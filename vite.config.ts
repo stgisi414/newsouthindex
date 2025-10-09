@@ -57,8 +57,6 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
-      // Expose your environment variables to the client-side code
-      'process.env.VITE_GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY),
       'process.env.VITE_FIREBASE_API_KEY': JSON.stringify(env.VITE_FIREBASE_API_KEY),
       'process.env.VITE_AUTH_DOMAIN': JSON.stringify(env.VITE_AUTH_DOMAIN),
       'process.env.VITE_PROJECT_ID': JSON.stringify(env.VITE_PROJECT_ID),

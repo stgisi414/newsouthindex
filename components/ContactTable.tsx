@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Contact } from '../types';
 import EditIcon from './icons/EditIcon';
@@ -10,7 +9,21 @@ interface ContactTableProps {
     onDelete: (id: string) => void;
 }
 
+// FIX/ADDITION: Define keys based on the entire Contact interface to ensure all fields are available for sorting
 type SortKey = keyof Contact;
+type DisplayableContactKey = Exclude<SortKey, 'id'>;
+
+// ADDITION: Define the full list of headers for all displayable contact fields
+const ALL_CONTACT_FIELDS: { key: DisplayableContactKey; label: string; hiddenInMobile?: boolean }[] = [
+    { key: 'honorific', label: 'Title', hiddenInMobile: true },
+    { key: 'firstName', label: 'First Name' },
+    { key: 'lastName', label: 'Last Name' },
+    { key: 'category', label: 'Category' },
+    { key: 'phone', label: 'Phone', hiddenInMobile: true },
+    { key: 'email', label: 'Email' },
+    { key: 'address', label: 'Address', hiddenInMobile: true },
+    { key: 'notes', label: 'Notes', hiddenInMobile: true },
+];
 
 const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete }) => {
     const [sortKey, setSortKey] = useState<SortKey>('lastName');
@@ -18,8 +31,9 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete 
 
     const sortedContacts = useMemo(() => {
         const sorted = [...contacts].sort((a, b) => {
-            const valA = a[sortKey] || '';
-            const valB = b[sortKey] || '';
+            // Updated to correctly handle comparisons on potentially missing optional properties
+            const valA = (a[sortKey as keyof typeof a] || '').toString().toLowerCase();
+            const valB = (b[sortKey as keyof typeof b] || '').toString().toLowerCase();
             if (valA < valB) return -1;
             if (valA > valB) return 1;
             return 0;
@@ -47,22 +61,20 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete 
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>
-                            {([
-                                { key: 'firstName', label: 'First Name' },
-                                { key: 'lastName', label: 'Last Name' },
-                                { key: 'category', label: 'Category' },
-                                { key: 'phone', label: 'Phone' },
-                                { key: 'email', label: 'Email' },
-                            ] as {key: SortKey, label: string}[]).map(({ key, label }) => (
+                            {/* UPDATED: Iterate over the new ALL_CONTACT_FIELDS array */}
+                            {ALL_CONTACT_FIELDS.map(({ key, label, hiddenInMobile }) => (
                                 <th
                                     key={key}
                                     scope="col"
-                                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                                    onClick={() => handleSort(key)}
+                                    // ADDED: Tailwind classes for mobile responsiveness
+                                    className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer 
+                                        ${hiddenInMobile ? 'hidden lg:table-cell' : ''}
+                                    `}
+                                    onClick={() => handleSort(key as SortKey)}
                                 >
                                     <div className="flex items-center">
                                         {label}
-                                        <span className="ml-2 text-gray-400 text-xs">{renderSortArrow(key)}</span>
+                                        <span className="ml-2 text-gray-400 text-xs">{renderSortArrow(key as SortKey)}</span>
                                     </div>
                                 </th>
                             ))}
@@ -74,11 +86,20 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete 
                     <tbody className="bg-white divide-y divide-gray-200">
                         {sortedContacts.map((contact) => (
                             <tr key={contact.id} className="hover:bg-gray-50 transition-colors duration-150">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{contact.firstName}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{contact.lastName}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{contact.category}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{contact.phone}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{contact.email}</td>
+                                {/* UPDATED: Iterate and display all fields */}
+                                {ALL_CONTACT_FIELDS.map(({ key, hiddenInMobile }) => (
+                                    <td 
+                                        key={key} 
+                                        className={`px-6 py-4 whitespace-nowrap text-sm text-gray-500 
+                                            ${key === 'firstName' || key === 'lastName' ? 'font-medium text-gray-900' : ''}
+                                            ${hiddenInMobile ? 'hidden lg:table-cell' : ''}
+                                        `}
+                                    >
+                                        {/* Display the value or '-' if null/undefined */}
+                                        {contact[key] || '-'}
+                                    </td>
+                                ))}
+                                {/* Action buttons column remains the same */}
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                     <div className="flex items-center justify-end space-x-4">
                                         <button onClick={() => onEdit(contact)} className="text-indigo-600 hover:text-indigo-900 transition-colors">
