@@ -18,15 +18,14 @@
   ],
   "hosting": {
     "public": "dist",
-    // Keep cleanUrls: false. This avoids secondary URL rewriting conflicts.
-    "cleanUrls": false, 
+    "cleanUrls": false,
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
     ],
     "rewrites": [
-      // FIX: This explicit rule MUST be first. It is the definitive way 
+      // FIX: This explicit rule MUST be first. It is the definitive way
       // to serve a static file and bypass the SPA fallback.
       {
         "source": "/google2b56a2ec54d22e57.html",
