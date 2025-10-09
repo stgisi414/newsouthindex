@@ -1,0 +1,5 @@
+{
+  "name": "AI-Powered CRM",
+  "description": "A Contact Relationship Management (CRM) application featuring a standard graphical user interface for managing contacts and an advanced AI-powered chat component for natural language commands.",
+  "requestFramePermissions": []
+}
