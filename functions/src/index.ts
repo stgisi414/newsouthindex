@@ -6,6 +6,7 @@ import {responseSchema} from "./geminiSchema";
 
 export const processCommand = onCall(
   {secrets: ["GEMINI_API_KEY"]},
+   enforceAppCheck: true, 
   async (request) => {
     const apiKey = process.env.GEMINI_API_KEY;
 

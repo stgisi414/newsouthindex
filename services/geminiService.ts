@@ -1,7 +1,7 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../src/firebaseConfig"; // Adjust the path if needed
 
-const processCommandCallable = httpsCallable(functions, 'processCommand');
+const processCommandCallable = httpsCallable(functions, 'processCommand', { limitedUseAppCheckTokens: true }); 
 
 export const processNaturalLanguageCommand = async (command: string) => {
     try {

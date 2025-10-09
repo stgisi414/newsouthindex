@@ -63,6 +63,7 @@ export default defineConfig(({ mode }) => {
       'process.env.VITE_STORAGE_BUCKET': JSON.stringify(env.VITE_STORAGE_BUCKET),
       'process.env.VITE_MESSAGING_SENDER_ID': JSON.stringify(env.VITE_MESSAGING_SENDER_ID),
       'process.env.VITE_APP_ID': JSON.stringify(env.VITE_APP_ID),
+      'process.env.VITE_RECAPTCHA_SITE_KEY': JSON.stringify(env.VITE_RECAPTCHA_SITE_KEY),
     },
     resolve: {
       alias: {
