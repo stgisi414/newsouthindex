@@ -2,7 +2,8 @@ import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
-import tailwindcss from '@tailwindcss/vite';
+import tailwindcss from 'tailwindcss';
+import autoprefixer from 'autoprefixer';
 
 export default defineConfig(({ mode }) => {
   // Load environment variables from the root of your project
@@ -15,7 +16,6 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
-      tailwindcss(),
       // VitePWA plugin configuration
       VitePWA({
         registerType: 'autoUpdate',
@@ -48,6 +48,14 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
+    css: {
+      postcss: {
+        plugins: [
+          tailwindcss, 
+          autoprefixer, 
+        ],
+      },
+    },
     define: {
       // Expose your environment variables to the client-side code
       'process.env.VITE_GEMINI_API_KEY': JSON.stringify(env.VITE_GEMINI_API_KEY),
