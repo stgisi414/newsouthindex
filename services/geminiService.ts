@@ -48,7 +48,7 @@ const responseSchema = {
 export const processNaturalLanguageCommand = async (command: string) => {
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-2.5-flash-lite',
             contents: `User command: "${command}"`,
             config: {
                 systemInstruction: `You are an intelligent assistant for a Contact Relationship Management (CRM) app. Your task is to parse user commands into structured JSON data. Identify the user's intent (ADD_CONTACT, FIND_CONTACT, UPDATE_CONTACT, DELETE_CONTACT, GENERAL_QUERY). Extract all relevant contact details. For FIND, UPDATE, or DELETE, identify the contact they are referring to. Always provide a friendly 'responseText' to confirm the action or answer the question. If the intent is unclear, use the 'UNSURE' intent.`,
