@@ -18,20 +18,12 @@
   ],
   "hosting": {
     "public": "dist",
-    "cleanUrls": false,
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
     ],
     "rewrites": [
-      // FIX: This explicit rule MUST be first. It is the definitive way
-      // to serve a static file and bypass the SPA fallback.
-      {
-        "source": "/google2b56a2ec54d22e57.html",
-        "destination": "/google2b56a2ec54d22e57.html"
-      },
-      // Your SPA fallback rule must remain last.
       {
         "source": "**",
         "destination": "/index.html"
@@ -42,6 +34,8 @@
     "rules": "storage.rules"
   },
   "firestore": {
+    "database": "(default)",
+    "location": "nam5",
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   }

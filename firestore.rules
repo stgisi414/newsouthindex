@@ -1,0 +1,39 @@
+// firestore.rules
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check if the current user is an admin
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    // Collection for user profiles/roles (Admin can set roles)
+    match /users/{userId} {
+       allow read: if request.auth != null;
+
+      // Allow a user to create their own user document upon sign-up.
+      // They can only set isAdmin to false.
+      allow create: if request.auth.uid == userId &&
+                       request.resource.data.isAdmin == false;
+
+      // Only allow admins to update user documents (e.g., to grant admin status).
+      allow update: if isAdmin();
+
+      // Users should not be able to delete their own role document,
+      // but admins can.
+      allow delete: if isAdmin();
+    }
+    
+    // Collection for user contacts
+    match /users/{userId}/contacts/{contactId} {
+      // Authenticated users can read their own contacts or any contacts if they are an admin.
+      allow read: if request.auth.uid == userId || isAdmin();
+      
+      // Admin (isAdmin() == true) can create/update/delete ANY contact.
+      // The owner (request.auth.uid == userId) can also create/update/delete their OWN contacts.
+      allow write: if request.auth.uid == userId || isAdmin();
+    }
+  }
+}
