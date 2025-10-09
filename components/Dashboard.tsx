@@ -13,9 +13,10 @@ interface DashboardProps {
     onUpdateContact: (contact: Contact) => void;
     onDeleteContact: (id: string) => void;
     onProcessAiCommand: (intent: string, data: any) => Promise<{ success: boolean; payload?: any }>;
+    onLogout: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateContact, onDeleteContact, onProcessAiCommand }) => {
+const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateContact, onDeleteContact, onProcessAiCommand, onLogout }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingContact, setEditingContact] = useState<Contact | null>(null);
@@ -57,9 +58,18 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
         <div className="min-h-screen bg-gray-50 text-gray-800">
             <header className="bg-white shadow-sm">
                 <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
-                   <div className="flex items-center gap-4">
-                        <img src={logo} alt="New South Books Logo" className="h-12 w-auto" />
-                        <h1 className="text-3xl font-bold leading-tight text-gray-900">New South Index</h1>
+                   <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <img src={logo} alt="New South Books Logo" className="h-12 w-auto" />
+                            <h1 className="text-3xl font-bold leading-tight text-gray-900">New South Index</h1>
+                        </div>
+                        {/* ADDITION: Logout Button */}
+                        <button
+                            onClick={onLogout}
+                            className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors text-sm"
+                        >
+                            Logout
+                        </button>
                    </div>
                 </div>
             </header>

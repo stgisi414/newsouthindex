@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { auth, db } from "./src/firebaseConfig"; 
-import { onAuthStateChanged, User } from "firebase/auth";
+import { onAuthStateChanged, User, signOut } from "firebase/auth"; // FIX 1: Add signOut
 import {
   collection,
   getDocs,
@@ -14,7 +14,7 @@ import {
 } from "firebase/firestore";
 import Dashboard from "./components/Dashboard";
 import { Auth } from "./components/Auth";
-import { Contact } from "./types";
+import { Contact, Category } from "./types";
 
 // --- Main App Component ---
 function App() {
@@ -119,6 +119,80 @@ function App() {
     }
   };
 
+  const onProcessAiCommand = async (intent: string, data: any): Promise<{ success: boolean; payload?: any }> => {
+    switch (intent) {
+      case 'ADD_CONTACT': { // ADDED: Opening block scope
+        const contactData = data.contactData || {};
+        const identifier = data.contactIdentifier || 'Unknown';
+        
+        // Attempt to parse name from identifier if separate name fields are missing
+        const nameParts = identifier.split(' ').filter(p => p.length > 0);
+        const firstName = contactData.firstName || nameParts[0] || 'Unknown';
+        const lastName = contactData.lastName || (nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Contact');
+        const defaultEmail = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, '')}.${lastName.toLowerCase().replace(/[^a-z0-9]/g, '')}@default.com`;
+
+
+        const newContact = {
+            // Optional fields use AI data or empty string
+            honorific: contactData.honorific || '',
+            
+            // Required fields are guaranteed to have a value
+            firstName: firstName,
+            lastName: lastName,
+            category: contactData.category || Category.OTHER,
+            phone: contactData.phone || 'N/A',
+            email: contactData.email || defaultEmail,
+            
+            // Optional fields
+            address: contactData.address || '',
+            notes: contactData.notes || `Added via AI Assistant. Request for ${identifier}.`,
+        } as Omit<Contact, "id" | "createdDate" | "lastModifiedDate">;
+
+        await addContact(newContact);
+        return { success: true };
+      } // ADDED: Closing block scope
+        
+      case 'FIND_CONTACT': { // ADDED: Opening block scope
+        const identifier = (data.contactIdentifier || '').toLowerCase();
+        const foundContacts = contacts.filter(c => 
+            c.firstName?.toLowerCase().includes(identifier) ||
+            c.lastName?.toLowerCase().includes(identifier) ||
+            c.email?.toLowerCase().includes(identifier)
+        );
+        // The found contacts are passed as payload for the AIChat to display.
+        return { success: true, payload: foundContacts };
+      } // ADDED: Closing block scope
+
+      case 'UPDATE_CONTACT':
+        // NOTE: In a complete application, logic to find the contact's ID 
+        // based on data.contactIdentifier would be implemented here,
+        // followed by calling updateContact(id, data.updateData).
+        console.log(`[AI-COMMAND]: Skipping UPDATE - Needs implementation to find ID for: ${data.contactIdentifier}`);
+        return { success: true };
+
+      case 'DELETE_CONTACT':
+        // NOTE: In a complete application, logic to find the contact's ID 
+        // based on data.contactIdentifier would be implemented here,
+        // followed by calling onDeleteContact(id).
+        console.log(`[AI-COMMAND]: Skipping DELETE - Needs implementation to find ID for: ${data.contactIdentifier}`);
+        return { success: true };
+
+      case 'GENERAL_QUERY':
+      case 'UNSURE':
+      default:
+        // No side effect needed for these intents.
+        return { success: true };
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
   if (loading) {
     return <div>Loading...</div>; // Or a spinner component
   }
@@ -131,6 +205,8 @@ function App() {
           onAddContact={addContact}
           onUpdateContact={updateContact}
           onDeleteContact={deleteContact}
+          onProcessAiCommand={onProcessAiCommand}
+          onLogout={handleLogout} // ADDITION: Pass the logout handler
         />
       ) : (
         <Auth />
