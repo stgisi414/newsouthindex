@@ -117,7 +117,7 @@ function App() {
     } catch (error) {
       console.error("Error deleting contact:", error);
     }
-  };
+  };c
 
   const onProcessAiCommand = async (intent: string, data: any): Promise<{ success: boolean; payload?: any }> => {
     switch (intent) {
