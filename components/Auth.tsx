@@ -10,6 +10,7 @@ import {
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../src/firebaseConfig";
 import logo from '../public/newsouthbookslogo.jpg';
+import { UserRole } from "../types";
 
 const ensureUserDocument = async (user: User) => {
   const userDocRef = doc(db, "users", user.uid);
@@ -17,6 +18,7 @@ const ensureUserDocument = async (user: User) => {
   if (!userDoc.exists()) {
     await setDoc(userDocRef, {
       email: user.email,
+      role: UserRole.APPLICANT,
       isAdmin: false,
       createdDate: serverTimestamp(),
     });

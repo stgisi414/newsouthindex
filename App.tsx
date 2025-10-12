@@ -12,30 +12,35 @@ import {
   orderBy,
   onSnapshot,
   getDoc,
-  setDoc
 } from "firebase/firestore";
 import Dashboard from "./components/Dashboard";
 import { Auth } from "./components/Auth";
-import { AppUser, Contact, Category } from "./types";
+import { AppUser, Contact, Category, UserRole } from "./types";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
         const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-        if (userDoc.exists() && userDoc.data().isAdmin) {
-          setIsAdmin(true);
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          setUserRole(userData.role);
+          setIsAdmin(userData.role === 'admin');
         } else {
+          // If the user doc doesn't exist for some reason, default to applicant
+          setUserRole(UserRole.APPLICANT);
           setIsAdmin(false);
         }
       } else {
+        setUserRole(null);
         setIsAdmin(false);
       }
       setLoading(false);
@@ -44,8 +49,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (user) {
-      // Fetch contacts
+    if (user && userRole !== UserRole.APPLICANT) {
+      // Fetch contacts only if user is a viewer or admin
       const contactsQuery = query(collection(db, "contacts"), orderBy("lastName", "asc"));
       const unsubscribeContacts = onSnapshot(contactsQuery, (snapshot) => {
         const contactsList = snapshot.docs.map(
@@ -54,7 +59,7 @@ function App() {
         setContacts(contactsList);
       });
 
-      if (isAdmin) {
+      if (userRole === UserRole.ADMIN) {
         const usersQuery = query(collection(db, "users"));
         const unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
           const usersList = snapshot.docs.map(
@@ -72,9 +77,9 @@ function App() {
       return () => unsubscribeContacts();
     } else {
       setContacts([]);
-      setUsers([]); // Clear users on logout
+      setUsers([]); // Clear users on logout or if applicant
     }
-  }, [user, isAdmin]);
+  }, [user, userRole]);
 
   const addContact = async (contactData: Omit<Contact, "id">) => {
     if (!isAdmin) {
@@ -144,11 +149,13 @@ function App() {
             notes: contactData.notes || `Added via AI.`,
         } as Omit<Contact, "id">;
 
-        // UPDATED: Return the result of the addContact function
         return await addContact(newContact);
       }
         
       case 'FIND_CONTACT': {
+        if (userRole === UserRole.APPLICANT) {
+          return { success: false, message: "You do not have permission to view contacts." };
+        }
         const identifier = (data.contactIdentifier || '').toLowerCase();
         if (!identifier) {
           return { success: false, message: "Please tell me who you're looking for." };
@@ -162,7 +169,6 @@ function App() {
 
       case 'UPDATE_CONTACT': {
         if (!isAdmin) {
-          // This message will be sent by the Cloud Function, but this is a good fallback.
           return { success: false, message: "I'm sorry, but only admins can update contacts." };
         }
         const identifier = (data.contactIdentifier || '').toLowerCase();
@@ -239,17 +245,32 @@ function App() {
   return (
     <div>
       {user ? (
-        <Dashboard
-          contacts={contacts}
-          onAddContact={addContact}
-          onUpdateContact={(contact) => updateContact(contact.id, contact)}
-          onDeleteContact={deleteContact}
-          onProcessAiCommand={onProcessAiCommand}
-          onLogout={handleLogout}
-          isAdmin={isAdmin}
-          users={users}
-          currentUser={user}
-        />
+        userRole === UserRole.APPLICANT ? (
+          <div className="flex items-center justify-center min-h-screen bg-gray-50">
+            <div className="text-center p-8 bg-white rounded-lg shadow-md">
+              <h2 className="text-2xl font-bold mb-4 text-gray-800">Waiting for Approval</h2>
+              <p className="text-gray-600">Your account is pending approval from an administrator.</p>
+              <button
+                onClick={handleLogout}
+                className="mt-6 px-4 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        ) : (
+          <Dashboard
+            contacts={contacts}
+            onAddContact={addContact}
+            onUpdateContact={(contact) => updateContact(contact.id, contact)}
+            onDeleteContact={deleteContact}
+            onProcessAiCommand={onProcessAiCommand}
+            onLogout={handleLogout}
+            isAdmin={isAdmin}
+            users={users}
+            currentUser={user}
+          />
+        )
       ) : (
         <Auth />
       )}

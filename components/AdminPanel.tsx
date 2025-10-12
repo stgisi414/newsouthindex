@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppUser } from '../types';
+import { AppUser, UserRole } from '../types';
 import { User } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../src/firebaseConfig';
@@ -9,19 +9,19 @@ interface AdminPanelProps {
     currentUser: User;
 }
 
-const setAdminStatus = httpsCallable(functions, 'setAdminStatus');
+const setUserRole = httpsCallable(functions, 'setUserRole');
 const deleteUser = httpsCallable(functions, 'deleteUser');
 
 const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser }) => {
 
-    const handleSetAdmin = async (userId: string, isAdmin: boolean) => {
-        if (window.confirm(`Are you sure you want to ${isAdmin ? 'promote' : 'demote'} this user?`)) {
+    const handleSetRole = async (userId: string, role: UserRole) => {
+        if (window.confirm(`Are you sure you want to set this user's role to ${role}?`)) {
             try {
-                await setAdminStatus({ userId, isAdmin });
-                alert('User status updated successfully.');
+                await setUserRole({ userId, role });
+                alert('User role updated successfully.');
             } catch (error) {
-                console.error("Error updating admin status:", error);
-                alert('Failed to update user status.');
+                console.error("Error updating user role:", error);
+                alert('Failed to update user role.');
             }
         }
     };
@@ -37,27 +37,57 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser }) => {
             }
         }
     };
+    
+    const applicants = users.filter(u => u.role === UserRole.APPLICANT);
+    const viewersAndAdmins = users.filter(u => u.role !== UserRole.APPLICANT);
 
     return (
         <div className="bg-white shadow-lg rounded-xl p-6 mt-8">
             <h3 className="text-lg font-semibold text-gray-800 border-b pb-2 mb-4">Admin Panel</h3>
+
+            {applicants.length > 0 && (
+                <div>
+                    <h4 className="text-md font-semibold text-gray-700 mb-2">New Applicants</h4>
+                    <div className="space-y-2 mb-6">
+                        {applicants.map(user => (
+                            <div key={user.id} className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
+                                <span className="text-sm text-gray-700">{user.email}</span>
+                                <button
+                                    onClick={() => handleSetRole(user.id, UserRole.VIEWER)}
+                                    className="px-3 py-1 text-xs font-semibold text-green-800 bg-green-200 rounded hover:bg-green-300"
+                                >
+                                    Approve as Viewer
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            <h4 className="text-md font-semibold text-gray-700 mb-2">Manage Users</h4>
             <div className="space-y-4">
-                {users.map(user => (
+                {viewersAndAdmins.map(user => (
                     <div key={user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <span className="text-sm text-gray-700">{user.email}</span>
+                        <span className="text-sm text-gray-700">{user.email} ({user.role})</span>
                         <div className="flex items-center space-x-3">
                             {user.id !== currentUser.uid && (
                                 <>
-                                    <button
-                                        onClick={() => handleSetAdmin(user.id, !user.isAdmin)}
-                                        className={`px-3 py-1 text-xs font-semibold rounded ${
-                                            user.isAdmin
-                                                ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
-                                                : 'bg-green-100 text-green-800 hover:bg-green-200'
-                                        }`}
-                                    >
-                                        {user.isAdmin ? 'Demote' : 'Promote to Admin'}
-                                    </button>
+                                    {user.role === UserRole.VIEWER && (
+                                        <button
+                                            onClick={() => handleSetRole(user.id, UserRole.ADMIN)}
+                                            className="px-3 py-1 text-xs font-semibold rounded bg-blue-100 text-blue-800 hover:bg-blue-200"
+                                        >
+                                            Promote to Admin
+                                        </button>
+                                    )}
+                                    {user.role === UserRole.ADMIN && (
+                                        <button
+                                            onClick={() => handleSetRole(user.id, UserRole.VIEWER)}
+                                            className="px-3 py-1 text-xs font-semibold rounded bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+                                        >
+                                            Demote to Viewer
+                                        </button>
+                                    )}
                                     <button
                                         onClick={() => handleDeleteUser(user.id)}
                                         className="px-3 py-1 text-xs font-semibold text-red-800 bg-red-100 rounded hover:bg-red-200"

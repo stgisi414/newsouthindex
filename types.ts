@@ -19,15 +19,15 @@ export interface Contact {
     notes?: string;
 }
 
-export interface ChatMessage {
-    id: string;
-    sender: 'user' | 'ai';
-    text: string;
-    data?: any;
+export enum UserRole {
+    APPLICANT = 'applicant',
+    VIEWER = 'viewer',
+    ADMIN = 'admin',
 }
 
 export interface AppUser {
     id: string;
     email?: string;
+    role: UserRole;
     isAdmin: boolean;
 }
