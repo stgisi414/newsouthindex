@@ -12,10 +12,12 @@ import {
   orderBy,
   onSnapshot,
   getDoc,
+  writeBatch,
+  increment, // Import increment
 } from "firebase/firestore";
 import Dashboard from "./components/Dashboard";
 import { Auth } from "./components/Auth";
-import { AppUser, Contact, Category, UserRole } from "./types";
+import { AppUser, Contact, Category, UserRole, Book, Transaction } from "./types";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -23,22 +25,20 @@ function App() {
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
+  const [books, setBooks] = useState<Book[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          setUserRole(userData.role);
-          setIsAdmin(userData.role === 'admin');
-        } else {
-          // If the user doc doesn't exist for some reason, default to applicant
-          setUserRole(UserRole.APPLICANT);
-          setIsAdmin(false);
-        }
+        const idTokenResult = await currentUser.getIdTokenResult(true);
+        const roleFromToken = (idTokenResult.claims.role as UserRole) || UserRole.APPLICANT;
+        
+        setUserRole(roleFromToken);
+        setIsAdmin(roleFromToken === UserRole.ADMIN);
+
       } else {
         setUserRole(null);
         setIsAdmin(false);
@@ -50,34 +50,40 @@ function App() {
 
   useEffect(() => {
     if (user && userRole !== UserRole.APPLICANT) {
-      // Fetch contacts only if user is a viewer or admin
       const contactsQuery = query(collection(db, "contacts"), orderBy("lastName", "asc"));
       const unsubscribeContacts = onSnapshot(contactsQuery, (snapshot) => {
-        const contactsList = snapshot.docs.map(
-          (doc) => ({ ...doc.data(), id: doc.id } as Contact)
-        );
-        setContacts(contactsList);
+        setContacts(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as Contact)));
       });
 
+      const booksQuery = query(collection(db, "books"), orderBy("title", "asc"));
+      const unsubscribeBooks = onSnapshot(booksQuery, (snapshot) => {
+        setBooks(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as Book)));
+      });
+
+      const transactionsQuery = query(collection(db, "transactions"), orderBy("transactionDate", "desc"));
+      const unsubscribeTransactions = onSnapshot(transactionsQuery, (snapshot) => {
+        setTransactions(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as Transaction)));
+      });
+
+      let unsubscribeUsers = () => {};
       if (userRole === UserRole.ADMIN) {
         const usersQuery = query(collection(db, "users"));
-        const unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
-          const usersList = snapshot.docs.map(
-            (doc) => ({ ...doc.data(), id: doc.id } as AppUser)
-          );
-          setUsers(usersList);
+        unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
+          setUsers(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as AppUser)));
         });
-        // Return a cleanup function for both listeners
-        return () => {
-          unsubscribeContacts();
-          unsubscribeUsers();
-        };
       }
 
-      return () => unsubscribeContacts();
+      return () => {
+        unsubscribeContacts();
+        unsubscribeBooks();
+        unsubscribeTransactions();
+        unsubscribeUsers();
+      };
     } else {
       setContacts([]);
-      setUsers([]); // Clear users on logout or if applicant
+      setUsers([]);
+      setBooks([]);
+      setTransactions([]);
     }
   }, [user, userRole]);
 
@@ -128,6 +134,52 @@ function App() {
       console.error("Error deleting contact:", error);
       return { success: false, message: "There was an error deleting the contact." };
     }
+  };
+  
+  const addBook = async (bookData: Omit<Book, "id">) => {
+    if (!isAdmin) return;
+    await addDoc(collection(db, "books"), bookData);
+  };
+  const updateBook = async (book: Book) => {
+    if (!isAdmin) return;
+    const bookDoc = doc(db, "books", book.id);
+    await updateDoc(bookDoc, { ...book });
+  };
+  const deleteBook = async (id: string) => {
+    if (!isAdmin) return;
+    await deleteDoc(doc(db, "books", id));
+  };
+
+  const addTransaction = async (transactionData: { contactId: string; booksWithQuantity: { book: Book, quantity: number }[] }) => {
+    if (!isAdmin) return;
+    const { contactId, booksWithQuantity } = transactionData;
+    const contact = contacts.find(c => c.id === contactId);
+    if (!contact) return;
+
+    const totalPrice = booksWithQuantity.reduce((sum, { book, quantity }) => sum + (book.price * quantity), 0);
+    
+    const batch = writeBatch(db);
+
+    const transactionRef = doc(collection(db, "transactions"));
+    batch.set(transactionRef, {
+      contactId,
+      contactName: `${contact.firstName} ${contact.lastName}`,
+      books: booksWithQuantity.map(({ book, quantity }) => ({ 
+        id: book.id, 
+        title: book.title, 
+        price: book.price, 
+        quantity 
+      })),
+      totalPrice,
+      transactionDate: serverTimestamp(),
+    });
+
+    booksWithQuantity.forEach(({ book, quantity }) => {
+      const bookRef = doc(db, "books", book.id);
+      batch.update(bookRef, { stock: increment(-quantity) });
+    });
+
+    await batch.commit();
   };
 
   const onProcessAiCommand = async (intent: string, data: any): Promise<{ success: boolean; payload?: any; message?: string }> => {
@@ -222,10 +274,54 @@ function App() {
         return await deleteContact(contactToDelete.id);
       }
 
-      case 'GENERAL_QUERY':
-      case 'UNSURE':
+        case 'ADD_BOOK': {
+        if (!isAdmin) return { success: false, message: "Sorry, only admins can add books." };
+        const bookData = data.bookData || {};
+        const newBook = {
+          title: bookData.title || "Untitled",
+          author: bookData.author || "Unknown Author",
+          isbn: bookData.isbn || "",
+          publisher: bookData.publisher || "",
+          price: bookData.price || 0,
+          stock: bookData.stock || 0,
+        } as Omit<Book, "id">;
+        await addBook(newBook);
+        return { success: true, message: `Successfully added the book "${newBook.title}".` };
+      }
+      case 'FIND_BOOK': {
+        const identifier = (data.bookIdentifier || '').toLowerCase();
+        if (!identifier) return { success: false, message: "Please specify a book title or ISBN." };
+        const foundBooks = books.filter(b => 
+          b.title.toLowerCase().includes(identifier) ||
+          b.author.toLowerCase().includes(identifier) ||
+          b.isbn?.toLowerCase().includes(identifier)
+        );
+        return { success: true, payload: foundBooks };
+      }
+      case 'UPDATE_BOOK': {
+        if (!isAdmin) return { success: false, message: "Sorry, only admins can update books." };
+        const identifier = (data.bookIdentifier || '').toLowerCase();
+        const foundBooks = books.filter(b => b.title.toLowerCase().includes(identifier));
+        if (foundBooks.length === 0) return { success: false, message: `Could not find a book matching "${data.bookIdentifier}".`};
+        if (foundBooks.length > 1) return { success: false, message: "Found multiple books with that title, please be more specific."};
+        const bookToUpdate = foundBooks[0];
+        await updateBook({ ...bookToUpdate, ...data.updateData });
+        return { success: true, message: `Successfully updated "${bookToUpdate.title}".` };
+      }
+      case 'DELETE_BOOK': {
+        if (!isAdmin) return { success: false, message: "Sorry, only admins can delete books." };
+        const identifier = (data.bookIdentifier || '').toLowerCase();
+        const foundBooks = books.filter(b => b.title.toLowerCase().includes(identifier));
+        if (foundBooks.length === 0) return { success: false, message: `Could not find a book matching "${data.bookIdentifier}".`};
+        if (foundBooks.length > 1) return { success: false, message: "Found multiple books with that title, please be more specific."};
+        await deleteBook(foundBooks[0].id);
+        return { success: true, message: `Successfully deleted "${foundBooks[0].title}".` };
+      }
+      case 'CREATE_TRANSACTION': {
+         // This would be complex to handle via AI and is better suited for the form.
+         return { success: false, message: "Please use the 'New Transaction' form to log a sale." };
+      }
       default:
-        // No side effect needed for these intents.
         return { success: true };
     }
   };
@@ -264,6 +360,12 @@ function App() {
             onAddContact={addContact}
             onUpdateContact={(contact) => updateContact(contact.id, contact)}
             onDeleteContact={deleteContact}
+            books={books}
+            onAddBook={addBook}
+            onUpdateBook={updateBook}
+            onDeleteBook={deleteBook}
+            transactions={transactions}
+            onAddTransaction={addTransaction}
             onProcessAiCommand={onProcessAiCommand}
             onLogout={handleLogout}
             isAdmin={isAdmin}
