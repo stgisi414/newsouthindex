@@ -3,48 +3,42 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- Helper Functions ---
     function isRole(role) {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
     }
 
     function isAdmin() {
-      return isRole('admin');
+      return request.auth.token.role == 'admin';
     }
 
     function isViewer() {
-      return isRole('viewer');
+      return request.auth.token.role == 'viewer';
     }
 
-    // --- Rules for User Profiles/Roles ---
     match /users/{userId} {
-      // Admins can list all users for the admin panel.
       allow list: if isAdmin();
-      
-      // Any authenticated user can read individual user profiles.
       allow read: if request.auth != null;
-
-      // A new user can create their own profile as an 'applicant'.
       allow create: if request.auth.uid == userId 
                     && request.resource.data.role == 'applicant'
                     && request.resource.data.isAdmin == false;
-
-      // Only admins can update or delete user profiles.
       allow update, delete: if isAdmin();
     }
     
-    // --- Rules for the SHARED Contacts Collection ---
     match /contacts/{contactId} {
-      // Viewers and admins can read contacts.
       allow read: if isViewer() || isAdmin();
-      
-      // Only admins can write contacts.
       allow write: if isAdmin();
     }
 
-    // --- Rules for Individual User Contact Lists (Legacy) ---
-    match /users/{userId}/contacts/{contactId} {
-      allow read, write: if request.auth.uid == userId || isAdmin();
+    // ADDED: Rules for Books and Transactions
+    match /books/{bookId} {
+        allow read: if isViewer() || isAdmin();
+        allow write: if isAdmin();
+    }
+
+    match /transactions/{transactionId} {
+        allow read: if isViewer() || isAdmin();
+        allow create: if isAdmin(); // Only admins can create transactions
+        allow update, delete: if false; // Transactions should be immutable
     }
   }
 }

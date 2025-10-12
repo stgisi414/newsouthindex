@@ -37,6 +37,33 @@ const contactProperties = {
   },
 };
 
+const bookProperties = {
+  title: {
+    type: Type.STRING,
+    description: "The title of the book.",
+  },
+  author: {
+    type: Type.STRING,
+    description: "The author of the book.",
+  },
+  isbn: {
+    type: Type.STRING,
+    description: "The ISBN of the book.",
+  },
+  publisher: {
+    type: Type.STRING,
+    description: "The publisher of the book.",
+  },
+  price: {
+    type: Type.NUMBER,
+    description: "The price of the book.",
+  },
+  stock: {
+    type: Type.NUMBER,
+    description: "The stock quantity of the book.",
+  },
+};
+
 export const responseSchema = {
   type: Type.OBJECT,
   properties: {
@@ -48,6 +75,11 @@ export const responseSchema = {
         "FIND_CONTACT",
         "UPDATE_CONTACT",
         "DELETE_CONTACT",
+        "ADD_BOOK",
+        "FIND_BOOK",
+        "UPDATE_BOOK",
+        "DELETE_BOOK",
+        "CREATE_TRANSACTION",
         "GENERAL_QUERY",
         "UNSURE",
       ],
@@ -58,6 +90,10 @@ export const responseSchema = {
         `The name or email of the contact to find, update, or delete. E.g.,
          "John Smith" or "jane.doe@example.com".`,
     },
+    bookIdentifier: {
+        type: Type.STRING,
+        description: `The title or ISBN of the book to find, update, or delete. E.g., "Dune" or "978-0451524935".`
+    },
     contactData: {
       type: Type.OBJECT,
       description: "Data for a new contact being added.",
@@ -66,8 +102,21 @@ export const responseSchema = {
     updateData: {
       type: Type.OBJECT,
       description:
-        "The specific fields to update for an existing contact.",
-      properties: contactProperties,
+        "The specific fields to update for an existing contact or book.",
+      properties: { ...contactProperties, ...bookProperties },
+    },
+    bookData: {
+        type: Type.OBJECT,
+        description: "Data for a new book being added.",
+        properties: bookProperties,
+    },
+    transactionData: {
+        type: Type.OBJECT,
+        description: "Data for a new transaction, linking contacts and books.",
+        properties: {
+            contactIdentifier: { type: Type.STRING, description: "The name or email of the customer." },
+            bookIdentifiers: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of book titles or ISBNs being purchased." }
+        }
     },
     responseText: {
       type: Type.STRING,
