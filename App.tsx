@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
-import { auth, db } from "./src/firebaseConfig"; 
-import { onAuthStateChanged, User, signOut } from "firebase/auth"; // FIX 1: Add signOut
+import { auth, db } from "./src/firebaseConfig";
+import { onAuthStateChanged, User, signOut } from "firebase/auth";
 import {
   collection,
-  getDocs,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -11,171 +10,211 @@ import {
   serverTimestamp,
   query,
   orderBy,
+  onSnapshot,
+  getDoc,
+  setDoc
 } from "firebase/firestore";
 import Dashboard from "./components/Dashboard";
 import { Auth } from "./components/Auth";
-import { Contact, Category } from "./types";
+import { AppUser, Contact, Category } from "./types";
 
-// --- Main App Component ---
 function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
-
+  
   useEffect(() => {
-    // Listen for authentication state changes
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      if (currentUser) {
+        const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+        if (userDoc.exists() && userDoc.data().isAdmin) {
+          setIsAdmin(true);
+        } else {
+          setIsAdmin(false);
+        }
+      } else {
+        setIsAdmin(false);
+      }
       setLoading(false);
     });
-    // Cleanup subscription on unmount
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    // Fetch contacts if a user is logged in
     if (user) {
-      fetchContacts(user.uid);
+      // Fetch contacts
+      const contactsQuery = query(collection(db, "contacts"), orderBy("lastName", "asc"));
+      const unsubscribeContacts = onSnapshot(contactsQuery, (snapshot) => {
+        const contactsList = snapshot.docs.map(
+          (doc) => ({ ...doc.data(), id: doc.id } as Contact)
+        );
+        setContacts(contactsList);
+      });
+
+      if (isAdmin) {
+        const usersQuery = query(collection(db, "users"));
+        const unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
+          const usersList = snapshot.docs.map(
+            (doc) => ({ ...doc.data(), id: doc.id } as AppUser)
+          );
+          setUsers(usersList);
+        });
+        // Return a cleanup function for both listeners
+        return () => {
+          unsubscribeContacts();
+          unsubscribeUsers();
+        };
+      }
+
+      return () => unsubscribeContacts();
     } else {
-      // Clear contacts if user logs out
       setContacts([]);
+      setUsers([]); // Clear users on logout
     }
-  }, [user]);
+  }, [user, isAdmin]);
 
-  // --- Firestore CRUD Functions ---
-
-  const getContactsCollection = (uid: string) => {
-    return collection(db, "users", uid, "contacts");
-  };
-
-  /**
-   * Fetches all contacts for the current user from Firestore.
-   */
-  const fetchContacts = async (uid: string) => {
-    try {
-      const contactsCollection = getContactsCollection(uid);
-      const q = query(contactsCollection, orderBy("lastName", "asc"));
-      const snapshot = await getDocs(q);
-      const contactsList = snapshot.docs.map(
-        (doc) => ({ ...doc.data(), id: doc.id } as Contact)
-      );
-      setContacts(contactsList);
-    } catch (error) {
-      console.error("Error fetching contacts:", error);
+  const addContact = async (contactData: Omit<Contact, "id">) => {
+    if (!isAdmin) {
+      return { success: false, message: "Sorry, only admins can add new contacts." };
     }
-  };
-
-  /**
-   * Adds a new contact to Firestore.
-   * @param contactData - The new contact's data, without createdDate or lastModifiedDate.
-   */
-  const addContact = async (contactData: Omit<Contact, "id" | "createdDate" | "lastModifiedDate">) => {
-    if (!user) return;
-    try {
-      const contactsCollection = getContactsCollection(user.uid);
-      await addDoc(contactsCollection, {
+     try {
+      await addDoc(collection(db, "contacts"), {
         ...contactData,
-        createdBy: user.email, // Or user.displayName
+        createdBy: user?.email,
         createdDate: serverTimestamp(),
         lastModifiedDate: serverTimestamp(),
       });
-      fetchContacts(user.uid); // Refresh list
+      return { success: true, message: `Successfully added ${contactData.firstName} ${contactData.lastName}.` };
     } catch (error) {
       console.error("Error adding contact:", error);
+      return { success: false, message: "An error occurred while adding the contact." };
     }
   };
 
-  /**
-   * Updates an existing contact in Firestore.
-   * @param contactId - The ID of the contact to update.
-   * @param updatedData - The fields to update.
-   */
   const updateContact = async (contactId: string, updatedData: Partial<Contact>) => {
-    if (!user) return;
+    if (!isAdmin) {
+      return { success: false, message: "Sorry, only admins can update contacts." };
+    }
     try {
-      const contactDoc = doc(db, "users", user.uid, "contacts", contactId);
+      const contactDoc = doc(db, "contacts", contactId);
       await updateDoc(contactDoc, {
         ...updatedData,
         lastModifiedDate: serverTimestamp(),
       });
-      fetchContacts(user.uid); // Refresh list
+      return { success: true, message: "Contact updated successfully." };
     } catch (error) {
       console.error("Error updating contact:", error);
+      return { success: false, message: "There was an error updating the contact." };
     }
   };
 
-  /**
-   * Deletes a contact from Firestore.
-   * @param contactId - The ID of the contact to delete.
-   */
   const deleteContact = async (contactId: string) => {
-    if (!user) return;
+    if (!isAdmin) {
+      return { success: false, message: "Sorry, only admins can delete contacts." };
+    }
     try {
-      const contactDoc = doc(db, "users", user.uid, "contacts", contactId);
+      const contactDoc = doc(db, "contacts", contactId);
       await deleteDoc(contactDoc);
-      fetchContacts(user.uid); // Refresh list
+      return { success: true, message: "Contact deleted successfully." };
     } catch (error) {
       console.error("Error deleting contact:", error);
+      return { success: false, message: "There was an error deleting the contact." };
     }
-  };c
+  };
 
-  const onProcessAiCommand = async (intent: string, data: any): Promise<{ success: boolean; payload?: any }> => {
+  const onProcessAiCommand = async (intent: string, data: any): Promise<{ success: boolean; payload?: any; message?: string }> => {
     switch (intent) {
-      case 'ADD_CONTACT': { // ADDED: Opening block scope
+      case 'ADD_CONTACT': {
         const contactData = data.contactData || {};
         const identifier = data.contactIdentifier || 'Unknown';
         
-        // Attempt to parse name from identifier if separate name fields are missing
         const nameParts = identifier.split(' ').filter(p => p.length > 0);
         const firstName = contactData.firstName || nameParts[0] || 'Unknown';
         const lastName = contactData.lastName || (nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Contact');
-        const defaultEmail = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, '')}.${lastName.toLowerCase().replace(/[^a-z0-9]/g, '')}@default.com`;
-
-
+        
         const newContact = {
-            // Optional fields use AI data or empty string
-            honorific: contactData.honorific || '',
-            
-            // Required fields are guaranteed to have a value
             firstName: firstName,
             lastName: lastName,
             category: contactData.category || Category.OTHER,
             phone: contactData.phone || 'N/A',
-            email: contactData.email || defaultEmail,
-            
-            // Optional fields
-            address: contactData.address || '',
-            notes: contactData.notes || `Added via AI Assistant. Request for ${identifier}.`,
-        } as Omit<Contact, "id" | "createdDate" | "lastModifiedDate">;
+            email: contactData.email || `${firstName.toLowerCase()}.${lastName.toLowerCase()}@default.com`,
+            notes: contactData.notes || `Added via AI.`,
+        } as Omit<Contact, "id">;
 
-        await addContact(newContact);
-        return { success: true };
-      } // ADDED: Closing block scope
+        // UPDATED: Return the result of the addContact function
+        return await addContact(newContact);
+      }
         
-      case 'FIND_CONTACT': { // ADDED: Opening block scope
+      case 'FIND_CONTACT': {
         const identifier = (data.contactIdentifier || '').toLowerCase();
+        if (!identifier) {
+          return { success: false, message: "Please tell me who you're looking for." };
+        }
         const foundContacts = contacts.filter(c => 
-            c.firstName?.toLowerCase().includes(identifier) ||
-            c.lastName?.toLowerCase().includes(identifier) ||
+            `${c.firstName} ${c.lastName}`.toLowerCase().includes(identifier) ||
             c.email?.toLowerCase().includes(identifier)
         );
-        // The found contacts are passed as payload for the AIChat to display.
         return { success: true, payload: foundContacts };
-      } // ADDED: Closing block scope
+      }
 
-      case 'UPDATE_CONTACT':
-        // NOTE: In a complete application, logic to find the contact's ID 
-        // based on data.contactIdentifier would be implemented here,
-        // followed by calling updateContact(id, data.updateData).
-        console.log(`[AI-COMMAND]: Skipping UPDATE - Needs implementation to find ID for: ${data.contactIdentifier}`);
-        return { success: true };
+      case 'UPDATE_CONTACT': {
+        if (!isAdmin) {
+          // This message will be sent by the Cloud Function, but this is a good fallback.
+          return { success: false, message: "I'm sorry, but only admins can update contacts." };
+        }
+        const identifier = (data.contactIdentifier || '').toLowerCase();
+        if (!identifier) {
+          return { success: false, message: "I'm not sure which contact you want to update. Please specify a name or email." };
+        }
 
-      case 'DELETE_CONTACT':
-        // NOTE: In a complete application, logic to find the contact's ID 
-        // based on data.contactIdentifier would be implemented here,
-        // followed by calling onDeleteContact(id).
-        console.log(`[AI-COMMAND]: Skipping DELETE - Needs implementation to find ID for: ${data.contactIdentifier}`);
-        return { success: true };
+        const foundContacts = contacts.filter(c => 
+          `${c.firstName} ${c.lastName}`.toLowerCase().includes(identifier) ||
+          c.email?.toLowerCase().includes(identifier)
+        );
+
+        if (foundContacts.length === 0) {
+          return { success: false, message: `I couldn't find a contact matching "${data.contactIdentifier}".` };
+        }
+
+        if (foundContacts.length > 1) {
+          return { success: false, message: "I found multiple contacts matching that name. Can you be more specific?" };
+        }
+
+        const contactToUpdate = foundContacts[0];
+        const updateData = data.updateData || {};
+        
+        return await updateContact(contactToUpdate.id, updateData);
+      }
+
+      case 'DELETE_CONTACT': {
+        if (!isAdmin) {
+          return { success: false, message: "I'm sorry, but only admins can delete contacts." };
+        }
+        const identifier = (data.contactIdentifier || '').toLowerCase();
+        if (!identifier) {
+          return { success: false, message: "I'm not sure which contact you want to delete. Please specify a name or email." };
+        }
+        
+        const foundContacts = contacts.filter(c => 
+          `${c.firstName} ${c.lastName}`.toLowerCase().includes(identifier) ||
+          c.email?.toLowerCase().includes(identifier)
+        );
+
+        if (foundContacts.length === 0) {
+          return { success: false, message: `I couldn't find a contact matching "${data.contactIdentifier}".` };
+        }
+
+        if (foundContacts.length > 1) {
+          return { success: false, message: "I found multiple contacts matching that name. Can you be more specific?" };
+        }
+
+        const contactToDelete = foundContacts[0];
+        
+        return await deleteContact(contactToDelete.id);
+      }
 
       case 'GENERAL_QUERY':
       case 'UNSURE':
@@ -194,7 +233,7 @@ function App() {
   };
 
   if (loading) {
-    return <div>Loading...</div>; // Or a spinner component
+    return <div>Loading...</div>;
   }
 
   return (
@@ -203,10 +242,13 @@ function App() {
         <Dashboard
           contacts={contacts}
           onAddContact={addContact}
-          onUpdateContact={updateContact}
+          onUpdateContact={(contact) => updateContact(contact.id, contact)}
           onDeleteContact={deleteContact}
           onProcessAiCommand={onProcessAiCommand}
-          onLogout={handleLogout} // ADDITION: Pass the logout handler
+          onLogout={handleLogout}
+          isAdmin={isAdmin}
+          users={users}
+          currentUser={user}
         />
       ) : (
         <Auth />

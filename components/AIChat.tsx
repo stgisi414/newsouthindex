@@ -5,10 +5,11 @@ import { processNaturalLanguageCommand } from '../services/geminiService';
 import PaperAirplaneIcon from './icons/PaperAirplaneIcon';
 
 interface AIChatProps {
-    onCommandProcessed: (intent: string, data: any) => Promise<{ success: boolean; payload?: any }>;
+    onCommandProcessed: (intent: string, data: any) => Promise<{ success: boolean; payload?: any; message?: string }>;
+    isAdmin: boolean;
 }
 
-const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed }) => {
+const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed, isAdmin }) => {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState('');
     const [isThinking, setIsThinking] = useState(false);
@@ -44,12 +45,13 @@ const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed }) => {
         setIsThinking(true);
 
         try {
-            const commandResponse = await processNaturalLanguageCommand(userMessage.text);
+            const commandResponse = await processNaturalLanguageCommand(userMessage.text, isAdmin);
             const { intent, ...data } = commandResponse;
 
             const result = await onCommandProcessed(intent, data);
             
-            let aiResponseText = commandResponse.responseText || "I'm not sure how to respond to that.";
+            let aiResponseText = result.message || commandResponse.responseText || "I'm not sure how to respond to that.";
+
 
             if (intent === 'FIND_CONTACT' && result.success) {
                  const foundContacts = result.payload as Contact[];

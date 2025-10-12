@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, Fragment } from 'react'; // ADD: Import Fragment
 import { Contact } from '../types';
 import EditIcon from './icons/EditIcon';
 import DeleteIcon from './icons/DeleteIcon';
@@ -9,11 +9,9 @@ interface ContactTableProps {
     onDelete: (id: string) => void;
 }
 
-// FIX/ADDITION: Define keys based on the entire Contact interface to ensure all fields are available for sorting
 type SortKey = keyof Contact;
 type DisplayableContactKey = Exclude<SortKey, 'id'>;
 
-// ADDITION: Define the full list of headers for all displayable contact fields
 const ALL_CONTACT_FIELDS: { key: DisplayableContactKey; label: string; hiddenInMobile?: boolean }[] = [
     { key: 'honorific', label: 'Title', hiddenInMobile: true },
     { key: 'firstName', label: 'First Name' },
@@ -28,6 +26,7 @@ const ALL_CONTACT_FIELDS: { key: DisplayableContactKey; label: string; hiddenInM
 const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete }) => {
     const [sortKey, setSortKey] = useState<SortKey>('lastName');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
 
     const sortedContacts = useMemo(() => {
         const sorted = [...contacts].sort((a, b) => {
@@ -40,6 +39,10 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete 
         });
         return sortOrder === 'asc' ? sorted : sorted.reverse();
     }, [contacts, sortKey, sortOrder]);
+
+    const handleToggleExpand = (contactId: string) => {
+        setExpandedContactId(prevId => (prevId === contactId ? null : contactId));
+    };
 
     const handleSort = (key: SortKey) => {
         if (sortKey === key) {
@@ -61,12 +64,10 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete 
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>
-                            {/* UPDATED: Iterate over the new ALL_CONTACT_FIELDS array */}
                             {ALL_CONTACT_FIELDS.map(({ key, label, hiddenInMobile }) => (
                                 <th
                                     key={key}
                                     scope="col"
-                                    // ADDED: Tailwind classes for mobile responsiveness
                                     className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer 
                                         ${hiddenInMobile ? 'hidden lg:table-cell' : ''}
                                     `}
@@ -85,32 +86,52 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete 
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                         {sortedContacts.map((contact) => (
-                            <tr key={contact.id} className="hover:bg-gray-50 transition-colors duration-150">
-                                {/* UPDATED: Iterate and display all fields */}
-                                {ALL_CONTACT_FIELDS.map(({ key, hiddenInMobile }) => (
-                                    <td 
-                                        key={key} 
-                                        className={`px-6 py-4 whitespace-nowrap text-sm text-gray-500 
-                                            ${key === 'firstName' || key === 'lastName' ? 'font-medium text-gray-900' : ''}
-                                            ${hiddenInMobile ? 'hidden lg:table-cell' : ''}
-                                        `}
-                                    >
-                                        {/* Display the value or '-' if null/undefined */}
-                                        {contact[key] || '-'}
+                            // UPDATED: Use Fragment to group the main row and the expandable row
+                            <Fragment key={contact.id}>
+                                <tr className="hover:bg-gray-50 transition-colors duration-150">
+                                    {ALL_CONTACT_FIELDS.map(({ key, hiddenInMobile }) => (
+                                        <td 
+                                            key={key} 
+                                            className={`px-6 py-4 whitespace-nowrap text-sm text-gray-500 
+                                                ${key === 'firstName' || key === 'lastName' ? 'font-medium text-gray-900' : ''}
+                                                ${hiddenInMobile ? 'hidden lg:table-cell' : ''}
+                                            `}
+                                        >
+                                            {contact[key] || '-'}
+                                        </td>
+                                    ))}
+                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <div className="flex items-center justify-end space-x-4">
+                                            {/* ADDITION: View/Hide button for mobile/tablet */}
+                                            <button 
+                                                onClick={() => handleToggleExpand(contact.id)}
+                                                className="lg:hidden px-2 py-1 text-xs font-semibold text-indigo-600 bg-indigo-100 rounded hover:bg-indigo-200 transition-colors"
+                                            >
+                                                {expandedContactId === contact.id ? 'Hide' : 'View'}
+                                            </button>
+                                            <button onClick={() => onEdit(contact)} className="text-indigo-600 hover:text-indigo-900 transition-colors">
+                                               <EditIcon className="h-5 w-5"/>
+                                            </button>
+                                            <button onClick={() => onDelete(contact.id)} className="text-red-600 hover:text-red-900 transition-colors">
+                                                <DeleteIcon className="h-5 w-5" />
+                                            </button>
+                                        </div>
                                     </td>
-                                ))}
-                                {/* Action buttons column remains the same */}
-                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    <div className="flex items-center justify-end space-x-4">
-                                        <button onClick={() => onEdit(contact)} className="text-indigo-600 hover:text-indigo-900 transition-colors">
-                                           <EditIcon className="h-5 w-5"/>
-                                        </button>
-                                        <button onClick={() => onDelete(contact.id)} className="text-red-600 hover:text-red-900 transition-colors">
-                                            <DeleteIcon className="h-5 w-5" />
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
+                                </tr>
+                                {/* ADDITION: Expanded row for mobile/tablet view */}
+                                {expandedContactId === contact.id && (
+                                    <tr className="lg:hidden bg-gray-50">
+                                        <td colSpan={ALL_CONTACT_FIELDS.length + 1} className="px-6 py-4">
+                                            <div className="space-y-3 text-sm text-gray-600">
+                                                <p><strong className="font-medium text-gray-800">Title:</strong> {contact.honorific || '-'}</p>
+                                                <p><strong className="font-medium text-gray-800">Phone:</strong> {contact.phone || '-'}</p>
+                                                <p><strong className="font-medium text-gray-800">Address:</strong> {contact.address || '-'}</p>
+                                                <p><strong className="font-medium text-gray-800">Notes:</strong> {contact.notes || '-'}</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </Fragment>
                         ))}
                     </tbody>
                 </table>

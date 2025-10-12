@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getFunctions } from "firebase/functions";
+import { getAuth, connectAuthEmulator } from "firebase/auth"; // Import connectAuthEmulator
+import { getFirestore, connectFirestoreEmulator } from "firebase/firestore"; // Import connectFirestoreEmulator
+import { getFunctions, connectFunctionsEmulator } from "firebase/functions"; // Import connectFunctionsEmulator
 
 // Your web app's Firebase configuration using environment variables
 const firebaseConfig = {
@@ -20,3 +20,10 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const functions = getFunctions(app);
+
+// ADD THIS SECTION TO CONNECT TO EMULATORS
+if (import.meta.env.DEV) {
+  connectAuthEmulator(auth, "http://127.0.0.1:9099");
+  connectFirestoreEmulator(db, "127.0.0.1", 5001);
+  connectFunctionsEmulator(functions, "127.0.0.1", 5003);
+}

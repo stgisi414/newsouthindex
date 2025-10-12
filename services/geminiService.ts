@@ -1,11 +1,12 @@
 import { httpsCallable } from "firebase/functions";
-import { functions } from "../src/firebaseConfig"; // Adjust the path if needed
+import { functions } from "../src/firebaseConfig";
 
 const processCommandCallable = httpsCallable(functions, 'processCommand', { limitedUseAppCheckTokens: true }); 
 
-export const processNaturalLanguageCommand = async (command: string) => {
+export const processNaturalLanguageCommand = async (command: string, isAdmin: boolean) => {
     try {
-        const response = await processCommandCallable({ command });
+        // UPDATED: Pass the isAdmin status in the payload
+        const response = await processCommandCallable({ command, isAdmin });
         return response.data;
     } catch (error) {
         console.error("Error calling Firebase Function:", error);

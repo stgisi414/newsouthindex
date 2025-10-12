@@ -25,3 +25,9 @@ export interface ChatMessage {
     text: string;
     data?: any;
 }
+
+export interface AppUser {
+    id: string;
+    email?: string;
+    isAdmin: boolean;
+}

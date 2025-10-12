@@ -1,11 +1,12 @@
-
 import React, { useState, useMemo } from 'react';
-import { Contact } from '../types';
+import { AppUser, Contact } from '../types';
+import { User } from 'firebase/auth';
 import ContactTable from './ContactTable';
 import ContactForm from './ContactForm';
 import AIChat from './AIChat';
 import PlusIcon from './icons/PlusIcon';
 import logo from '../public/newsouthbookslogo.jpg';
+import AdminPanel from './AdminPanel';
 
 interface DashboardProps {
     contacts: Contact[];
@@ -14,12 +15,17 @@ interface DashboardProps {
     onDeleteContact: (id: string) => void;
     onProcessAiCommand: (intent: string, data: any) => Promise<{ success: boolean; payload?: any }>;
     onLogout: () => void;
+    isAdmin: boolean;
+    users: AppUser[];
+    currentUser: User;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateContact, onDeleteContact, onProcessAiCommand, onLogout }) => {
+const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateContact, onDeleteContact, onProcessAiCommand, onLogout, isAdmin, users, currentUser }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingContact, setEditingContact] = useState<Contact | null>(null);
+    const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+    const [isAiChatOpen, setIsAiChatOpen] = useState(true);
 
     const filteredContacts = useMemo(() => {
         return contacts.filter(contact =>
@@ -63,7 +69,6 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                             <img src={logo} alt="New South Books Logo" className="h-12 w-auto" />
                             <h1 className="text-3xl font-bold leading-tight text-gray-900">New South Index</h1>
                         </div>
-                        {/* ADDITION: Logout Button */}
                         <button
                             onClick={onLogout}
                             className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors text-sm"
@@ -84,22 +89,46 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full sm:w-1/2 px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             />
-                            <button
-                                onClick={handleNewContact}
-                                className="w-full sm:w-auto flex items-center justify-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
-                            >
-                               <PlusIcon className="h-5 w-5 mr-2" />
-                               New Contact
-                            </button>
+                            {isAdmin && (
+                                <div className="flex items-center gap-4">
+                                    <button
+                                        onClick={() => setIsAdminPanelOpen(prev => !prev)}
+                                        className="px-4 py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition-colors"
+                                    >
+                                        {isAdminPanelOpen ? 'Hide Admin' : 'Show Admin'}
+                                    </button>
+                                    <button
+                                        onClick={handleNewContact}
+                                        className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+                                    >
+                                       <PlusIcon className="h-5 w-5 mr-2" />
+                                       New Contact
+                                    </button>
+                                </div>
+                            )}
                         </div>
+                        
+                        {isAdmin && isAdminPanelOpen && <AdminPanel users={users} currentUser={currentUser} />}
+
                         <ContactTable 
                             contacts={filteredContacts}
-                            onEdit={handleEditContact}
-                            onDelete={handleDeleteContact}
+                            onEdit={isAdmin ? handleEditContact : () => {}}
+                            onDelete={isAdmin ? handleDeleteContact : () => {}}
                         />
                     </div>
-                    <div className="lg:col-span-1 h-[85vh]">
-                        <AIChat onCommandProcessed={onProcessAiCommand} />
+                    {/* UPDATED: AI Chat column with toggle button */}
+                    <div className="lg:col-span-1 space-y-4">
+                        <button
+                            onClick={() => setIsAiChatOpen(prev => !prev)}
+                            className="w-full px-4 py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition-colors"
+                        >
+                            {isAiChatOpen ? 'Hide AI Assistant' : 'Show AI Assistant'}
+                        </button>
+                        {isAiChatOpen && (
+                            <div className="h-[calc(85vh-4rem)]">
+                                <AIChat onCommandProcessed={onProcessAiCommand} isAdmin={isAdmin} />
+                            </div>
+                        )}
                     </div>
                 </div>
             </main>
