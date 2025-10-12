@@ -28,13 +28,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
         if (!bookSearch) return books.filter(b => b.stock > 0);
         return books.filter(book =>
             book.stock > 0 &&
-            (book.title.toLowerCase().includes(bookSearch.toLowerCase()) ||
-            book.author.toLowerCase().includes(bookSearch.toLowerCase()))
+            ((book.title || '').toLowerCase().includes(bookSearch.toLowerCase()) ||
+            (book.author || '').toLowerCase().includes(bookSearch.toLowerCase()))
         );
     }, [books, bookSearch]);
 
     const totalPrice = useMemo(() => {
-        return Array.from(selectedBooks.values()).reduce((sum, { book, quantity }) => sum + (book.price * quantity), 0);
+        return Array.from(selectedBooks.values()).reduce((sum, { book, quantity }) => sum + (book.price * (quantity || 0)), 0);
     }, [selectedBooks]);
 
     if (!isOpen) {
@@ -51,12 +51,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
         setSelectedBooks(newSelection);
     };
 
-    const handleQuantityChange = (bookId: string, quantity: number) => {
+    const handleQuantityChange = (bookId: string, newQuantityValue: number) => {
         const newSelection = new Map(selectedBooks);
         const item = newSelection.get(bookId);
         if (item) {
-            const newQuantity = Math.max(1, Math.min(quantity, item.book.stock));
-            newSelection.set(bookId, { ...item, quantity: newQuantity });
+            // FIX: Allow NaN for empty inputs, but ensure it's at least 0 and not more than stock.
+            const quantity = isNaN(newQuantityValue) ? NaN : Math.max(0, Math.min(newQuantityValue, item.book.stock));
+            newSelection.set(bookId, { ...item, quantity });
             setSelectedBooks(newSelection);
         }
     };
@@ -65,6 +66,13 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
         const newErrors: { [key: string]: string } = {};
         if (!contactId) newErrors.contactId = 'A customer must be selected.';
         if (selectedBooks.size === 0) newErrors.books = 'At least one book must be selected.';
+        // Also check if any selected book has a quantity of 0 or NaN
+        for (const { quantity } of selectedBooks.values()) {
+            if (isNaN(quantity) || quantity <= 0) {
+                newErrors.books = 'All selected books must have a quantity of at least 1.';
+                break;
+            }
+        }
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -74,7 +82,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
         if (validate()) {
             onSave({
                 contactId,
-                booksWithQuantity: Array.from(selectedBooks.values())
+                booksWithQuantity: Array.from(selectedBooks.values()).map(item => ({...item, quantity: item.quantity || 0}))
             });
         }
     };
@@ -83,7 +91,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center">
             <div className="bg-white rounded-lg shadow-2xl p-8 m-4 max-w-2xl w-full max-h-[90vh] flex flex-col">
                 <h2 className="text-2xl font-bold text-gray-800 mb-6">New Transaction</h2>
-                <form onSubmit={handleSubmit} className="flex-grow flex flex-col">
+                <form onSubmit={handleSubmit} className="flex-grow flex flex-col overflow-hidden">
                     <div className="space-y-6 flex-grow overflow-y-auto pr-2">
                         <div>
                             <label htmlFor="contactId" className="block text-sm font-medium text-gray-700">Customer</label>
@@ -111,7 +119,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
                                         </div>
                                     </div>
                                     {selectedBooks.has(book.id) && (
-                                        <input type="number" min="1" max={book.stock} value={selectedBooks.get(book.id)?.quantity || 1} onChange={(e) => handleQuantityChange(book.id, parseInt(e.target.value, 10))} className="w-20 text-center border-gray-300 rounded-md shadow-sm" />
+                                        // FIX: Allow empty string for NaN values and set min to 0
+                                        <input type="number" min="0" max={book.stock} value={isNaN(selectedBooks.get(book.id)?.quantity || 0) ? '' : selectedBooks.get(book.id)?.quantity} onChange={(e) => handleQuantityChange(book.id, parseInt(e.target.value, 10))} className="w-20 text-center border-gray-300 rounded-md shadow-sm" />
                                     )}
                                 </div>
                             ))}

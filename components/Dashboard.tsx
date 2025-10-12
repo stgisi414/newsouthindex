@@ -24,7 +24,7 @@ interface DashboardProps {
     onUpdateBook: (book: Book) => void;
     onDeleteBook: (id: string) => void;
     transactions: Transaction[];
-    onAddTransaction: (data: { contactId: string; books: Book[] }) => void;
+    onAddTransaction: (data: { contactId: string; booksWithQuantity: { book: Book, quantity: number }[] }) => void;
     onProcessAiCommand: (intent: string, data: any) => Promise<{ success: boolean; payload?: any }>;
     onLogout: () => void;
     isAdmin: boolean;
@@ -83,7 +83,7 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
         setIsBookFormOpen(false);
     };
     
-    const handleSaveTransaction = (data: { contactId: string; books: Book[] }) => {
+    const handleSaveTransaction = (data: { contactId: string; booksWithQuantity: { book: Book, quantity: number }[] }) => {
         onAddTransaction(data);
         setIsTransactionFormOpen(false);
     };

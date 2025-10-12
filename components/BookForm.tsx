@@ -33,7 +33,9 @@ const BookForm: React.FC<BookFormProps> = ({ isOpen, onClose, onSave, bookToEdit
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, type } = e.target;
-        setFormState(prev => ({ ...prev, [name]: type === 'number' ? parseFloat(value) || 0 : value }));
+        // FIX: Remove '|| 0' to allow the input to be cleared.
+        // This will result in NaN for empty number fields, which we'll handle.
+        setFormState(prev => ({ ...prev, [name]: type === 'number' ? parseFloat(value) : value }));
     };
     
     const validate = () => {
@@ -49,7 +51,14 @@ const BookForm: React.FC<BookFormProps> = ({ isOpen, onClose, onSave, bookToEdit
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (validate()) {
-            onSave(bookToEdit ? { ...formState, id: bookToEdit.id } : formState);
+            // FIX: Create a clean version of the state for saving,
+            // converting any NaN values from empty inputs back to 0.
+            const dataToSave = {
+                ...formState,
+                price: isNaN(formState.price) ? 0 : formState.price,
+                stock: isNaN(formState.stock) ? 0 : formState.stock,
+            };
+            onSave(bookToEdit ? { ...dataToSave, id: bookToEdit.id } : dataToSave);
             onClose();
         }
     };
@@ -80,12 +89,14 @@ const BookForm: React.FC<BookFormProps> = ({ isOpen, onClose, onSave, bookToEdit
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label htmlFor="price" className="block text-sm font-medium text-gray-700">Price</label>
-                            <input type="number" id="price" name="price" value={formState.price} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 border ${errors.price ? 'border-red-500' : 'border-gray-300'} rounded-md`} step="0.01" />
+                            {/* FIX: Show an empty string if the value is NaN */}
+                            <input type="number" id="price" name="price" value={isNaN(formState.price) ? '' : formState.price} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 border ${errors.price ? 'border-red-500' : 'border-gray-300'} rounded-md`} step="0.01" />
                             {errors.price && <p className="text-red-500 text-xs mt-1">{errors.price}</p>}
                         </div>
                         <div>
                             <label htmlFor="stock" className="block text-sm font-medium text-gray-700">Stock</label>
-                            <input type="number" id="stock" name="stock" value={formState.stock} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 border ${errors.stock ? 'border-red-500' : 'border-gray-300'} rounded-md`} />
+                            {/* FIX: Show an empty string if the value is NaN */}
+                            <input type="number" id="stock" name="stock" value={isNaN(formState.stock) ? '' : formState.stock} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 border ${errors.stock ? 'border-red-500' : 'border-gray-300'} rounded-md`} />
                              {errors.stock && <p className="text-red-500 text-xs mt-1">{errors.stock}</p>}
                         </div>
                     </div>
