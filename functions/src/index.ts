@@ -1,19 +1,21 @@
-import { onCall, HttpsError } from "firebase-functions/v2";
+import { onCall, type CallableRequest } from "firebase-functions/v2/https"; // UPDATED: Correct path and import CallableRequest
+import { HttpsError } from "firebase-functions/v2/https"; // ADDED: Explicit import for HttpsError
 import * as logger from "firebase-functions/logger";
 import { GoogleGenAI } from "@google/genai";
 import { responseSchema } from "./geminiSchema";
 import * as admin from "firebase-admin";
 
+admin.initializeApp();
+
 export const processCommand = onCall(
   {secrets: ["GEMINI_API_KEY"]},
-  async (request) => {
+  async (request: CallableRequest<any>) => { // FIXED: Added explicit type CallableRequest<any>
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       logger.error("GEMINI_API_KEY environment variable missing.");
       throw new HttpsError("internal", "AI service configuration failed.");
     }
-
     const ai = new GoogleGenAI({apiKey});
 
     const command = request.data.command;
