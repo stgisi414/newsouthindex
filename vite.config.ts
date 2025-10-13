@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
-      tailwindcss(), // Use the vite plugin here
+      tailwindcss(), // <--- ADD THIS
       VitePWA({
         registerType: 'autoUpdate',
         manifest: {
@@ -33,7 +33,6 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
-    // The explicit css.postcss block is NOT needed when using @tailwindcss/vite
     define: {
       'process.env.VITE_FIREBASE_API_KEY': JSON.stringify(env.VITE_FIREBASE_API_KEY),
       'process.env.VITE_AUTH_DOMAIN': JSON.stringify(env.VITE_AUTH_DOMAIN),
