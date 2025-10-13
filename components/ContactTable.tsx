@@ -13,14 +13,13 @@ type SortKey = keyof Contact;
 type DisplayableContactKey = Exclude<SortKey, 'id'>;
 
 const ALL_CONTACT_FIELDS: { key: DisplayableContactKey; label: string; hiddenInMobile?: boolean }[] = [
-    { key: 'honorific', label: 'Title', hiddenInMobile: true },
     { key: 'firstName', label: 'First Name' },
     { key: 'lastName', label: 'Last Name' },
     { key: 'category', label: 'Category' },
-    { key: 'phone', label: 'Phone', hiddenInMobile: true },
     { key: 'email', label: 'Email' },
-    { key: 'address', label: 'Address', hiddenInMobile: true },
-    { key: 'notes', label: 'Notes', hiddenInMobile: true },
+    { key: 'phone', label: 'Phone', hiddenInMobile: true },
+    { key: 'city', label: 'City', hiddenInMobile: true },
+    { key: 'state', label: 'State', hiddenInMobile: true },
 ];
 
 const ITEMS_PER_PAGE = 10;
@@ -131,9 +130,10 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete 
                                     <tr className="lg:hidden bg-gray-50">
                                         <td colSpan={ALL_CONTACT_FIELDS.length + 1} className="px-6 py-4">
                                             <div className="space-y-3 text-sm text-gray-600">
-                                                <p><strong className="font-medium text-gray-800">Title:</strong> {contact.honorific || '-'}</p>
+                                                <p><strong className="font-medium text-gray-800">Full Name:</strong> {contact.honorific} {contact.firstName} {contact.middleInitial} {contact.lastName} {contact.suffix}</p>
                                                 <p><strong className="font-medium text-gray-800">Phone:</strong> {contact.phone || '-'}</p>
-                                                <p><strong className="font-medium text-gray-800">Address:</strong> {contact.address || '-'}</p>
+                                                <p><strong className="font-medium text-gray-800">URL:</strong> {contact.url || '-'}</p>
+                                                <p><strong className="font-medium text-gray-800">Address:</strong> {contact.address1 || ''} {contact.address2 || ''} {contact.city || ''} {contact.state || ''} {contact.zip || ''}</p>
                                                 <p><strong className="font-medium text-gray-800">Notes:</strong> {contact.notes || '-'}</p>
                                             </div>
                                         </td>
@@ -144,7 +144,7 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete 
                     </tbody>
                 </table>
             </div>
-            {/* ADDED: Pagination Controls */}
+            {/* Pagination Controls */}
             <div className="px-6 py-3 flex items-center justify-between border-t border-gray-200 bg-gray-50">
                 <div className="flex-1 flex justify-between sm:hidden">
                     <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">Previous</button>

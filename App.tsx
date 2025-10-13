@@ -13,11 +13,13 @@ import {
   onSnapshot,
   getDoc,
   writeBatch,
-  increment, // Import increment
+  increment,
+  arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import Dashboard from "./components/Dashboard";
 import { Auth } from "./components/Auth";
-import { AppUser, Contact, Category, UserRole, Book, Transaction } from "./types";
+import { AppUser, Contact, Category, UserRole, Book, Transaction, Event } from "./types";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -28,6 +30,7 @@ function App() {
   const [books, setBooks] = useState<Book[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<Event[]>([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -65,6 +68,11 @@ function App() {
         setTransactions(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as Transaction)));
       });
 
+      const eventsQuery = query(collection(db, "events"), orderBy("date", "desc"));
+      const unsubscribeEvents = onSnapshot(eventsQuery, (snapshot) => {
+        setEvents(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as Event)));
+      });
+
       let unsubscribeUsers = () => {};
       if (userRole === UserRole.ADMIN) {
         const usersQuery = query(collection(db, "users"));
@@ -78,12 +86,14 @@ function App() {
         unsubscribeBooks();
         unsubscribeTransactions();
         unsubscribeUsers();
+        unsubscribeEvents();
       };
     } else {
       setContacts([]);
       setUsers([]);
       setBooks([]);
       setTransactions([]);
+      setEvents([]);
     }
   }, [user, userRole]);
 
@@ -182,6 +192,30 @@ function App() {
     await batch.commit();
   };
 
+  const addEvent = async (eventData: Omit<Event, "id">) => {
+    if (!isAdmin) return;
+    await addDoc(collection(db, "events"), { ...eventData, attendeeIds: [] });
+  };
+
+  const updateEvent = async (event: Event) => {
+    if (!isAdmin) return;
+    const eventDoc = doc(db, "events", event.id);
+    await updateDoc(eventDoc, { ...event });
+  };
+
+  const deleteEvent = async (id: string) => {
+    if (!isAdmin) return;
+    await deleteDoc(doc(db, "events", id));
+  };
+
+  const updateEventAttendees = async (eventId: string, contactId: string, isAttending: boolean) => {
+      if (!isAdmin) return;
+      const eventRef = doc(db, "events", eventId);
+      await updateDoc(eventRef, {
+          attendeeIds: isAttending ? arrayUnion(contactId) : arrayRemove(contactId),
+      });
+  };
+
   const onProcessAiCommand = async (intent: string, data: any): Promise<{ success: boolean; payload?: any; message?: string }> => {
     switch (intent) {
       case 'ADD_CONTACT': {
@@ -274,7 +308,7 @@ function App() {
         return await deleteContact(contactToDelete.id);
       }
 
-        case 'ADD_BOOK': {
+      case 'ADD_BOOK': {
         if (!isAdmin) return { success: false, message: "Sorry, only admins can add books." };
         const bookData = data.bookData || {};
         const newBook = {
@@ -288,6 +322,7 @@ function App() {
         await addBook(newBook);
         return { success: true, message: `Successfully added the book "${newBook.title}".` };
       }
+
       case 'FIND_BOOK': {
         const identifier = (data.bookIdentifier || '').toLowerCase();
         if (!identifier) return { success: false, message: "Please specify a book title or ISBN." };
@@ -298,6 +333,7 @@ function App() {
         );
         return { success: true, payload: foundBooks };
       }
+
       case 'UPDATE_BOOK': {
         if (!isAdmin) return { success: false, message: "Sorry, only admins can update books." };
         const identifier = (data.bookIdentifier || '').toLowerCase();
@@ -308,6 +344,7 @@ function App() {
         await updateBook({ ...bookToUpdate, ...data.updateData });
         return { success: true, message: `Successfully updated "${bookToUpdate.title}".` };
       }
+
       case 'DELETE_BOOK': {
         if (!isAdmin) return { success: false, message: "Sorry, only admins can delete books." };
         const identifier = (data.bookIdentifier || '').toLowerCase();
@@ -317,10 +354,87 @@ function App() {
         await deleteBook(foundBooks[0].id);
         return { success: true, message: `Successfully deleted "${foundBooks[0].title}".` };
       }
+
       case 'CREATE_TRANSACTION': {
          // This would be complex to handle via AI and is better suited for the form.
          return { success: false, message: "Please use the 'New Transaction' form to log a sale." };
       }
+
+      case 'ADD_EVENT': {
+        if (!isAdmin) return { success: false, message: "Sorry, only admins can add events." };
+        const eventData = data.eventData || {};
+        const newEvent = {
+          name: eventData.name || "Untitled Event",
+          date: eventData.date ? new Date(eventData.date) : new Date(),
+          author: eventData.author || "",
+          description: eventData.description || "",
+        } as Omit<Event, "id">;
+        await addEvent(newEvent);
+        return { success: true, message: `Successfully scheduled the event "${newEvent.name}".` };
+      }
+
+      case 'FIND_EVENT': {
+        const identifier = (data.eventIdentifier || '').toLowerCase();
+        if (!identifier) return { success: false, message: "Please specify an event name." };
+        const foundEvents = events.filter(e => 
+          e.name.toLowerCase().includes(identifier)
+        );
+        return { success: true, payload: foundEvents };
+      }
+
+      case 'UPDATE_EVENT': {
+        if (!isAdmin) return { success: false, message: "Sorry, only admins can update events." };
+        const identifier = (data.eventIdentifier || '').toLowerCase();
+        const foundEvents = events.filter(e => e.name.toLowerCase().includes(identifier));
+        if (foundEvents.length === 0) return { success: false, message: `Could not find an event matching "${data.eventIdentifier}".`};
+        if (foundEvents.length > 1) return { success: false, message: "Found multiple events with that name, please be more specific."};
+        const eventToUpdate = foundEvents[0];
+        const updateData = data.updateData || {};
+        if (updateData.date) {
+            updateData.date = new Date(updateData.date);
+        }
+        await updateEvent({ ...eventToUpdate, ...updateData });
+        return { success: true, message: `Successfully updated "${eventToUpdate.name}".` };
+      }
+
+      case 'DELETE_EVENT': {
+        if (!isAdmin) return { success: false, message: "Sorry, only admins can delete events." };
+        const identifier = (data.eventIdentifier || '').toLowerCase();
+        const foundEvents = events.filter(e => e.name.toLowerCase().includes(identifier));
+        if (foundEvents.length === 0) return { success: false, message: `Could not find an event matching "${data.eventIdentifier}".`};
+        if (foundEvents.length > 1) return { success: false, message: "Found multiple events with that name, please be more specific."};
+        await deleteEvent(foundEvents[0].id);
+        return { success: true, message: `Successfully deleted "${foundEvents[0].name}".` };
+      }
+
+      case 'ADD_ATTENDEE':
+      case 'REMOVE_ATTENDEE': {
+          if (!isAdmin) return { success: false, message: "Sorry, only admins can manage attendees." };
+          const eventIdentifier = (data.eventIdentifier || '').toLowerCase();
+          const contactIdentifier = (data.contactIdentifier || '').toLowerCase();
+
+          if (!eventIdentifier || !contactIdentifier) {
+              return { success: false, message: "Please specify both an event and a contact." };
+          }
+          
+          const foundEvents = events.filter(e => e.name.toLowerCase().includes(eventIdentifier));
+          if (foundEvents.length === 0) return { success: false, message: `Could not find an event matching "${data.eventIdentifier}".` };
+          if (foundEvents.length > 1) return { success: false, message: "Found multiple events with that name, please be more specific." };
+          
+          const foundContacts = contacts.filter(c => `${c.firstName} ${c.lastName}`.toLowerCase().includes(contactIdentifier));
+          if (foundContacts.length === 0) return { success: false, message: `Could not find a contact matching "${data.contactIdentifier}".` };
+          if (foundContacts.length > 1) return { success: false, message: "Found multiple contacts with that name, please be more specific." };
+          
+          const eventToUpdate = foundEvents[0];
+          const contactToUpdate = foundContacts[0];
+          const isAttending = intent === 'ADD_ATTENDEE';
+
+          await updateEventAttendees(eventToUpdate.id, contactToUpdate.id, isAttending);
+
+          const actionText = isAttending ? "added" : "removed";
+          return { success: true, message: `Successfully ${actionText} ${contactToUpdate.firstName} ${contactToUpdate.lastName} ${isAttending ? 'to' : 'from'} the event "${eventToUpdate.name}".` };
+      }
+
       default:
         return { success: true };
     }
@@ -366,6 +480,11 @@ function App() {
             onDeleteBook={deleteBook}
             transactions={transactions}
             onAddTransaction={addTransaction}
+            events={events}
+            onAddEvent={addEvent}
+            onUpdateEvent={updateEvent}
+            onDeleteEvent={deleteEvent}
+            onUpdateEventAttendees={updateEventAttendees}
             onProcessAiCommand={onProcessAiCommand}
             onLogout={handleLogout}
             isAdmin={isAdmin}

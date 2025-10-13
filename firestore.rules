@@ -29,7 +29,6 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // ADDED: Rules for Books and Transactions
     match /books/{bookId} {
         allow read: if isViewer() || isAdmin();
         allow write: if isAdmin();
@@ -39,6 +38,11 @@ service cloud.firestore {
         allow read: if isViewer() || isAdmin();
         allow create: if isAdmin(); // Only admins can create transactions
         allow update, delete: if false; // Transactions should be immutable
+    }
+
+    match /events/{eventId} {
+        allow read: if isViewer() || isAdmin();
+        allow write: if isAdmin();
     }
   }
 }

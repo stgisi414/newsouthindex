@@ -9,7 +9,6 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../src/firebaseConfig";
-import logo from '../public/newsouthbookslogo.jpg';
 import { UserRole } from "../types";
 
 const ensureUserDocument = async (user: User) => {
@@ -72,7 +71,7 @@ export const Auth = () => {
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg">
         <div className="flex items-center justify-center gap-4 border-b pb-4">
-          <img src={logo} alt="New South Books Logo" className="h-12 w-auto" />
+          <img src="/newsouthbookslogo.jpg" alt="New South Books Logo" className="h-12 w-auto" />
           <h2 className="text-2xl font-bold text-gray-900">
             New South Index
           </h2>

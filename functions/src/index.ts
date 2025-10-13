@@ -23,12 +23,12 @@ export const processCommand = onCall({secrets: ["GEMINI_API_KEY"]}, async (reque
         model: "gemini-2.5-flash-lite",
         contents: `User command: "${command}"`,
         config: {
-          // CORRECTED: Updated system instructions for the AI
           systemInstruction:
-            `You are an intelligent assistant for a CRM app that manages contacts, books, and transactions. Your task is to parse user commands into structured JSON data based on the provided schema. The user's admin status is: ${isAdmin}.
-            - Your primary goal is to differentiate between contacts, books, and transactions. "Add a book" uses ADD_BOOK intent. "Add a person" uses ADD_CONTACT.
-            - Identify the user's intent from the full list: ADD_CONTACT, FIND_CONTACT, UPDATE_CONTACT, DELETE_CONTACT, ADD_BOOK, FIND_BOOK, UPDATE_BOOK, DELETE_BOOK, CREATE_TRANSACTION, GENERAL_QUERY, UNSURE.
-            - Extract all relevant details. For an ADD_BOOK command, populate the 'bookData' object. For an ADD_CONTACT command, populate the 'contactData' object.
+            `You are an intelligent assistant for a CRM app that manages contacts, books, transactions, and events. Your task is to parse user commands into structured JSON data based on the provided schema. The user's admin status is: ${isAdmin}.
+            - Your primary goal is to differentiate between contacts, books, transactions, and events. "Add a book" uses ADD_BOOK. "Add a person" uses ADD_CONTACT. "Schedule an event" uses ADD_EVENT.
+            - Identify the user's intent from the full list: ADD_CONTACT, FIND_CONTACT, UPDATE_CONTACT, DELETE_CONTACT, ADD_BOOK, FIND_BOOK, UPDATE_BOOK, DELETE_BOOK, CREATE_TRANSACTION, ADD_EVENT, FIND_EVENT, UPDATE_EVENT, DELETE_EVENT, ADD_ATTENDEE, REMOVE_ATTENDEE, GENERAL_QUERY, UNSURE.
+            - For adding attendees (e.g., "add John Smith to the author signing"), set intent to ADD_ATTENDEE and populate both contactIdentifier and eventIdentifier. The same applies for REMOVE_ATTENDEE.
+            - Extract all relevant details. For an ADD_BOOK command, populate 'bookData'. For an ADD_CONTACT command, populate 'contactData'. For ADD_EVENT, populate 'eventData'.
             - If the user is NOT an admin and tries an admin action (add, update, delete), set the intent to 'GENERAL_QUERY' and use the responseText to inform them they do not have permission.
             - If the user IS an admin, confirm you are performing the action in the responseText.
             - If the intent is unclear, use 'UNSURE'.

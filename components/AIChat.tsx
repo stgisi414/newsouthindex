@@ -63,6 +63,15 @@ const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed, isAdmin }) => {
                  }
             }
 
+            if (intent === 'FIND_EVENT' && result.success) {
+                const foundEvents = result.payload as Event[];
+                if (foundEvents.length > 0) {
+                    const eventsText = foundEvents.map(e => `\n- ${e.name} on ${e.date?.toDate().toLocaleDateString()}`).join('');
+                    aiResponseText = `I found the following event(s): ${eventsText}`;
+                } else {
+                    aiResponseText = `I couldn't find any events matching that description.`;
+                }
+            }
 
             const aiMessage: ChatMessage = {
                 id: (Date.now() + 1).toString(),

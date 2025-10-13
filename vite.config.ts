@@ -2,11 +2,9 @@ import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
-import tailwindcss from 'tailwindcss';
-import autoprefixer from 'autoprefixer';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig(({ mode }) => {
-  // Load environment variables from the root of your project
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
@@ -16,7 +14,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
-      // VitePWA plugin configuration
+      tailwindcss(), // Use the vite plugin here
       VitePWA({
         registerType: 'autoUpdate',
         manifest: {
@@ -25,22 +23,9 @@ export default defineConfig(({ mode }) => {
           description: 'A simple contact management app for New South Books.',
           theme_color: '#ffffff',
           icons: [
-            {
-              src: 'pwa-192x192.png',
-              sizes: '192x192',
-              type: 'image/png',
-            },
-            {
-              src: 'pwa-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-            },
-            {
-              src: 'pwa-512x512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'any maskable',
-            },
+            { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+            { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+            { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
           ],
         },
         workbox: {
@@ -48,14 +33,7 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
-    css: {
-      postcss: {
-        plugins: [
-          tailwindcss, 
-          autoprefixer, 
-        ],
-      },
-    },
+    // The explicit css.postcss block is NOT needed when using @tailwindcss/vite
     define: {
       'process.env.VITE_FIREBASE_API_KEY': JSON.stringify(env.VITE_FIREBASE_API_KEY),
       'process.env.VITE_AUTH_DOMAIN': JSON.stringify(env.VITE_AUTH_DOMAIN),
@@ -66,7 +44,6 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
-        // Set up a path alias for easier imports
         '@': path.resolve(__dirname, './src'),
       },
     },

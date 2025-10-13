@@ -9,10 +9,12 @@ import BookTable from './BookTable';
 import BookForm from './BookForm';
 import TransactionTable from './TransactionTable';
 import TransactionForm from './TransactionForm';
+import EventTable from './EventTable';
+import EventForm from './EventForm';
 import AIChat from './AIChat';
 import PlusIcon from './icons/PlusIcon';
-import logo from '../public/newsouthbookslogo.jpg';
 import AdminPanel from './AdminPanel';
+import Reports from './Reports'; // Import the new component
 
 interface DashboardProps {
     contacts: Contact[];
@@ -25,6 +27,11 @@ interface DashboardProps {
     onDeleteBook: (id: string) => void;
     transactions: Transaction[];
     onAddTransaction: (data: { contactId: string; booksWithQuantity: { book: Book, quantity: number }[] }) => void;
+    events: Event[];
+    onAddEvent: (eventData: Omit<Event, 'id'>) => void;
+    onUpdateEvent: (event: Event) => void;
+    onDeleteEvent: (id: string) => void;
+    onUpdateEventAttendees: (eventId: string, contactId: string, isAttending: boolean) => void;
     onProcessAiCommand: (intent: string, data: any) => Promise<{ success: boolean; payload?: any }>;
     onLogout: () => void;
     isAdmin: boolean;
@@ -34,9 +41,9 @@ interface DashboardProps {
 
 const makeMeAdmin = httpsCallable(functions, 'makeMeAdmin');
 
-type View = 'contacts' | 'books' | 'transactions';
+type View = 'contacts' | 'books' | 'transactions' | 'reports' | 'events';
 
-const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateContact, onDeleteContact, books, onAddBook, onUpdateBook, onDeleteBook, transactions, onAddTransaction, onProcessAiCommand, onLogout, isAdmin, users, currentUser }) => {
+const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateContact, onDeleteContact, books, onAddBook, onUpdateBook, onDeleteBook, transactions, onAddTransaction, events, onAddEvent, onUpdateEvent, onDeleteEvent, onUpdateEventAttendees, onProcessAiCommand, onLogout, isAdmin, users, currentUser }) => {
     const [currentView, setCurrentView] = useState<View>('contacts');
     const [searchQuery, setSearchQuery] = useState('');
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -44,6 +51,8 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
     const [editingBook, setEditingBook] = useState<Book | null>(null);
     const [isBookFormOpen, setIsBookFormOpen] = useState(false);
     const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
+    const [isEventFormOpen, setIsEventFormOpen] = useState(false);
+    const [editingEvent, setEditingEvent] = useState<Event | null>(null);
     const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
     const [isAiChatOpen, setIsAiChatOpen] = useState(true);
     const [adminStatus, setAdminStatus] = useState<string | null>(null);
@@ -113,6 +122,25 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
         setIsFormOpen(false);
     }
 
+    const handleNewEvent = () => {
+        setEditingEvent(null);
+        setIsEventFormOpen(true);
+    };
+
+    const handleEditEvent = (event: Event) => {
+        setEditingEvent(event);
+        setIsEventFormOpen(true);
+    };
+
+    const handleSaveEvent = (eventData: Omit<Event, 'id'> | Event) => {
+        if ('id' in eventData) {
+            onUpdateEvent(eventData);
+        } else {
+            onAddEvent(eventData);
+        }
+        setIsEventFormOpen(false);
+    };
+
     const handleMakeAdmin = async () => {
         setAdminStatus("Attempting to sync admin permissions...");
         try {
@@ -137,7 +165,7 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                 <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                            <img src={logo} alt="New South Books Logo" className="h-12 w-auto" />
+                            <img src="/newsouthbookslogo.jpg" alt="New South Books Logo" className="h-12 w-auto" />
                             <h1 className="text-3xl font-bold leading-tight text-gray-900">New South Index</h1>
                         </div>
                         <button
@@ -151,10 +179,12 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
             </header>
             <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
                 <div className="mb-6 border-b border-gray-200">
-                    <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                        <button onClick={() => setCurrentView('contacts')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${currentView === 'contacts' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Contacts</button>
-                        <button onClick={() => setCurrentView('books')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${currentView === 'books' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Book Inventory</button>
-                        <button onClick={() => setCurrentView('transactions')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${currentView === 'transactions' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Transactions</button>
+                    <nav className="-mb-px flex space-x-4 overflow-x-auto scrollbar-hidden" aria-label="Tabs">
+                        <button onClick={() => setCurrentView('contacts')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'contacts' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Contacts</button>
+                        <button onClick={() => setCurrentView('books')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'books' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Book Inventory</button>
+                        <button onClick={() => setCurrentView('transactions')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'transactions' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Transactions</button>
+                        <button onClick={() => setCurrentView('events')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'events' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Events</button>
+                        <button onClick={() => setCurrentView('reports')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'reports' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Reports</button>
                     </nav>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -179,6 +209,9 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                                         {currentView === 'transactions' && (
                                             <button onClick={() => setIsTransactionFormOpen(true)} className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700"><PlusIcon className="h-5 w-5 mr-2" />New Transaction</button>
                                         )}
+                                        {currentView === 'events' && (
+                                            <button onClick={handleNewEvent} className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700"><PlusIcon className="h-5 w-5 mr-2" />New Event</button>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="flex items-center gap-4">
@@ -191,13 +224,15 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                                     </div>
                                 )}
                             </div>
-                            <input
-                                type="text"
-                                placeholder={`Search ${currentView}...`}
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
+                            {currentView !== 'reports' && (
+                                <input
+                                    type="text"
+                                    placeholder={`Search ${currentView}...`}
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                            )}
                         </div>
 
                         {adminStatus && <p className="text-sm text-center text-gray-600 p-2 bg-gray-100 rounded-md">{adminStatus}</p>}
@@ -207,6 +242,8 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                         {currentView === 'contacts' && <ContactTable contacts={filteredContacts} onEdit={isAdmin ? handleEditContact : () => {}} onDelete={isAdmin ? handleDeleteContact : () => {}} />}
                         {currentView === 'books' && <BookTable books={filteredBooks} onEdit={isAdmin ? handleEditBook : () => {}} onDelete={isAdmin ? onDeleteBook : () => {}} />}
                         {currentView === 'transactions' && <TransactionTable transactions={transactions} />}
+                        {currentView === 'events' && <EventTable events={events} contacts={contacts} onEdit={handleEditEvent} onDelete={onDeleteEvent} onUpdateAttendees={onUpdateEventAttendees} />}
+                        {currentView === 'reports' && <Reports contacts={contacts} transactions={transactions} books={books} />}
                     </div>
                     <div className="lg:col-span-1 space-y-4">
                         <button
@@ -241,6 +278,12 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                 onSave={handleSaveTransaction}
                 contacts={contacts}
                 books={books}
+            />
+            <EventForm 
+                isOpen={isEventFormOpen}
+                onClose={() => setIsEventFormOpen(false)}
+                onSave={handleSaveEvent}
+                eventToEdit={editingEvent}
             />
         </div>
     );

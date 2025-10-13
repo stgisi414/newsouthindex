@@ -10,12 +10,22 @@ export interface Contact {
     id: string;
     honorific?: string;
     firstName: string;
+    middleInitial?: string;
     lastName: string;
+    suffix?: string;
     category: Category;
     phone: string;
     email: string;
-    address?: string;
+    url?: string;
+    address1?: string;
+    address2?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
     notes?: string;
+    createdDate?: any;
+    lastModifiedDate?: any;
+    createdBy?: string;
 }
 
 export enum UserRole {
@@ -62,3 +72,16 @@ export interface ChatMessage {
     text: string;
 }
 
+export interface Event {
+    id: string;
+    name: string;
+    date: any; // Using 'any' for Firebase Timestamp flexibility
+    description?: string;
+    author?: string; // Could be linked to a Contact ID later
+    attendeeIds?: string[];
+}
+
+export interface Attendee {
+    id: string; // This will be the Contact ID
+    name: string; // Combination of firstName and lastName
+}
