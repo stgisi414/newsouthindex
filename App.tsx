@@ -74,7 +74,7 @@ function App() {
       });
 
       let unsubscribeUsers = () => {};
-      if (userRole === UserRole.ADMIN) {
+      if (user) {
         const usersQuery = query(collection(db, "users"));
         unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
           setUsers(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as AppUser)));

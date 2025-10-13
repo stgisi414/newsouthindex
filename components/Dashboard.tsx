@@ -56,6 +56,7 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
     const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
     const [isAiChatOpen, setIsAiChatOpen] = useState(true);
     const [adminStatus, setAdminStatus] = useState<string | null>(null);
+    const hasAdmins = useMemo(() => users.some(user => user.isAdmin), [users]);
 
     const filteredContacts = useMemo(() => {
         return contacts.filter(contact =>
@@ -218,14 +219,16 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                                         )}
                                     </div>
                                 ) : (
-                                    <div className="flex items-center gap-4">
-                                        <button
-                                            onClick={handleMakeAdmin}
-                                            className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 transition-colors"
-                                        >
-                                            Become First Admin
-                                        </button>
-                                    </div>
+                                    !hasAdmins && (
+                                        <div className="flex items-center gap-4">
+                                            <button
+                                                onClick={handleMakeAdmin}
+                                                className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 transition-colors"
+                                            >
+                                                Become First Admin
+                                            </button>
+                                        </div>
+                                    )
                                 )}
                             </div>
                             {currentView !== 'reports' && (

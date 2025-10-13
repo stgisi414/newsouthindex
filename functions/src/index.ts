@@ -115,6 +115,14 @@ export const makeMeAdmin = onCall(async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "You must be logged in to perform this action.");
     }
+
+    const usersRef = admin.firestore().collection("users");
+    const adminSnapshot = await usersRef.where('isAdmin', '==', true).limit(1).get();
+
+    if (!adminSnapshot.empty) {
+        throw new HttpsError("permission-denied", "An admin already exists.");
+    }
+    
     const uid = request.auth.uid;
     const email = request.auth.token.email || "Unknown";
     try {
