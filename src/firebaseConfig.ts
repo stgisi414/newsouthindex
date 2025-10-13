@@ -24,6 +24,7 @@ export const functions = getFunctions(app);
 // ADD THIS SECTION TO CONNECT TO EMULATORS
 if (import.meta.env.DEV) {
   connectAuthEmulator(auth, "http://127.0.0.1:9099");
-  connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  // FIX: Change Firestore port from 8080 to 5001 to match your running emulators
+  connectFirestoreEmulator(db, "127.0.0.1", 5001);
   connectFunctionsEmulator(functions, "127.0.0.1", 5003);
 }

@@ -14,44 +14,9 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
-      tailwindcss(), // <--- ADD THIS
+      tailwindcss(),
       VitePWA({
-        registerType: 'autoUpdate',
-        manifest: {
-          name: 'New South Index',
-          short_name: 'NSIndex',
-          description: 'A simple contact management app for New South Books.',
-          theme_color: '#ffffff',
-          background_color: '#ffffff',
-          display: 'standalone',
-          start_url: '.',
-          icons: [
-            {
-              src: 'manifest-icon-192.maskable.png',
-              sizes: '192x192',
-              type: 'image/png',
-              purpose: 'any',
-            },
-            {
-              src: 'manifest-icon-512.maskable.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'any',
-            },
-            {
-              src: 'manifest-icon-192.maskable.png',
-              sizes: '192x192',
-              type: 'image/png',
-              purpose: 'maskable',
-            },
-            {
-              src: 'manifest-icon-512.maskable.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'maskable',
-            },
-          ],
-        },
+        registerType: 'autoUpdate',        
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         },
