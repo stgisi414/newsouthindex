@@ -377,9 +377,26 @@ function App() {
         const identifier = (data.eventIdentifier || '').toLowerCase();
         if (!identifier) return { success: false, message: "Please specify an event name." };
         const foundEvents = events.filter(e => 
-          e.name.toLowerCase().includes(identifier)
+          e.name.toLowerCase().includes(identifier) ||
+          e.description?.toLowerCase().includes(identifier) || // ADDED
+          e.author?.toLowerCase().includes(identifier) // ADDED
         );
-        return { success: true, payload: foundEvents };
+
+        const enrichedEvents = foundEvents.map(e => {
+            const attendees = (e.attendeeIds || [])
+                .map(id => contacts.find(c => c.id === id))
+                .filter((c): c is Contact => !!c) // Filter out null/undefined contacts
+                .map(c => ({ id: c.id, firstName: c.firstName, lastName: c.lastName, email: c.email }));
+            
+            return {
+                ...e,
+                // Ensure date is a simple string for easy transmission/consumption
+                date: e.date?.toDate().toISOString().split('T')[0],
+                attendees: attendees,
+            };
+        });
+
+        return { success: true, payload: enrichedEvents };
       }
 
       case 'UPDATE_EVENT': {

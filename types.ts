@@ -87,3 +87,11 @@ export interface Attendee {
     id: string; 
     name: string;
 }
+
+export interface ChatMessage {
+    id: string;
+    sender: 'user' | 'ai';
+    text: string;
+    userId: string; 
+    timestamp: any;
+}

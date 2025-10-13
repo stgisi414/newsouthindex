@@ -257,7 +257,7 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                         </button>
                         {isAiChatOpen && (
                             <div className="h-[calc(85vh-4rem)]">
-                                <AIChat onCommandProcessed={onProcessAiCommand} isAdmin={isAdmin} />
+                                <AIChat onCommandProcessed={onProcessAiCommand} isAdmin={isAdmin} currentUser={currentUser} />
                             </div>
                         )}
                     </div>

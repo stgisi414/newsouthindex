@@ -22,26 +22,35 @@ service cloud.firestore {
                     && request.resource.data.role == 'applicant'
                     && request.resource.data.isAdmin == false;
       allow update, delete: if isAdmin();
+    
+      match /chat/{chatDocId} {
+        allow read, write, delete: if request.auth.uid == userId;
+      }
     }
     
     match /contacts/{contactId} {
-      allow read: if isViewer() || isAdmin();
+      allow read: if isViewer() ||
+      isAdmin();
       allow write: if isAdmin();
     }
 
     match /books/{bookId} {
-        allow read: if isViewer() || isAdmin();
+        allow read: if isViewer() ||
+        isAdmin();
         allow write: if isAdmin();
     }
 
     match /transactions/{transactionId} {
-        allow read: if isViewer() || isAdmin();
+        allow read: if isViewer() ||
+        isAdmin();
         allow create: if isAdmin(); // Only admins can create transactions
-        allow update, delete: if false; // Transactions should be immutable
+        allow update, delete: if false;
+        // Transactions should be immutable
     }
 
     match /events/{eventId} {
-        allow read: if isViewer() || isAdmin();
+        allow read: if isViewer() ||
+        isAdmin();
         allow write: if isAdmin();
     }
   }
