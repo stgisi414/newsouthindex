@@ -12,6 +12,8 @@ const EventForm: React.FC<EventFormProps> = ({ isOpen, onClose, onSave, eventToE
     const initialFormState = {
         name: '',
         date: new Date().toISOString().split('T')[0], // Defaults to today
+        time: '',
+        location: '',
         description: '',
         author: '',
     };
@@ -59,9 +61,19 @@ const EventForm: React.FC<EventFormProps> = ({ isOpen, onClose, onSave, eventToE
                         <label htmlFor="name" className="block text-sm font-medium text-gray-700">Event Name</label>
                         <input type="text" id="name" name="name" value={formState.name} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" required />
                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label htmlFor="date" className="block text-sm font-medium text-gray-700">Date</label>
+                            <input type="date" id="date" name="date" value={formState.date} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        </div>
+                        <div>
+                            <label htmlFor="time" className="block text-sm font-medium text-gray-700">Time</label>
+                            <input type="time" id="time" name="time" value={formState.time || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                        </div>
+                    </div>
                     <div>
-                        <label htmlFor="date" className="block text-sm font-medium text-gray-700">Date</label>
-                        <input type="date" id="date" name="date" value={formState.date} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" required />
+                        <label htmlFor="location" className="block text-sm font-medium text-gray-700">Location</label>
+                        <input type="text" id="location" name="location" value={formState.location || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
                     </div>
                     <div>
                         <label htmlFor="author" className="block text-sm font-medium text-gray-700">Featured Author (Optional)</label>

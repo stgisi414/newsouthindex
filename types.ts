@@ -75,13 +75,15 @@ export interface ChatMessage {
 export interface Event {
     id: string;
     name: string;
-    date: any; // Using 'any' for Firebase Timestamp flexibility
+    date: any; 
+    time?: string;
+    location?: string;
     description?: string;
-    author?: string; // Could be linked to a Contact ID later
+    author?: string; 
     attendeeIds?: string[];
 }
 
 export interface Attendee {
-    id: string; // This will be the Contact ID
-    name: string; // Combination of firstName and lastName
+    id: string; 
+    name: string;
 }

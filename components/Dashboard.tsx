@@ -189,6 +189,10 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-2 space-y-6">
+                        {adminStatus && <p className="text-sm text-center text-gray-600 p-2 bg-gray-100 rounded-md">{adminStatus}</p>}
+
+                        {isAdmin && isAdminPanelOpen && <AdminPanel users={users} currentUser={currentUser} />}
+
                         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                             <div className="flex-1">
                                 {isAdmin ? (
@@ -234,10 +238,6 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                                 />
                             )}
                         </div>
-
-                        {adminStatus && <p className="text-sm text-center text-gray-600 p-2 bg-gray-100 rounded-md">{adminStatus}</p>}
-
-                        {isAdmin && isAdminPanelOpen && <AdminPanel users={users} currentUser={currentUser} />}
 
                         {currentView === 'contacts' && <ContactTable contacts={filteredContacts} onEdit={isAdmin ? handleEditContact : () => {}} onDelete={isAdmin ? handleDeleteContact : () => {}} />}
                         {currentView === 'books' && <BookTable books={filteredBooks} onEdit={isAdmin ? handleEditBook : () => {}} onDelete={isAdmin ? onDeleteBook : () => {}} />}

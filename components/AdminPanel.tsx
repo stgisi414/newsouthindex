@@ -51,7 +51,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser }) => {
     }, [currentPage, viewersAndAdmins]);
 
     return (
-        <div className="bg-white shadow-lg rounded-xl p-6 mt-8">
+        <div className="bg-white shadow-lg rounded-xl p-6 mt-2 mb-10">
             <h3 className="text-lg font-semibold text-gray-800 border-b pb-2 mb-4">Admin Panel</h3>
 
             {applicants.length > 0 && (

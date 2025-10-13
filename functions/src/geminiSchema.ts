@@ -109,6 +109,14 @@ const eventProperties = {
     type: Type.STRING,
     description: "The date of the event in YYYY-MM-DD format.",
   },
+  time: {
+    type: Type.STRING,
+    description: "The time of the event in HH:MM format.",
+  },
+  location: {
+    type: Type.STRING,
+    description: "The location of the event.",
+  },
   description: {
     type: Type.STRING,
     description: "A description of the event.",

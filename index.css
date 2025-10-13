@@ -1,12 +1,21 @@
 @import "tailwindcss";
 
+@theme {
+  --font-heading: Oswald, sans-serif;
+  --font-sans: Roboto, sans-serif;
+}
+
 @layer base {
   body {
-    @apply font-sans;
+    font-family: var(--font-sans);
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
   }
 
-  h1, h2, h3, h4, h5, h6 {
-    font-family: theme('fontFamily.heading');
+  button {
+    @apply cursor-pointer;
   }
 }
 
@@ -18,7 +27,7 @@
 
   /* Hide scrollbar for IE, Edge and Firefox */
   .scrollbar-hidden {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
   }
 }

@@ -453,48 +453,55 @@ function App() {
   }
 
   return (
-    <div>
-      {user ? (
-        userRole === UserRole.APPLICANT ? (
-          <div className="flex items-center justify-center min-h-screen bg-gray-50">
-            <div className="text-center p-8 bg-white rounded-lg shadow-md">
-              <h2 className="text-2xl font-bold mb-4 text-gray-800">Waiting for Approval</h2>
-              <p className="text-gray-600">Your account is pending approval from an administrator.</p>
-              <button
-                onClick={handleLogout}
-                className="mt-6 px-4 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition-colors"
-              >
-                Logout
-              </button>
+    <div className="flex flex-col min-h-screen">
+      <main className="flex-grow">
+        {user ? (
+          userRole === UserRole.APPLICANT ? (
+            <div className="flex items-center justify-center min-h-screen bg-gray-50">
+              <div className="text-center p-8 bg-white rounded-lg shadow-md">
+                <h2 className="text-2xl font-bold mb-4 text-gray-800">Waiting for Approval</h2>
+                <p className="text-gray-600">Your account is pending approval from an administrator.</p>
+                <button
+                  onClick={handleLogout}
+                  className="mt-6 px-4 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition-colors"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <Dashboard
+              contacts={contacts}
+              onAddContact={addContact}
+              onUpdateContact={(contact) => updateContact(contact.id, contact)}
+              onDeleteContact={deleteContact}
+              books={books}
+              onAddBook={addBook}
+              onUpdateBook={updateBook}
+              onDeleteBook={deleteBook}
+              transactions={transactions}
+              onAddTransaction={addTransaction}
+              events={events}
+              onAddEvent={addEvent}
+              onUpdateEvent={updateEvent}
+              onDeleteEvent={deleteEvent}
+              onUpdateEventAttendees={updateEventAttendees}
+              onProcessAiCommand={onProcessAiCommand}
+              onLogout={handleLogout}
+              isAdmin={isAdmin}
+              users={users}
+              currentUser={user}
+            />
+          )
         ) : (
-          <Dashboard
-            contacts={contacts}
-            onAddContact={addContact}
-            onUpdateContact={(contact) => updateContact(contact.id, contact)}
-            onDeleteContact={deleteContact}
-            books={books}
-            onAddBook={addBook}
-            onUpdateBook={updateBook}
-            onDeleteBook={deleteBook}
-            transactions={transactions}
-            onAddTransaction={addTransaction}
-            events={events}
-            onAddEvent={addEvent}
-            onUpdateEvent={updateEvent}
-            onDeleteEvent={deleteEvent}
-            onUpdateEventAttendees={updateEventAttendees}
-            onProcessAiCommand={onProcessAiCommand}
-            onLogout={handleLogout}
-            isAdmin={isAdmin}
-            users={users}
-            currentUser={user}
-          />
-        )
-      ) : (
-        <Auth />
-      )}
+          <Auth />
+        )}
+      </main>
+      <footer className="w-full bg-white shadow-inner mt-auto py-4 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto text-center text-sm text-gray-500">
+          © New South Books 2025 <i>All Rights Reserved.</i>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -34,6 +34,10 @@ const EventTable: React.FC<EventTableProps> = ({ events, contacts, onEdit, onDel
             attendees: (event.attendeeIds || []).map(id => contacts.find(c => c.id === id)).filter(Boolean) as Contact[]
         }));
     }, [paginatedEvents, contacts]);
+    
+    const handleToggleExpand = (eventId: string) => {
+        setExpandedEventId(prevId => (prevId === eventId ? null : eventId));
+    };
 
     return (
         <div className="bg-white shadow-lg rounded-xl overflow-hidden">
@@ -56,8 +60,11 @@ const EventTable: React.FC<EventTableProps> = ({ events, contacts, onEdit, onDel
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{event.attendees.length}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <div className="flex items-center justify-end space-x-4">
-                                            <button onClick={() => setExpandedEventId(expandedEventId === event.id ? null : event.id)} className="text-indigo-600 hover:text-indigo-900">
-                                                {expandedEventId === event.id ? 'Hide' : 'Manage'}
+                                            <button 
+                                                onClick={() => handleToggleExpand(event.id)}
+                                                className="px-2 py-1 text-xs font-semibold text-indigo-600 bg-indigo-100 rounded hover:bg-indigo-200"
+                                            >
+                                                {expandedEventId === event.id ? 'Hide' : 'View'}
                                             </button>
                                             <button onClick={() => onEdit(event)} className="text-indigo-600 hover:text-indigo-900"><EditIcon className="h-5 w-5"/></button>
                                             <button onClick={() => onDelete(event.id)} className="text-red-600 hover:text-red-900"><DeleteIcon className="h-5 w-5" /></button>
@@ -67,19 +74,27 @@ const EventTable: React.FC<EventTableProps> = ({ events, contacts, onEdit, onDel
                                 {expandedEventId === event.id && (
                                     <tr>
                                         <td colSpan={4} className="p-4 bg-gray-50">
-                                            <div className="max-h-60 overflow-y-auto">
-                                                <h4 className="text-md font-semibold mb-2">Manage Attendees</h4>
-                                                {contacts.map(contact => (
-                                                    <div key={contact.id} className="flex items-center justify-between p-2 border-b">
-                                                        <span>{contact.firstName} {contact.lastName}</span>
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={event.attendeeIds?.includes(contact.id) || false}
-                                                            onChange={(e) => onUpdateAttendees(event.id, contact.id, e.target.checked)}
-                                                            className="h-4 w-4 text-indigo-600 border-gray-300 rounded"
-                                                        />
-                                                    </div>
-                                                ))}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="space-y-3 text-sm text-gray-600">
+                                                    <p><strong className="font-medium text-gray-800">Time:</strong> {event.time || '-'}</p>
+                                                    <p><strong className="font-medium text-gray-800">Location:</strong> {event.location || '-'}</p>
+                                                    <p><strong className="font-medium text-gray-800">Author:</strong> {event.author || '-'}</p>
+                                                    <p><strong className="font-medium text-gray-800">Description:</strong> {event.description || '-'}</p>
+                                                </div>
+                                                <div className="max-h-48 overflow-y-auto">
+                                                    <h4 className="text-md font-semibold mb-2">Manage Attendees</h4>
+                                                    {contacts.map(contact => (
+                                                        <div key={contact.id} className="flex items-center justify-between p-2 border-b">
+                                                            <span>{contact.firstName} {contact.lastName}</span>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={event.attendeeIds?.includes(contact.id) || false}
+                                                                onChange={(e) => onUpdateAttendees(event.id, contact.id, e.target.checked)}
+                                                                className="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </td>
                                     </tr>
