@@ -376,74 +376,86 @@ function App() {
           return { success: false, message: "You do not have permission to view this information." };
         }
         
-        // CRITICAL FIX: Explicitly destructure both the expected 'countRequest' and the observed 'updateData'
         const { countRequest, updateData } = (data || {}) as { countRequest?: any, updateData?: any };
 
-        // Determine if the request is valid (this check usually passes based on your observed data)
         if (!countRequest?.target) {
             return { success: false, message: "I'm sorry, I couldn't understand the count request." };
         }
 
-        // CRITICAL FIX: CONSOLIDATE FILTERS TO MATCH API BEHAVIOR
-        // Prioritize updateData for filters, then fall back to countRequest.filters
+        // Filters contain the final, normalized, capitalized filters (e.g., { category: 'Personal', state: 'AL' })
         const filters = updateData || countRequest.filters || {};
         
         const { target } = countRequest;
         let count = 0;
         let message = '';
         
-        // FIX: Simplify check for empty filters since 'filters' is guaranteed to be an object ({}).
+        // Generate the description for the response message
         const filterDescriptions = Object.keys(filters).length > 0
             ? Object.entries(filters).map(([key, value]) => `${key} is '${value}'`).join(' and ')
             : '';
 
         if (target === 'contacts') {
             let filtered = contacts;
-          if (filters && Object.keys(filters).length > 0) { // Only filter if filters object has keys
-            filtered = contacts.filter(c => {
-              let passes = true;
-              if (filters.category) {
-                  if (filters.category.toLowerCase() === 'not client') {
-                      if (c.category?.toLowerCase() === 'client') passes = false;
-                  } else {
-                      // Note: Category must match exactly what is passed (e.g., "client" vs "Client")
-                      if (c.category?.toLowerCase() !== filters.category.toLowerCase()) passes = false;
-                  }
-              }
-              // Added check for "alabama" == "al" for state for robust filtering
-              const stateFilter = filters.state?.toLowerCase();
-              if (stateFilter && !(c.state?.toLowerCase() === stateFilter || (c.state?.toLowerCase() === 'al' && stateFilter === 'alabama'))) passes = false;
-              if (filters.city && c.city?.toLowerCase() !== filters.city.toLowerCase()) passes = false;
-              if (filters.zip && c.zip !== filters.zip) passes = false;
-              return passes;
-            });
-          }
-          count = filtered.length;
-          message = `There are ${count} contacts${filterDescriptions ? ` where ${filterDescriptions}` : ' in total'}.`;
+            if (Object.keys(filters).length > 0) { 
+                filtered = contacts.filter(c => {
+                    let passes = true;
+                    
+                    // Category Filter (Handles 'not Client' and exact match)
+                    if (filters.category) {
+                        if (filters.category === 'not Client') {
+                            if (c.category === Category.CLIENT) passes = false;
+                        } else {
+                            if (c.category !== filters.category) passes = false;
+                        }
+                    }
+                    
+                    // State Filter 
+                    if (filters.state && c.state !== filters.state) passes = false;
+                    
+                    // City Filter
+                    if (filters.city && c.city !== filters.city) passes = false;
+                    
+                    // Zip Code Filter
+                    if (filters.zip && c.zip !== filters.zip) passes = false;
+                    
+                    return passes;
+                });
+            }
+            count = filtered.length;
+            message = `There are ${count} contacts${filterDescriptions ? ` where ${filterDescriptions}` : ' in total'}.`;
         } else if (target === 'books') {
-          let filtered = books;
-          if (filters) {
-            filtered = books.filter(b => {
-              let passes = true;
-              if (filters.author && !b.author.toLowerCase().includes(filters.author.toLowerCase())) passes = false;
-              if (filters.genre && b.genre?.toLowerCase() !== filters.genre.toLowerCase()) passes = false;
-              if (filters.stock === 0 && b.stock !== 0) passes = false;
-              if (filters.publisher && b.publisher?.toLowerCase() !== filters.publisher.toLowerCase()) passes = false;
-              if (filters.publicationYear && b.publicationYear !== filters.publicationYear) passes = false;
-              return passes;
-            });
-          }
-          count = filtered.length;
-          message = `There are ${count} books${filterDescriptions ? ` where ${filterDescriptions}` : ' in total'}.`;
+            let filtered = books;
+            if (Object.keys(filters).length > 0) {
+                filtered = books.filter(b => {
+                    let passes = true;
+                    
+                    if (filters.author && b.author !== filters.author) passes = false;
+                    if (filters.genre && b.genre !== filters.genre) passes = false;
+                    if (filters.stock === 0 && b.stock !== 0) passes = false;
+                    if (filters.publisher && b.publisher !== filters.publisher) passes = false;
+                    if (filters.publicationYear && b.publicationYear !== filters.publicationYear) passes = false;
+                    
+                    return passes;
+                });
+            }
+            count = filtered.length;
+            message = `There are ${count} books${filterDescriptions ? ` where ${filterDescriptions}` : ' in total'}.`;
         } else if (target === 'events') {
             let filtered = events;
-            if (filters) {
+            if (Object.keys(filters).length > 0) {
                 filtered = events.filter(e => {
-                  let passes = true;
-                  if (filters.author && e.author?.toLowerCase() !== filters.author.toLowerCase()) passes = false;
-                  if (filters.location && e.location?.toLowerCase() !== filters.location.toLowerCase()) passes = false;
-                  if (filters.name && !e.name.toLowerCase().includes(filters.name.toLowerCase())) passes = false;
-                  return passes;
+                    let passes = true;
+                    
+                    // Author Filter (Guaranteed by backend to be present for names like Jane Doe)
+                    if (filters.author && e.author !== filters.author) passes = false;
+                    
+                    // Location Filter
+                    if (filters.location && e.location !== filters.location) passes = false;
+                    
+                    // Name Filter (Use includes for partial matches like "Poetry")
+                    if (filters.name && !e.name.includes(filters.name)) passes = false;
+                    
+                    return passes;
                 });
             }
             count = filtered.length;
