@@ -24,6 +24,8 @@ import { AppUser, Contact, Category, UserRole, Book, Transaction, Event } from "
 
 const seedDatabase = httpsCallable(functions, 'seedDatabase');
 
+type View = 'contacts' | 'books' | 'transactions' | 'reports' | 'events';
+
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -233,7 +235,7 @@ function App() {
   };
 
   // --- REWRITTEN AI Command Processor ---
-  const onProcessAiCommand = async (intent: string, data: any): Promise<{ success: boolean; payload?: any; message?: string }> => {
+  const onProcessAiCommand = async (intent: string, data: any): Promise<{ success: boolean; payload?: any; message?: string; targetView?: View }> => {
     console.log('%c[FRONTEND LOG] Processing AI Command:', 'color: green; font-weight: bold;', { intent, data });
     switch (intent) {
       case 'ADD_CONTACT': {
@@ -253,7 +255,8 @@ function App() {
             notes: contactData?.notes || `Added via AI.`,
         } as Omit<Contact, "id">;
 
-        return await addContact(newContact);
+        const result = await addContact(newContact);
+        return { ...result, targetView: 'contacts' };
       }
         
       case 'FIND_CONTACT': {
@@ -269,7 +272,7 @@ function App() {
             `${c.firstName} ${c.lastName}`.toLowerCase().includes(identifier) ||
             c.email?.toLowerCase().includes(identifier)
         );
-        return { success: true, payload: foundContacts };
+        return { success: true, payload: foundContacts, targetView: 'contacts' };
       }
 
       case 'UPDATE_CONTACT': {
@@ -297,7 +300,8 @@ function App() {
 
         const contactToUpdate = foundContacts[0];
         
-        return await updateContact(contactToUpdate.id, updateData || {});
+        const result = await updateContact(contactToUpdate.id, updateData || {});
+        return { ...result, targetView: 'contacts' };
       }
 
       case 'DELETE_CONTACT': {
@@ -325,7 +329,8 @@ function App() {
 
         const contactToDelete = foundContacts[0];
         
-        return await deleteContact(contactToDelete.id);
+        const result = await deleteContact(contactToDelete.id);
+        return { ...result, targetView: 'contacts' };
       }
 
       case 'ADD_BOOK': {
@@ -343,7 +348,7 @@ function App() {
           publicationYear: bookData?.publicationYear || undefined,
         } as Omit<Book, "id">;
         await addBook(newBook);
-        return { success: true, message: `Successfully added the book "${newBook.title}".` };
+        return { success: true, message: `Successfully added the book "${newBook.title}".`, targetView: 'books' };
       }
 
       case 'FIND_BOOK': {
@@ -355,7 +360,7 @@ function App() {
           b.author.toLowerCase().includes(identifier) ||
           b.isbn?.toLowerCase().includes(identifier)
         );
-        return { success: true, payload: foundBooks };
+        return { success: true, payload: foundBooks, targetView: 'books' };
       }
 
       case 'UPDATE_BOOK': {
@@ -368,7 +373,7 @@ function App() {
         if (foundBooks.length > 1) return { success: false, message: "Found multiple books with that title, please be more specific."};
         const bookToUpdate = foundBooks[0];
         await updateBook({ ...bookToUpdate, ...updateData });
-        return { success: true, message: `Successfully updated "${bookToUpdate.title}".` };
+        return { success: true, message: `Successfully updated "${bookToUpdate.title}".`, targetView: 'books' };
       }
       
       case 'COUNT_DATA': {
@@ -393,6 +398,9 @@ function App() {
         const filterDescriptions = Object.keys(filters).length > 0
             ? Object.entries(filters).map(([key, value]) => `${key} is '${value}'`).join(' and ')
             : '';
+
+        const viewMap = { 'contacts': 'contacts', 'books': 'books', 'events': 'events' };
+        const targetView: View | undefined = viewMap[target as keyof typeof viewMap];
 
         if (target === 'contacts') {
             let filtered = contacts;
@@ -435,6 +443,26 @@ function App() {
                     if (filters.publisher && b.publisher !== filters.publisher) passes = false;
                     if (filters.publicationYear && b.publicationYear !== filters.publicationYear) passes = false;
                     
+                    // *** CRITICAL: ADD PRICE FILTER LOGIC ***
+                    if (passes && filters.priceFilter) {
+                        const filterStr = filters.priceFilter.toString().toLowerCase().replace(/ /g, ''); 
+                        const price = b.price;
+
+                        if (filterStr.startsWith('<')) {
+                            const limit = parseFloat(filterStr.slice(1));
+                            if (price >= limit) passes = false; 
+                        } else if (filterStr.startsWith('>')) {
+                            const limit = parseFloat(filterStr.slice(1));
+                            if (price <= limit) passes = false; 
+                        } else if (filterStr.includes('-')) {
+                            const [minStr, maxStr] = filterStr.split('-');
+                            const min = parseFloat(minStr);
+                            const max = parseFloat(maxStr);
+                            if (price < min || price > max) passes = false;
+                        }
+                    }
+                    // *** END PRICE FILTER LOGIC ***
+
                     return passes;
                 });
             }
@@ -466,7 +494,7 @@ function App() {
 
         const result = { success: true, message };
         console.log('%c[FRONTEND LOG] Count Result:', 'color: green;', result);
-        return result;
+        return { ...result, targetView };
       }
 
       case 'METRICS_DATA': {
@@ -487,7 +515,7 @@ function App() {
                 customerSpending[t.contactId].total += t.totalPrice;
             });
             const topCustomers = Object.values(customerSpending).sort((a, b) => b.total - a.total).slice(0, limit);
-            return { success: true, payload: topCustomers, message: `Here are the top ${limit} customers by spending.` };
+            return { success: true, payload: topCustomers, message: `Here are the top ${limit} customers by spending.`, targetView: 'reports' };
         }
         if (target === 'books' && metric === 'top-selling') {
             const bookSales: { [key: string]: { title: string; quantity: number } } = {};
@@ -501,7 +529,7 @@ function App() {
                 });
             });
             const bestSellingBooks = Object.values(bookSales).sort((a, b) => b.quantity - a.quantity).slice(0, limit);
-            return { success: true, payload: bestSellingBooks, message: `Here are the top ${limit} best-selling books.` };
+            return { success: true, payload: bestSellingBooks, message: `Here are the top ${limit} best-selling books.`, targetView: 'reports' };
         }
         return { success: false, message: "I'm sorry, I can't calculate those metrics." };
       }
@@ -514,10 +542,10 @@ function App() {
         if (foundBooks.length === 0) return { success: false, message: `Could not find a book matching "${bookIdentifier}".`};
         if (foundBooks.length > 1) return { success: false, message: "Found multiple books with that title, please be more specific."};
         await deleteBook(foundBooks[0].id);
-        return { success: true, message: `Successfully deleted "${foundBooks[0].title}".` };
+        return { success: true, message: `Successfully deleted "${foundBooks[0].title}".`, targetView: 'books' };
       }
       case 'CREATE_TRANSACTION': {
-         return { success: false, message: "Please use the 'New Transaction' form to log a sale." };
+         return { success: false, message: "Please use the 'New Transaction' form to log a sale.", targetView: 'transactions' };
       }
       case 'ADD_EVENT': {
         if (!isAdmin) return { success: false, message: "Sorry, only admins can add events." };
@@ -529,7 +557,7 @@ function App() {
           description: eventData?.description || "",
         } as Omit<Event, "id">;
         await addEvent(newEvent);
-        return { success: true, message: `Successfully scheduled the event "${newEvent.name}".` };
+        return { success: true, message: `Successfully scheduled the event "${newEvent.name}".`, targetView: 'events' };
       }
 
       case 'FIND_EVENT': {
@@ -555,7 +583,7 @@ function App() {
             };
         });
 
-        return { success: true, payload: enrichedEvents };
+        return { success: true, payload: enrichedEvents, targetView: 'events' };
       }
 
       case 'UPDATE_EVENT': {
@@ -570,7 +598,7 @@ function App() {
             updateData.date = new Date(updateData.date);
         }
         await updateEvent({ ...eventToUpdate, ...updateData });
-        return { success: true, message: `Successfully updated "${eventToUpdate.name}".` };
+        return { success: true, message: `Successfully updated "${eventToUpdate.name}".`, targetView: 'events' };
       }
 
       case 'DELETE_EVENT': {
@@ -581,7 +609,7 @@ function App() {
         if (foundEvents.length === 0) return { success: false, message: `Could not find an event matching "${eventIdentifier}".`};
         if (foundEvents.length > 1) return { success: false, message: "Found multiple events with that name, please be more specific."};
         await deleteEvent(foundEvents[0].id);
-        return { success: true, message: `Successfully deleted "${foundEvents[0].name}".` };
+        return { success: true, message: `Successfully deleted "${foundEvents[0].name}".`, targetView: 'events' };
       }
 
       case 'ADD_ATTENDEE':
@@ -604,7 +632,7 @@ function App() {
           const isAttending = intent === 'ADD_ATTENDEE';
           await updateEventAttendees(eventToUpdate.id, contactToUpdate.id, isAttending);
           const actionText = isAttending ? "added" : "removed";
-          return { success: true, message: `Successfully ${actionText} ${contactToUpdate.firstName} ${contactToUpdate.lastName} ${isAttending ? 'to' : 'from'} the event "${eventToUpdate.name}".` };
+          return { success: true, message: `Successfully ${actionText} ${contactToUpdate.firstName} ${contactToUpdate.lastName} ${isAttending ? 'to' : 'from'} the event "${eventToUpdate.name}".`, targetView: 'events' };
       }
       default:
         return { success: true };

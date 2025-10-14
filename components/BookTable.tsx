@@ -11,19 +11,80 @@ interface BookTableProps {
 
 const ITEMS_PER_PAGE = 10;
 
+// Define types for sorting keys and direction
+type SortKey = 'title' | 'author' | 'genre' | 'publicationYear' | 'price' | 'stock';
+type SortDirection = 'asc' | 'desc';
+
 const BookTable: React.FC<BookTableProps> = ({ books, onEdit, onDelete }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [expandedBookId, setExpandedBookId] = useState<string | null>(null);
-    const totalPages = Math.ceil(books.length / ITEMS_PER_PAGE);
+    // State for sorting
+    const [sortColumn, setSortColumn] = useState<SortKey>('title');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+    // --- Sorting Logic ---
+    const sortedBooks = useMemo(() => {
+        // Create a shallow copy to sort without mutating the original prop
+        const sorted = [...books].sort((a, b) => {
+            // Handle null/undefined values by treating them as smaller/larger for consistent sorting
+            const aValue = a[sortColumn] ?? (sortDirection === 'asc' ? -Infinity : Infinity);
+            const bValue = b[sortColumn] ?? (sortDirection === 'asc' ? -Infinity : Infinity);
+
+            // Compare based on type
+            if (typeof aValue === 'string' && typeof bValue === 'string') {
+                return aValue.localeCompare(bValue);
+            }
+            if (typeof aValue === 'number' && typeof bValue === 'number') {
+                return aValue - bValue;
+            }
+            return 0;
+        });
+
+        // Apply direction
+        if (sortDirection === 'desc') {
+            return sorted.reverse();
+        }
+        return sorted;
+    }, [books, sortColumn, sortDirection]);
+
+
+    const totalPages = Math.ceil(sortedBooks.length / ITEMS_PER_PAGE);
 
     const paginatedBooks = useMemo(() => {
         const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-        return books.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-    }, [currentPage, books]);
+        return sortedBooks.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+    }, [currentPage, sortedBooks]);
 
     const handleToggleExpand = (bookId: string) => {
         setExpandedBookId(prevId => (prevId === bookId ? null : bookId));
     };
+
+    // --- New Sort Handler ---
+    const handleSort = (column: SortKey) => {
+        // Reset page to 1 when sorting
+        setCurrentPage(1); 
+        if (sortColumn === column) {
+            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortColumn(column);
+            setSortDirection('asc');
+        }
+    };
+    
+    // Helper function to render the sort indicator
+    const renderSortIndicator = (column: SortKey) => {
+        if (sortColumn !== column) return null;
+        return sortDirection === 'asc' ? ' ▲' : ' ▼';
+    };
+
+    const headerConfigs: { key: SortKey; label: string; hideOnSmall?: boolean }[] = [
+        { key: 'title', label: 'Title' },
+        { key: 'author', label: 'Author', hideOnSmall: true },
+        { key: 'genre', label: 'Genre' },
+        { key: 'publicationYear', label: 'Year' },
+        { key: 'price', label: 'Price' },
+        { key: 'stock', label: 'Stock' },
+    ];
 
     return (
         <div className="bg-white shadow-lg rounded-xl overflow-hidden">
@@ -31,12 +92,18 @@ const BookTable: React.FC<BookTableProps> = ({ books, onEdit, onDelete }) => {
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Author</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Genre</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Year</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                            {headerConfigs.map(config => (
+                                <th 
+                                    key={config.key}
+                                    scope="col" 
+                                    // Make header clickable to trigger sorting
+                                    onClick={() => handleSort(config.key)}
+                                    className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 ${config.hideOnSmall ? 'hidden lg:table-cell' : ''}`}
+                                >
+                                    {config.label}
+                                    {renderSortIndicator(config.key)}
+                                </th>
+                            ))}
                             <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
                         </tr>
                     </thead>
@@ -48,7 +115,8 @@ const BookTable: React.FC<BookTableProps> = ({ books, onEdit, onDelete }) => {
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{book.author}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{book.genre}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{book.publicationYear}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${book.price.toFixed(2)}</td>
+                                    {/* Use toLocaleString for currency formatting */}
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{book.price.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{book.stock}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <div className="flex items-center justify-end space-x-4">
@@ -65,7 +133,7 @@ const BookTable: React.FC<BookTableProps> = ({ books, onEdit, onDelete }) => {
                                 </tr>
                                 {expandedBookId === book.id && (
                                     <tr className="lg:hidden bg-gray-50">
-                                        <td colSpan={5} className="px-6 py-4">
+                                        <td colSpan={6} className="px-6 py-4">
                                             <div className="space-y-3 text-sm text-gray-600">
                                                 <p><strong className="font-medium text-gray-800">Author:</strong> {book.author || '-'}</p>
                                                 <p><strong className="font-medium text-gray-800">ISBN:</strong> {book.isbn || '-'}</p>

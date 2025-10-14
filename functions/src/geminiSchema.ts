@@ -98,6 +98,11 @@ const bookProperties = {
       type: Type.NUMBER,
       description: "The year the book was published.",
   },
+  // CRITICAL ADDITION
+  priceFilter: { 
+      type: Type.STRING, 
+      description: "A price range filter (e.g., '>15', '<20.50', '10-25')." 
+  },
 };
 
 const eventProperties = {
@@ -213,7 +218,9 @@ export const responseSchema = {
             name: { type: Type.STRING, description: "Filter events by name." },
             stock: { type: Type.NUMBER, description: "Filter books by stock." },
             publicationYear: { type: Type.NUMBER, description: "Filter books by publication year." },
-            publisher: { type: Type.STRING, description: "Filter books by publisher." }
+            publisher: { type: Type.STRING, description: "Filter books by publisher." },
+            // CRITICAL ADDITION
+            priceFilter: { type: Type.STRING, description: "Filter books by price range (e.g., '>15', '<20.50', '10-25')." }
           },
         },
       },
@@ -229,7 +236,7 @@ export const responseSchema = {
         },
         metric: {
           type: Type.STRING,
-          description: "The metric to calculate.",
+          description: "The specific metric type (e.g., 'top-spending', 'lowest-stock', 'total-revenue').",
           enum: ["top-spending", "top-selling"],
         },
         limit: {

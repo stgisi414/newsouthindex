@@ -33,7 +33,7 @@ interface DashboardProps {
     onUpdateEvent: (event: Event) => void;
     onDeleteEvent: (id: string) => void;
     onUpdateEventAttendees: (eventId: string, contactId: string, isAttending: boolean) => void;
-    onProcessAiCommand: (intent: string, data: any) => Promise<{ success: boolean; payload?: any }>;
+    onProcessAiCommand: (intent: string, data: any) => Promise<{ success: boolean; payload?: any; message?: string; targetView?: View }>;
     onLogout: () => void;
     isAdmin: boolean;
     users: AppUser[];
@@ -107,6 +107,32 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
         }
         return events;
     }, [events, aiSearchResults, currentView]);
+
+    // Wrapper function to process the AI command and handle the view switch based on the result
+    const processAndHandleAiCommand = async (intent: string, data: any) => {
+        // 1. Process the command via the App.tsx function
+        const result = await onProcessAiCommand(intent, data); 
+
+        // 2. Handle the view switch based on the result
+        if (result.targetView) {
+            // Determine if the action is a search/count that returns a filtered payload (list of items)
+            const isSearchOrCount = ['FIND_CONTACT', 'FIND_BOOK', 'FIND_EVENT', 'COUNT_DATA'].includes(intent);
+
+            if (isSearchOrCount && result.payload) {
+                // For search/count, switch view and apply filter results
+                setAiSearchResults(result.payload);
+                setCurrentView(result.targetView);
+                setSearchQuery(''); // Clear text search when AI is used for filtering
+            } else {
+                // For ADD/UPDATE/DELETE/METRICS, just switch the view and clear any lingering search/filter states
+                setAiSearchResults(null);
+                setSearchQuery('');
+                setCurrentView(result.targetView);
+            }
+        }
+        // Return the original result for AIChat to display the message
+        return result;
+    };
 
     const handleNewBook = () => {
         setEditingBook(null);
@@ -302,7 +328,12 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                         </button>
                         {isAiChatOpen && (
                             <div className="h-[calc(85vh-4rem)]">
-                                <AIChat onCommandProcessed={onProcessAiCommand} isAdmin={isAdmin} currentUser={currentUser} onAiSearch={handleAiSearch} />
+                                <AIChat 
+                                    onCommandProcessed={processAndHandleAiCommand} // <<< USE THE NEW WRAPPER
+                                    isAdmin={isAdmin} 
+                                    currentUser={currentUser} 
+                                    onAiSearch={handleAiSearch} // onAiSearch is now redundant but kept for safety
+                                />
                             </div>
                         )}
                     </div>
