@@ -3,10 +3,91 @@ import * as logger from "firebase-functions/logger";
 import { GoogleGenAI } from "@google/genai";
 import { responseSchema } from "./geminiSchema";
 import * as admin from "firebase-admin";
+// FIX: Import FieldValue directly
+import { FieldValue } from "firebase-admin/firestore";
+import { mockContacts, mockBooks, mockEvents } from "./mockData";
 
 admin.initializeApp();
 
-export const processCommand = onCall({secrets: ["GEMINI_API_KEY"]}, async (request: CallableRequest<any>) => {
+// NEW FUNCTION: Seeds the database with mock data if it's empty
+export const seedDatabase = onCall({cors: true}, async (request) => {
+  // Only allow this in non-production environments
+  if (process.env.FUNCTIONS_EMULATOR !== "true") {
+    throw new HttpsError("permission-denied", "This function can only be run in the emulator environment.");
+  }
+
+  const contactsRef = admin.firestore().collection("contacts");
+  const contactsSnapshot = await contactsRef.limit(1).get();
+
+  if (!contactsSnapshot.empty) {
+    logger.info("Database already contains data. Seeding skipped.");
+    return { message: "Database already seeded." };
+  }
+
+  logger.info("Database is empty. Seeding with mock data...");
+
+  const batch = admin.firestore().batch();
+
+  // Add Contacts and store their new IDs
+  const contactDocs = mockContacts.map(contact => {
+    const docRef = contactsRef.doc();
+    // FIX: Use FieldValue directly
+    batch.set(docRef, { ...contact, createdDate: FieldValue.serverTimestamp() });
+    return { id: docRef.id, ...contact };
+  });
+
+  // Add Books and store their new IDs
+  const booksRef = admin.firestore().collection("books");
+  const bookDocs = mockBooks.map(book => {
+    const docRef = booksRef.doc();
+    batch.set(docRef, book);
+    return { id: docRef.id, ...book };
+  });
+
+  // Add Events
+  const eventsRef = admin.firestore().collection("events");
+  mockEvents.forEach(event => {
+    const docRef = eventsRef.doc();
+    batch.set(docRef, event);
+  });
+
+  // Add a sample Transaction
+  if (contactDocs.length > 0 && bookDocs.length > 1) {
+    const transactionsRef = admin.firestore().collection("transactions");
+    const transactionDoc = transactionsRef.doc();
+    batch.set(transactionDoc, {
+      contactId: contactDocs[0].id,
+      contactName: `${contactDocs[0].firstName} ${contactDocs[0].lastName}`,
+      books: [
+        { id: bookDocs[0].id, title: bookDocs[0].title, price: bookDocs[0].price, quantity: 1 },
+        { id: bookDocs[1].id, title: bookDocs[1].title, price: bookDocs[1].price, quantity: 2 },
+      ],
+      totalPrice: bookDocs[0].price + (bookDocs[1].price * 2),
+      // FIX: Use FieldValue directly
+      transactionDate: FieldValue.serverTimestamp(),
+    });
+
+    // Decrement stock for the books in the transaction
+    const book1Ref = booksRef.doc(bookDocs[0].id);
+    // FIX: Use FieldValue directly
+    batch.update(book1Ref, { stock: FieldValue.increment(-1) });
+    const book2Ref = booksRef.doc(bookDocs[1].id);
+    // FIX: Use FieldValue directly
+    batch.update(book2Ref, { stock: FieldValue.increment(-2) });
+  }
+
+  try {
+    await batch.commit();
+    logger.info("Database seeded successfully.");
+    return { message: "Database seeded successfully." };
+  } catch (error) {
+    logger.error("Error seeding database:", error);
+    throw new HttpsError("internal", "Failed to seed database.");
+  }
+});
+
+
+export const processCommand = onCall({secrets: ["GEMINI_API_KEY"], cors: true}, async (request: CallableRequest<any>) => {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       logger.error("GEMINI_API_KEY environment variable missing.");
@@ -50,7 +131,7 @@ export const processCommand = onCall({secrets: ["GEMINI_API_KEY"]}, async (reque
     }
 });
 
-export const setUserRole = onCall(async (request) => {
+export const setUserRole = onCall({cors: true}, async (request) => {
   if (request.auth?.token.role !== 'admin') {
     throw new HttpsError("permission-denied", "Only admins can set user roles.");
   }
@@ -80,7 +161,7 @@ export const setUserRole = onCall(async (request) => {
   }
 });
 
-export const deleteUser = onCall(async (request) => {
+export const deleteUser = onCall({cors: true}, async (request) => {
   if (request.auth?.token.role !== 'admin') {
     throw new HttpsError("permission-denied", "Only admins can delete users.");
   }
@@ -111,7 +192,7 @@ export const deleteUser = onCall(async (request) => {
 });
 
 // You should now delete this function if you haven't already.
-export const makeMeAdmin = onCall(async (request) => {
+export const makeMeAdmin = onCall({cors: true}, async (request) => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "You must be logged in to perform this action.");
     }

@@ -1,0 +1,39 @@
+[33mcommit 579b7b88c3d2b30415468ae312f9fe9dff497094[m
+Author: Stefan Gisi <141892560+stgisi414@users.noreply.github.com>
+Date:   Sun Oct 12 23:35:37 2025 -0500
+
+    stuff
+
+[33mcommit 27af2c6734f330f68154bdf8bf71aa13f4060a3f[m
+Author: Stefan Gisi <141892560+stgisi414@users.noreply.github.com>
+Date:   Thu Oct 9 12:51:55 2025 -0500
+
+    configuring firebase
+
+[33mcommit b43544caf9998df14b5b5b81e6c5633d854550f0[m
+Author: Stefan Gisi <141892560+stgisi414@users.noreply.github.com>
+Date:   Thu Oct 9 12:01:36 2025 -0500
+
+    set up firebase
+
+[33mcommit 36d5d568fa3b12c3f05b5f89ab9ac27359062906[m
+Author: Stefan Gisi <141892560+stgisi414@users.noreply.github.com>
+Date:   Thu Oct 9 11:37:31 2025 -0500
+
+    feat: Initialize AI-Powered CRM project
+    
+    This commit sets up the foundational structure for the AI-Powered CRM application. It includes:
+    - Project initialization using Vite.
+    - Basic React setup and dependencies.
+    - TypeScript configuration.
+    - Integration with Google's Generative AI library.
+    - Mock data for contacts.
+    - Initial service for interacting with the Gemini API.
+    - Basic HTML and CSS for the application shell.
+    - README with local development instructions.
+
+[33mcommit 4f2d185568a2011f12f4e4bda96820438a698590[m
+Author: Stefan Gisi <141892560+stgisi414@users.noreply.github.com>
+Date:   Thu Oct 9 11:37:20 2025 -0500
+
+    Initial commit

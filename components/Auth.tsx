@@ -32,14 +32,14 @@ export const Auth = () => {
   const auth = getAuth();
   const googleProvider = new GoogleAuthProvider();
 
-  const handleSignUp = async (e: FormEvent) => {
+   const handleSignUp = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     try {
       const result = await createUserWithEmailAndPassword(auth, email, password);
       await ensureUserDocument(result.user);
     } catch (err: any) {
-      setError(err.message);
+      setError("Invalid email or password. Please check your credentials.");
       console.error("Sign up error:", err);
     }
   };
@@ -50,7 +50,7 @@ export const Auth = () => {
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (err: any) {
-      setError(err.message);
+      setError("Invalid email or password. Please check your credentials.");
       console.error("Login error:", err);
     }
   };

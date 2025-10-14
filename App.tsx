@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
-import { auth, db } from "./src/firebaseConfig";
+import { useState, useEffect, useRef } from "react";
+import { auth, db, functions } from "./src/firebaseConfig";
 import { onAuthStateChanged, User, signOut } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
 import {
   collection,
   addDoc,
@@ -21,6 +22,9 @@ import Dashboard from "./components/Dashboard";
 import { Auth } from "./components/Auth";
 import { AppUser, Contact, Category, UserRole, Book, Transaction, Event } from "./types";
 
+// NEW: Define the callable function
+const seedDatabase = httpsCallable(functions, 'seedDatabase');
+
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -31,6 +35,7 @@ function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
+  const seeded = useRef(false); // NEW: Ref to prevent multiple calls
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -42,9 +47,22 @@ function App() {
         setUserRole(roleFromToken);
         setIsAdmin(roleFromToken === UserRole.ADMIN);
 
+        // NEW: Automatically seed the database in dev environment
+        if (import.meta.env.DEV && roleFromToken !== UserRole.APPLICANT && !seeded.current) {
+          seeded.current = true; // Mark as attempted
+          console.log("In dev environment, attempting to seed database...");
+          try {
+            const result = await seedDatabase();
+            console.log("Seeder function result:", result.data);
+          } catch (error) {
+            console.error("Error calling seeder function:", error);
+          }
+        }
+
       } else {
         setUserRole(null);
         setIsAdmin(false);
+        seeded.current = false; // Reset on logout
       }
       setLoading(false);
     });
