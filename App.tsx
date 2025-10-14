@@ -376,7 +376,7 @@ function App() {
           return { success: false, message: "You do not have permission to view this information." };
         }
         
-        // CRITICAL FIX: Destructure both the expected 'countRequest' and the observed 'updateData'
+        // CRITICAL FIX: Explicitly destructure both the expected 'countRequest' and the observed 'updateData'
         const { countRequest, updateData } = (data || {}) as { countRequest?: any, updateData?: any };
 
         // Determine if the request is valid (this check usually passes based on your observed data)
@@ -384,9 +384,8 @@ function App() {
             return { success: false, message: "I'm sorry, I couldn't understand the count request." };
         }
 
-        // CRITICAL FIX: CONSOLIDATE FILTERS TO MATCH STUCK BACKEND BEHAVIOR
-        // 1. First, check the ERRONEOus location where the backend is putting filters.
-        // 2. Fallback to the intended location, in case the backend suddenly fixes itself.
+        // CRITICAL FIX: CONSOLIDATE FILTERS TO MATCH API BEHAVIOR
+        // Prioritize updateData for filters, then fall back to countRequest.filters
         const filters = updateData || countRequest.filters || {};
         
         const { target } = countRequest;
@@ -407,6 +406,7 @@ function App() {
                   if (filters.category.toLowerCase() === 'not client') {
                       if (c.category?.toLowerCase() === 'client') passes = false;
                   } else {
+                      // Note: Category must match exactly what is passed (e.g., "client" vs "Client")
                       if (c.category?.toLowerCase() !== filters.category.toLowerCase()) passes = false;
                   }
               }
