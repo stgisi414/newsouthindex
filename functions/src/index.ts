@@ -168,98 +168,120 @@ CRITICAL INSTRUCTION:
                     response = { 
                         intent: 'COUNT_DATA', 
                         data: {
-                            countRequest: { target: name.replace('count', '').toLowerCase(), filters: args }, // Filters are correctly placed in args
+                            // FIX: Correctly map args to countRequest.filters
+                            countRequest: { target: name.replace('count', '').toLowerCase(), filters: args || {} }, 
                         },
-                        responseText: `I am processing your request to count ${name.replace('count', '').toLowerCase()}.`
+                        // Removed responseText to prevent conversational output when a function call is made
                     };
                     break;
                 case "addContact": 
-                    response = { intent: 'ADD_CONTACT', data: { contactData: args }, responseText: `I am processing your request to add a contact.` };
+                    response = { 
+                        intent: 'ADD_CONTACT', 
+                        data: { contactData: args }, 
+                        // Removed responseText
+                    };
                     break;
                 case "findContact": 
-                    response = { intent: 'FIND_CONTACT', data: { contactIdentifier: anyArgs.identifier }, responseText: `I am processing your request to find a contact.` };
+                    response = { 
+                        intent: 'FIND_CONTACT', 
+                        data: { contactIdentifier: anyArgs.identifier }, 
+                        // Removed responseText
+                    };
                     break;
                 case "updateContact": 
-                    response = { intent: 'UPDATE_CONTACT', data: { contactIdentifier: anyArgs.identifier, updateData: anyArgs.updateData }, responseText: `I am processing your request to update a contact.` };
+                    response = { 
+                        intent: 'UPDATE_CONTACT', 
+                        data: { contactIdentifier: anyArgs.identifier, updateData: anyArgs.updateData }, 
+                        // Removed responseText
+                    };
                     break;
                 case "deleteContact": 
-                    response = { intent: 'DELETE_CONTACT', data: { contactIdentifier: anyArgs.identifier }, responseText: `I am processing your request to delete a contact.` };
+                    response = { 
+                        intent: 'DELETE_CONTACT', 
+                        data: { contactIdentifier: anyArgs.identifier }, 
+                        // Removed responseText
+                    };
                     break;
                 case "addBook": 
                     response = { 
                         intent: 'ADD_BOOK', 
                         data: { bookData: args },
-                        responseText: `Successfully parsed query into an ADD_BOOK command.`
+                        // Removed responseText
                     };
                     break;
                 case "findBook": 
                     response = { 
                         intent: 'FIND_BOOK', 
                         data: { bookIdentifier: anyArgs.identifier },
-                        responseText: `Successfully parsed query into a FIND_BOOK command.`
+                        // Removed responseText
                     };
                     break;
                 case "updateBook": 
                     response = { 
                         intent: 'UPDATE_BOOK', 
                         data: { bookIdentifier: anyArgs.bookIdentifier, updateData: anyArgs.updateData },
-                        responseText: `Successfully parsed query into an UPDATE_BOOK command.`
+                        // Removed responseText
                     };
                     break;
                 case "deleteBook": 
                     response = { 
                         intent: 'DELETE_BOOK', 
                         data: { bookIdentifier: anyArgs.bookIdentifier },
-                        responseText: `Successfully parsed query into a DELETE_BOOK command.`
+                        // Removed responseText
                     };
                     break;
                 case "addEvent": 
                     response = { 
                         intent: 'ADD_EVENT', 
                         data: { eventData: args },
-                        responseText: `Successfully parsed query into an ADD_EVENT command.`
+                        // Removed responseText
                     };
                     break;
                 case "findEvent": 
                     response = { 
                         intent: 'FIND_EVENT', 
                         data: { eventIdentifier: anyArgs.identifier },
-                        responseText: `Successfully parsed query into a FIND_EVENT command.`
+                        // Removed responseText
                     };
                     break;
                 case "updateEvent": 
                     response = { 
                         intent: 'UPDATE_EVENT', 
                         data: { eventIdentifier: anyArgs.eventIdentifier, updateData: anyArgs.updateData },
-                        responseText: `Successfully parsed query into an UPDATE_EVENT command.`
+                        // Removed responseText
                     };
                     break;
                 case "deleteEvent": 
                     response = { 
                         intent: 'DELETE_EVENT', 
                         data: { eventIdentifier: anyArgs.eventIdentifier },
-                        responseText: `Successfully parsed query into a DELETE_EVENT command.`
+                        // Removed responseText
                     };
                     break;
                 case "addAttendee": 
                     response = { 
                         intent: 'ADD_ATTENDEE', 
                         data: { eventIdentifier: anyArgs.eventIdentifier, contactIdentifier: anyArgs.contactIdentifier },
-                        responseText: `Successfully parsed query into an ADD_ATTENDEE command.`
+                        // Removed responseText
                     };
                     break;
                 case "removeAttendee": 
                     response = { 
                         intent: 'REMOVE_ATTENDEE', 
                         data: { eventIdentifier: anyArgs.eventIdentifier, contactIdentifier: anyArgs.contactIdentifier },
-                        responseText: `Successfully parsed query into a REMOVE_ATTENDEE command.`
+                        // Removed responseText
                     };
                     break;
                 case "getMetrics": 
-                    response = { intent: 'METRICS_DATA', data: { metricsRequest: args }, responseText: `I am processing your request for metrics data.` };
+                    response = { 
+                        intent: 'METRICS_DATA', 
+                        data: { metricsRequest: args }, 
+                        // Removed responseText
+                    };
                     break;
                 default: 
-                    response = { intent: 'GENERAL_QUERY', responseText: `Function ${name} not recognized. Cannot determine specific action.` };
+                    // Only conversational responses for non-function calls
+                    response = { intent: 'GENERAL_QUERY', responseText: conversationalText };
             }
 
             logger.info("[GEMINI] Transformed to structured response:", JSON.stringify(response, null, 2));

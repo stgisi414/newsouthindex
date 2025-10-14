@@ -376,29 +376,29 @@ function App() {
           return { success: false, message: "You do not have permission to view this information." };
         }
         
-        // CRITICAL FIX: Destructure both the expected (countRequest) and the observed, incorrect field (updateData)
-        // Note: The previous defensive destructuring (data || {}) is already applied in the outer layer,
-        // but we must check the properties within the data object for filters.
-        const { countRequest } = (data || {}) as { countRequest?: any }; 
-        const { updateData } = (data || {}) as { updateData?: any };
-        
-        if (!countRequest) {
-          return { success: false, message: "I'm sorry, I couldn't understand the count request." };
+        // CRITICAL FIX: Destructure the expected shape and observed incorrect fields defensively
+        const { countRequest, updateData } = (data || {}) as { countRequest?: any, updateData?: any };
+
+        // Determine if the request is valid (must have a count target)
+        if (!countRequest?.target) {
+            return { success: false, message: "I'm sorry, I couldn't understand the count request." };
         }
 
-        // CRITICAL FIX: Consolidate filters from the correct spot (countRequest.filters)
-        // or the observed, incorrect spot (updateData)
+        // CRITICAL FIX: Consolidate filters. Prioritize the correct nested field, then the old incorrect field.
         const filters = countRequest.filters || updateData || {};
-
+        
         const { target } = countRequest;
         let count = 0;
         let message = '';
-        const filterDescriptions = Object.entries(filters).map(([key, value]) => `${key} is '${value}'`).join(' and ');
-
+        
+        // FIX: Implement explicit check for filters length before building description string
+        const filterDescriptions = filters && Object.keys(filters).length > 0
+            ? Object.entries(filters).map(([key, value]) => `${key} is '${value}'`).join(' and ')
+            : '';
 
         if (target === 'contacts') {
-          let filtered = contacts;
-          if (filters) {
+            let filtered = contacts;
+          if (filters && Object.keys(filters).length > 0) { // Only filter if filters object has keys
             filtered = contacts.filter(c => {
               let passes = true;
               if (filters.category) {
