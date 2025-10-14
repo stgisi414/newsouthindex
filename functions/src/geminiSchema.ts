@@ -197,7 +197,7 @@ export const responseSchema = {
         target: {
           type: Type.STRING,
           description: "The entity to count.",
-          enum: ["contacts"],
+          enum: ["contacts", "books", "events"],
         },
         filters: {
           type: Type.OBJECT,
@@ -206,6 +206,10 @@ export const responseSchema = {
             category: { type: Type.STRING, description: "Filter contacts by category." },
             state: { type: Type.STRING, description: "Filter contacts by state." },
             city: { type: Type.STRING, description: "Filter contacts by city." },
+            zip: { type: Type.STRING, description: "Filter contacts by zip code." },
+            author: { type: Type.STRING, description: "Filter books or events by author." },
+            genre: { type: Type.STRING, description: "Filter books by genre." },
+            location: { type: Type.STRING, description: "Filter events by location." },
           },
         },
       },

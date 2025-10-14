@@ -110,9 +110,13 @@ export const processCommand = onCall({secrets: ["GEMINI_API_KEY"], cors: true}, 
             **Core Rules:**
             1.  **Intent Identification**: First, determine the user's primary goal. This MUST map to one of the allowed 'intent' enum values.
             2.  **Counting vs. Metrics (CRITICAL)**: You must distinguish between counting and metrics.
-                -   If the user is asking "how many," "count," or "total number of," you MUST use the \`COUNT_DATA\` intent and populate the \`countRequest\` object. The target is always 'contacts'. Any location or category is a filter.
-                    - **Example 1**: "how many customers do we have in alabama?" -> \`intent: 'COUNT_DATA'\`, \`countRequest: { target: 'contacts', filters: { state: 'alabama' } }\`
-                    - **Example 2**: "count the vendors" -> \`intent: 'COUNT_DATA'\`, \`countRequest: { target: 'contacts', filters: { category: 'vendor' } }\`
+                -   If the user is asking "how many," "count," or "total number of," you MUST use the \`COUNT_DATA\` intent and populate the \`countRequest\` object.
+                -   **CRITICAL FILTERING RULE**: If any filterable criteria (like a location, category, or author) is mentioned in a counting query, you MUST include it in the \`filters\` object. Do NOT ignore it.
+                    - **Example 1**: "how many customers do we have in alabama?" -> This is a count of contacts with a state filter. JSON: \`{ "intent": "COUNT_DATA", "countRequest": { "target": "contacts", "filters": { "state": "alabama" } } }\`
+                    - **Example 2**: "count the vendors" -> This is a count of contacts with a category filter. JSON: \`{ "intent": "COUNT_DATA", "countRequest": { "target": "contacts", "filters": { "category": "vendor" } } }\`
+                    - **Example 3**: "how many contacts in Montgomery" -> This is a count of contacts with a city filter. JSON: \`{ "intent": "COUNT_DATA", "countRequest": { "target": "contacts", "filters": { "city": "montgomery" } } }\`
+                    - **Example 4**: "how many books by F. Scott Fitzgerald?" -> This is a count of books with an author filter. JSON: \`{ "intent": "COUNT_DATA", "countRequest": { "target": "books", "filters": { "author": "F. Scott Fitzgerald" } } }\`
+                    - **Example 5**: "count the events at the Main Store" -> This is a count of events with a location filter. JSON: \`{ "intent": "COUNT_DATA", "countRequest": { "target": "events", "filters": { "location": "Main Store" } } }\`
                 -   If the user is asking for "top," "best," or "highest," you MUST use the \`METRICS_DATA\` intent and populate the \`metricsRequest\` object.
                     - **Example 1**: "who are our top customers?" -> \`intent: 'METRICS_DATA'\`, \`metricsRequest: { target: 'customers', metric: 'top-spending' }\`
                     - **Example 2**: "show me the best-selling books" -> \`intent: 'METRICS_DATA'\`, \`metricsRequest: { target: 'books', metric: 'top-selling' }\`

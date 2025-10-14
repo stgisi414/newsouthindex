@@ -374,23 +374,51 @@ function App() {
         }
 
         const { target, filters } = countRequest;
+        let count = 0;
+        let message = '';
+        const filterDescriptions = filters ? Object.entries(filters).map(([key, value]) => `${key} is '${value}'`).join(' and ') : '';
+
 
         if (target === 'contacts') {
           let filtered = contacts;
           if (filters) {
             filtered = contacts.filter(c => {
-              if (filters.category && c.category.toLowerCase() !== filters.category.toLowerCase()) return false;
+              if (filters.category && c.category?.toLowerCase() !== filters.category.toLowerCase()) return false;
               if (filters.state && c.state?.toLowerCase() !== filters.state.toLowerCase()) return false;
               if (filters.city && c.city?.toLowerCase() !== filters.city.toLowerCase()) return false;
+              if (filters.zip && c.zip !== filters.zip) return false;
               return true;
             });
           }
-          const filterDescriptions = filters ? Object.entries(filters).map(([key, value]) => `${key} is '${value}'`).join(' and ') : '';
-          const message = `There are ${filtered.length} contacts${filterDescriptions ? ` where ${filterDescriptions}` : ' in total'}.`;
-          return { success: true, message };
+          count = filtered.length;
+          message = `There are ${count} contacts${filterDescriptions ? ` where ${filterDescriptions}` : ' in total'}.`;
+        } else if (target === 'books') {
+          let filtered = books;
+          if (filters) {
+            filtered = books.filter(b => {
+              if (filters.author && !b.author.toLowerCase().includes(filters.author.toLowerCase())) return false;
+              if (filters.genre && b.genre?.toLowerCase() !== filters.genre.toLowerCase()) return false;
+              return true;
+            });
+          }
+          count = filtered.length;
+          message = `There are ${count} books${filterDescriptions ? ` where ${filterDescriptions}` : ' in total'}.`;
+        } else if (target === 'events') {
+            let filtered = events;
+            if (filters) {
+                filtered = events.filter(e => {
+                    if (filters.author && e.author?.toLowerCase() !== filters.author.toLowerCase()) return false;
+                    if (filters.location && e.location?.toLowerCase() !== filters.location.toLowerCase()) return false;
+                    return true;
+                });
+            }
+            count = filtered.length;
+            message = `There are ${count} events${filterDescriptions ? ` where ${filterDescriptions}` : ' in total'}.`;
+        } else {
+            return { success: false, message: "I'm sorry, I can only count contacts, books, and events right now." };
         }
 
-        return { success: false, message: "I'm sorry, I can only count contacts right now." };
+        return { success: true, message };
       }
 
       case 'METRICS_DATA': {
