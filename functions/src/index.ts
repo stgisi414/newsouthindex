@@ -97,7 +97,7 @@ export const processCommand = onCall({secrets: ["GEMINI_API_KEY"], cors: true}, 
 
     const command = request.data.command;
     const isAdmin = request.data.isAdmin === true;
-    logger.info(`Received command: "${command}" for user with isAdmin=${isAdmin}`);
+    logger.info(`[GEMINI] Received command: "${command}" for user with isAdmin=${isAdmin}`);
 
     try {
       const result = await ai.models.generateContent({
@@ -105,27 +105,40 @@ export const processCommand = onCall({secrets: ["GEMINI_API_KEY"], cors: true}, 
         contents: `User command: "${command}"`,
         config: {
           systemInstruction:
-            `You are an intelligent assistant for a CRM app that manages contacts, books, transactions, and events. Your task is to parse user commands into structured JSON data based on the provided schema. The user's admin status is: ${isAdmin}.
-            - Your primary goal is to differentiate between contacts, books, transactions, and events. "Add a book" uses ADD_BOOK. "Add a person" uses ADD_CONTACT. "Schedule an event" uses ADD_EVENT.
-            - For summarization questions like "how many clients in Alabama" or "who is the top customer", use the SUMMARIZE_DATA intent. For "how many", populate the 'filters' object. For "top customer" or "best-selling book", populate 'summaryTarget' and 'summaryMetric'.
-            - Identify the user's intent from the full list: ADD_CONTACT, FIND_CONTACT, UPDATE_CONTACT, DELETE_CONTACT, ADD_BOOK, FIND_BOOK, UPDATE_BOOK, DELETE_BOOK, CREATE_TRANSACTION, ADD_EVENT, FIND_EVENT, UPDATE_EVENT, DELETE_EVENT, ADD_ATTENDEE, REMOVE_ATTENDEE, SUMMARIZE_DATA, GENERAL_QUERY, UNSURE.
-            - For adding attendees (e.g., "add John Smith to the author signing"), set intent to ADD_ATTENDEE and populate both contactIdentifier and eventIdentifier. The same applies for REMOVE_ATTENDEE.
-            - Extract all relevant details. For an ADD_BOOK command, populate 'bookData'. For an ADD_CONTACT command, populate 'contactData'. For ADD_EVENT, populate 'eventData'.
-            - If the user is NOT an admin and tries an admin action (add, update, delete), set the intent to 'GENERAL_QUERY' and use the responseText to inform them they do not have permission.
-            - If the user IS an admin, confirm you are performing the action in the responseText.
-            - If the intent is unclear, use 'UNSURE'.
-            - Always provide a friendly 'responseText'.`,
+            `You are an intelligent assistant for a CRM app. Your primary function is to accurately parse user commands into a structured JSON format based on the provided schema.
+
+            **Core Rules:**
+            1.  **Intent Identification**: First, determine the user's primary goal. This MUST map to one of the allowed 'intent' enum values.
+            2.  **Summarization (CRITICAL)**: You MUST correctly identify summarization queries.
+                -   **Counting**: Any question asking "how many", "count", "total number of", etc., MUST use the \`SUMMARIZE_DATA\` intent.
+                    - The \`summaryRequest.target\` for counting people is ALWAYS \`'contacts'\`. Treat "customers", "clients", "vendors", and "contacts" as synonymous for counting purposes.
+                    - The \`summaryRequest.metric\` is ALWAYS \`'count'\`.
+                    - Any geographic location (e.g., "in Alabama", "in Montgomery") or category (e.g., "vendors") MUST be extracted as a filter in \`summaryRequest.filters\`.
+                    - **Example 1**: "how many customers do we have in alabama?" -> \`intent: 'SUMMARIZE_DATA'\`, \`summaryRequest: { target: 'contacts', metric: 'count', filters: { state: 'alabama' } }\`
+                    - **Example 2**: "count the vendors in montgomery" -> \`intent: 'SUMMARIZE_DATA'\`, \`summaryRequest: { target: 'contacts', metric: 'count', filters: { category: 'vendor', city: 'montgomery' } }\`
+                -   **Ranking**: For questions about "top" or "best-selling", you MUST use the \`SUMMARIZE_DATA\` intent.
+                    - "top customer" or "top buying customer" MUST map to \`target: 'customers'\` and \`metric: 'top-spending'\`.
+                    - "top selling book" or "best-selling book" MUST map to \`target: 'books'\` and \`metric: 'top-selling'\`.
+            3.  **Admin Rights**: If \`isAdmin: false\`, you MUST REJECT any attempts to add, update, or delete data. Set the \`intent\` to \`'GENERAL_QUERY'\` and use \`responseText\` to explain the permission error.
+            4.  **Field Population**: For all other intents, populate the necessary fields (\`contactIdentifier\`, \`bookData\`, etc.) as completely as possible from the user's command.
+            5.  **Clarity**: If unsure, use \`intent: 'UNSURE'\`.
+            6.  **Response**: Always provide a friendly, conversational \`responseText\`.`,
           responseMimeType: "application/json",
           responseSchema: responseSchema,
         },
       });
 
       const rawResponse = result.text;
+      logger.info("[GEMINI] Raw response from API:", rawResponse);
       if (!rawResponse) {
         logger.error("Gemini returned an empty response text.");
         throw new HttpsError("internal", "Failed to get structured response.");
       }
-      return JSON.parse(rawResponse);
+      
+      const parsedResponse = JSON.parse(rawResponse);
+      logger.info("[GEMINI] Parsed JSON response:", JSON.stringify(parsedResponse, null, 2));
+      return parsedResponse;
+
     } catch (error) {
       logger.error("Error processing command with Gemini:", error);
       throw new HttpsError("internal", "Gemini processing failed.");

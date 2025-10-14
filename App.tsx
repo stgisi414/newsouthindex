@@ -367,21 +367,30 @@ function App() {
         if (userRole === UserRole.APPLICANT) {
           return { success: false, message: "You do not have permission to view this information." };
         }
-        const { summaryTarget, filters, summaryMetric } = data;
-        if (summaryTarget === 'contacts' && filters) {
-          const filteredContacts = contacts.filter(c => {
-            let matches = true;
-            if (filters?.category) {
-              matches = matches && c.category.toLowerCase() === filters.category.toLowerCase();
-            }
-            if (filters?.state) {
-              matches = matches && c.state?.toLowerCase() === filters.state.toLowerCase();
-            }
-            return matches;
-          });
-          return { success: true, message: `There are ${filteredContacts.length} contacts matching your criteria.` };
+        
+        const { summaryRequest } = data;
+        if (!summaryRequest) {
+          return { success: false, message: "I'm sorry, I couldn't understand the summary request." };
         }
-        if (summaryTarget === 'customers' && summaryMetric === 'top-spending') {
+
+        const { target, metric, filters, limit = 10 } = summaryRequest;
+
+        if (target === 'contacts' && metric === 'count') {
+          let filtered = contacts;
+          if (filters) {
+            filtered = contacts.filter(c => {
+              if (filters.category && c.category.toLowerCase() !== filters.category.toLowerCase()) return false;
+              if (filters.state && c.state?.toLowerCase() !== filters.state.toLowerCase()) return false;
+              if (filters.city && c.city?.toLowerCase() !== filters.city.toLowerCase()) return false;
+              return true;
+            });
+          }
+          const filterDescriptions = filters ? Object.entries(filters).map(([key, value]) => `${key} is '${value}'`).join(' and ') : '';
+          const message = `There are ${filtered.length} contacts${filterDescriptions ? ` where ${filterDescriptions}` : ' in total'}.`;
+          return { success: true, message };
+        }
+
+        if (target === 'customers' && metric === 'top-spending') {
             const customerSpending: { [key: string]: { name: string; total: number } } = {};
             transactions.forEach(t => {
                 if (!customerSpending[t.contactId]) {
@@ -389,10 +398,11 @@ function App() {
                 }
                 customerSpending[t.contactId].total += t.totalPrice;
             });
-            const topCustomers = Object.values(customerSpending).sort((a, b) => b.total - a.total).slice(0, 10);
-            return { success: true, payload: topCustomers, message: "Here are the top customers by spending." };
+            const topCustomers = Object.values(customerSpending).sort((a, b) => b.total - a.total).slice(0, limit);
+            return { success: true, payload: topCustomers, message: `Here are the top ${limit} customers by spending.` };
         }
-        if (summaryTarget === 'books' && summaryMetric === 'top-selling') {
+
+        if (target === 'books' && metric === 'top-selling') {
             const bookSales: { [key: string]: { title: string; quantity: number } } = {};
             transactions.forEach(t => {
                 t.books.forEach(bookInTransaction => {
@@ -403,10 +413,11 @@ function App() {
                     bookSales[bookInTransaction.id].quantity += bookInTransaction.quantity;
                 });
             });
-            const bestSellingBooks = Object.values(bookSales).sort((a, b) => b.quantity - a.quantity).slice(0, 10);
-            return { success: true, payload: bestSellingBooks, message: "Here are the top-selling books." };
+            const bestSellingBooks = Object.values(bookSales).sort((a, b) => b.quantity - a.quantity).slice(0, limit);
+            return { success: true, payload: bestSellingBooks, message: `Here are the top ${limit} best-selling books.` };
         }
-        return { success: false, message: "I'm sorry, I can't summarize that information." };
+
+        return { success: false, message: "I'm sorry, I can't summarize that information in that way." };
       }
 
       case 'DELETE_BOOK': {

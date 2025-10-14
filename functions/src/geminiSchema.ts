@@ -189,23 +189,34 @@ export const responseSchema = {
         description: "Data for a new event being added.",
         properties: eventProperties,
     },
-    summaryTarget: {
-        type: Type.STRING,
-        description: "The type of data to summarize, e.g., 'customers' or 'books'.",
-        enum: ["customers", "books"],
-    },
-    summaryMetric: {
-        type: Type.STRING,
-        description: "The metric to summarize by, e.g., 'top-selling' or 'top-spending'.",
-        enum: ["top-selling", "top-spending"],
-    },
-    filters: {
-        type: Type.OBJECT,
-        description: "Filters to apply to the summarization.",
-        properties: {
-            category: { type: Type.STRING, description: "The contact category to filter by." },
-            state: { type: Type.STRING, description: "The state to filter contacts by." },
+    summaryRequest: {
+      type: Type.OBJECT,
+      description: "Details for a data summarization request.",
+      properties: {
+        target: {
+          type: Type.STRING,
+          description: "The entity to summarize.",
+          enum: ["contacts", "customers", "books"],
         },
+        metric: {
+          type: Type.STRING,
+          description: "The metric to calculate.",
+          enum: ["count", "top-spending", "top-selling"],
+        },
+        limit: {
+          type: Type.NUMBER,
+          description: "The number of results to return for top-N queries (e.g., top 5). Defaults to 10.",
+        },
+        filters: {
+          type: Type.OBJECT,
+          description: "Filters to apply before summarizing.",
+          properties: {
+            category: { type: Type.STRING, description: "Filter contacts by category." },
+            state: { type: Type.STRING, description: "Filter contacts by state." },
+            city: { type: Type.STRING, description: "Filter contacts by city." },
+          },
+        },
+      },
     },
     transactionData: {
         type: Type.OBJECT,
