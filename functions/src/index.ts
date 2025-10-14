@@ -77,66 +77,42 @@ export const processCommand = onCall({secrets: ["GEMINI_API_KEY"], cors: true}, 
     const command = request.data.command;
     logger.info(`[GEMINI] Received command: "${command}"`);
 
-    // --- DEFINITIVE FIX: Few-shot examples ---
-    // This provides concrete examples to force the AI into the correct output structure.
-    // It's much more effective than descriptions alone.
+    // --- Definitive Fix v4: Enforced System Instruction and Highly Specific Few-Shot Examples ---
+    cconst systemInstruction = `You are a function-calling AI assistant for a CRM application. Your role is to convert natural language commands into a single, structured JSON function call using the provided tools.
+    
+CRITICAL INSTRUCTION:
+1. Always translate the user's intent into the *most specific* function call possible. Never use the 'find' functions when a 'count', 'add', 'update', 'delete', or 'metrics' function is appropriate.
+2. The output MUST be a function call and NOT a conversational response.
+3. For all queries that require specific filtering (e.g., location, category, author), you must populate the 'args' object with the correct filter(s) and their value(s) from the user's command. Use proper casing for known categorical values (e.g., 'Client', 'Media', 'AL').
+4. For general "count all" requests (e.g., 'total contacts'), the function call must include an empty args object: {}.`;
+
+
     const fewShotExamples: GenerativeContent[] = [
-        {
-            role: "user",
-            parts: [{ text: "how many clients?" }]
-        },
-        {
-            role: "model",
-            parts: [{ functionCall: { name: "countContacts", args: { category: "Client" } } }]
-        },
-        {
-            role: "user",
-            parts: [{ text: "how many books are out of stock?" }]
-        },
-        {
-            role: "model",
-            parts: [{ functionCall: { name: "countBooks", args: { stock: 0 } } }]
-        },
-        {
-            role: "user",
-            parts: [{ text: "how many events with Jane Doe?" }]
-        },
-        {
-            role: "model",
-            parts: [{ functionCall: { name: "countEvents", args: { author: "Jane Doe" } } }]
-        },
-        {
-            role: "user",
-            parts: [{ text: "how many poetry events?" }]
-        },
-        {
-            role: "model",
-            parts: [{ functionCall: { name: "countEvents", args: { name: "poetry" } } }]
-        },
-        {
-            role: "user",
-            parts: [{ text: "number of contacts that are not clients" }]
-        },
-        {
-            role: "model",
-            parts: [{ functionCall: { name: "countContacts", args: { category: "not Client" } } }]
-        },
-        {
-            role: "user",
-            parts: [{ text: "how many contacts in mobile, alabama with zip 36602?" }]
-        },
-        {
-            role: "model",
-            parts: [{ functionCall: { name: "countContacts", args: { city: "mobile", state: "alabama", zip: "36602" } } }]
-        },
-         {
-            role: "user",
-            parts: [{ text: "how many contacts in montgomery?" }]
-        },
-        {
-            role: "model",
-            parts: [{ functionCall: { name: "countContacts", args: { city: "montgomery" } } }]
-        }
+        // All-data counts must explicitly use an empty object as args
+        { role: "user", parts: [{ text: "total contacts" }] },
+        { role: "model", parts: [{ functionCall: { name: "countContacts", args: {} } }] },
+        { role: "user", parts: [{ text: "count all events" }] },
+        { role: "model", parts: [{ functionCall: { name: "countEvents", args: {} } }] },
+        
+        // Filtered examples (ensuring args is populated)
+        { role: "user", parts: [{ text: "how many clients?" }] },
+        { role: "model", parts: [{ functionCall: { name: "countContacts", args: { category: "Client" } } }] },
+        { role: "user", parts: [{ text: "how many contacts are not clients?" }] },
+        { role: "model", parts: [{ functionCall: { name: "countContacts", args: { category: "not Client" } } }] },
+        { role: "user", parts: [{ text: "count my business contacts" }] },
+        { role: "model", parts: [{ functionCall: { name: "countContacts", args: { category: "Client" } } }] },
+        { role: "user", parts: [{ text: "how many contacts in montgomery?" }] },
+        { role: "model", parts: [{ functionCall: { name: "countContacts", args: { city: "Montgomery" } } }] },
+        { role: "user", parts: [{ text: "how many contacts in mobile, alabama with zip 36602?" }] },
+        { role: "model", parts: [{ functionCall: { name: "countContacts", args: { city: "Mobile", state: "AL", zip: "36602" } } }] },
+        { role: "user", parts: [{ text: "count all books by Stephen King" }] },
+        { role: "model", parts: [{ functionCall: { name: "countBooks", args: { author: "Stephen King" } } }] },
+        { role: "user", parts: [{ text: "how many books are out of stock?" }] },
+        { role: "model", parts: [{ functionCall: { name: "countBooks", args: { stock: 0 } } }] },
+        { role: "user", parts: [{ text: "count events in the Upstairs Loft" }] },
+        { role: "model", parts: [{ functionCall: { name: "countEvents", args: { location: "Upstairs Loft" } } }] },
+        { role: "user", parts: [{ text: "who are my top 5 customers?" }] },
+        { role: "model", parts: [{ functionCall: { name: "getMetrics", args: { target: "customers", metric: "top-spending", limit: 5 } } }] }
     ];
 
     const contents: GenerativeContent[] = [
@@ -144,12 +120,11 @@ export const processCommand = onCall({secrets: ["GEMINI_API_KEY"], cors: true}, 
         { role: "user", parts: [{ text: command }] }
     ];
 
-    // --- Simplified Tool Definitions ---
-    // The main logic is now in the few-shot examples, so descriptions can be simpler.
+    // --- Updated Tool Definitions (More Descriptive) ---
     const tools: FunctionDeclaration[] = [
-      { name: "countContacts", description: "Counts contacts.", parameters: { type: "OBJECT", properties: { category: { type: "STRING" }, state: { type: "STRING" }, city: { type: "STRING" }, zip: { type: "STRING" } } } },
-      { name: "countBooks", description: "Counts books.", parameters: { type: "OBJECT", properties: { author: { type: "STRING" }, genre: { type: "STRING" }, stock: { type: "NUMBER" }, publisher: { type: "STRING" }, publicationYear: { type: "NUMBER" } } } },
-      { name: "countEvents", description: "Counts events.", parameters: { type: "OBJECT", properties: { location: { type: "STRING" }, author: { type: "STRING" }, name: { type: "STRING" } } } },
+      { name: "countContacts", description: "Counts contacts based on filters like category, city, state, or zip code.", parameters: { type: "OBJECT", properties: { category: { type: "STRING" }, state: { type: "STRING" }, city: { type: "STRING" }, zip: { type: "STRING" } } } },
+      { name: "countBooks", description: "Counts books in the inventory based on filters like author, genre, stock, publisher, or publication year.", parameters: { type: "OBJECT", properties: { author: { type: "STRING" }, genre: { type: "STRING" }, stock: { type: "NUMBER" }, publisher: { type: "STRING" }, publicationYear: { type: "NUMBER" } } } },
+      { name: "countEvents", description: "Counts scheduled events based on filters like location, featured author, or event name.", parameters: { type: "OBJECT", properties: { location: { type: "STRING" }, author: { type: "STRING" }, name: { type: "STRING" } } } },
       { name: "addContact", description: "Adds a new contact.", parameters: { type: "OBJECT", properties: { firstName: { type: "STRING" }, lastName: { type: "STRING" }, email: { type: "STRING" }, phone: { type: "STRING" }, city: { type: "STRING" }, state: { type: "STRING" }, zip: { type: "STRING" }, category: { type: "STRING" }, notes: { type: "STRING" } }, required: ["firstName", "lastName"] } },
       { name: "findContact", description: "Finds a contact by name or email.", parameters: { type: "OBJECT", properties: { identifier: { type: "STRING" } }, required: ["identifier"] } },
       { name: "updateContact", description: "Updates a contact's information.", parameters: { type: "OBJECT", properties: { identifier: { type: "STRING" }, updateData: { type: "OBJECT", properties: { firstName: { type: "STRING" }, lastName: { type: "STRING" }, email: { type: "STRING" }, phone: { type: "STRING" }, city: { type: "STRING" }, state: { type: "STRING" }, zip: { type: "STRING" }, category: { type: "STRING" }, notes: { type: "STRING" } } } }, required: ["identifier", "updateData"] } },
@@ -164,15 +139,17 @@ export const processCommand = onCall({secrets: ["GEMINI_API_KEY"], cors: true}, 
       { name: "deleteEvent", description: "Deletes an event by its name.", parameters: { type: "OBJECT", properties: { eventIdentifier: { type: "STRING" } }, required: ["eventIdentifier"] } },
       { name: "addAttendee", description: "Adds a contact as an attendee to an event.", parameters: { type: "OBJECT", properties: { eventIdentifier: { type: "STRING" }, contactIdentifier: { type: "STRING" } }, required: ["eventIdentifier", "contactIdentifier"] } },
       { name: "removeAttendee", description: "Removes a contact from an event's attendee list.", parameters: { type: "OBJECT", properties: { eventIdentifier: { type: "STRING" }, contactIdentifier: { type: "STRING" } }, required: ["eventIdentifier", "contactIdentifier"] } },
-      { name: "getMetrics", description: "Gets metrics, such as top customers or best-selling books.", parameters: { type: "OBJECT", properties: { target: { type: "STRING" }, metric: { type: "STRING" }, limit: { type: "NUMBER" } }, required: ["target", "metric"] } },
+      { name: "getMetrics", description: "Gets metrics, such as top customers (top-spending) or best-selling books (top-selling).", parameters: { type: "OBJECT", properties: { target: { type: "STRING" }, metric: { type: "STRING" }, limit: { type: "NUMBER" } }, required: ["target", "metric"] } },
     ];
-
 
     try {
         const result = await ai.models.generateContent({
             model: "gemini-2.5-flash-lite",
             contents: contents,
             tools: [{ functionDeclarations: tools }],
+            config: {
+                systemInstruction: systemInstruction,
+            }
         });
 
         const call = result.functionCalls?.[0];
@@ -180,29 +157,109 @@ export const processCommand = onCall({secrets: ["GEMINI_API_KEY"], cors: true}, 
         if (call) {
             logger.info("[GEMINI] Function call requested:", call.name, call.args);
             const { name, args } = call;
-            let response: any = { responseText: `Understood. Performing action: ${name}.` };
+            let response: any;
             const anyArgs = args as any;
 
+            // CRITICAL FIX: Ensure ALL function calls return the required { intent, data, responseText } structure.
             switch (name) {
-                case "countContacts": response.intent = 'COUNT_DATA'; response.countRequest = { target: 'contacts', filters: args }; break;
-                case "countBooks": response.intent = 'COUNT_DATA'; response.countRequest = { target: 'books', filters: args }; break;
-                case "countEvents": response.intent = 'COUNT_DATA'; response.countRequest = { target: 'events', filters: args }; break;
-                case "addContact": response.intent = 'ADD_CONTACT'; response.contactData = args; break;
-                case "findContact": response.intent = 'FIND_CONTACT'; response.contactIdentifier = anyArgs.identifier; break;
-                case "updateContact": response.intent = 'UPDATE_CONTACT'; response.contactIdentifier = anyArgs.identifier; response.updateData = anyArgs.updateData; break;
-                case "deleteContact": response.intent = 'DELETE_CONTACT'; response.contactIdentifier = anyArgs.identifier; break;
-                case "addBook": response.intent = 'ADD_BOOK'; response.bookData = args; break;
-                case "findBook": response.intent = 'FIND_BOOK'; response.bookIdentifier = anyArgs.identifier; break;
-                case "updateBook": response.intent = 'UPDATE_BOOK'; response.bookIdentifier = anyArgs.bookIdentifier; response.updateData = anyArgs.updateData; break;
-                case "deleteBook": response.intent = 'DELETE_BOOK'; response.bookIdentifier = anyArgs.bookIdentifier; break;
-                case "addEvent": response.intent = 'ADD_EVENT'; response.eventData = args; break;
-                case "findEvent": response.intent = 'FIND_EVENT'; response.eventIdentifier = anyArgs.identifier; break;
-                case "updateEvent": response.intent = 'UPDATE_EVENT'; response.eventIdentifier = anyArgs.eventIdentifier; response.updateData = anyArgs.updateData; break;
-                case "deleteEvent": response.intent = 'DELETE_EVENT'; response.eventIdentifier = anyArgs.eventIdentifier; break;
-                case "addAttendee": response.intent = 'ADD_ATTENDEE'; response.eventIdentifier = anyArgs.eventIdentifier; response.contactIdentifier = anyArgs.contactIdentifier; break;
-                case "removeAttendee": response.intent = 'REMOVE_ATTENDEE'; response.eventIdentifier = anyArgs.eventIdentifier; response.contactIdentifier = anyArgs.contactIdentifier; break;
-                case "getMetrics": response.intent = 'METRICS_DATA'; response.metricsRequest = args; break;
-                default: response.intent = 'GENERAL_QUERY'; response.responseText = "I understood the action but don't know how to handle it.";
+                case "countContacts": 
+                case "countBooks":
+                case "countEvents":
+                    response = { 
+                        intent: 'COUNT_DATA', 
+                        data: {
+                            countRequest: { target: name.replace('count', '').toLowerCase(), filters: args }, // Filters are correctly placed in args
+                        },
+                        responseText: `I am processing your request to count ${name.replace('count', '').toLowerCase()}.`
+                    };
+                    break;
+                case "addContact": 
+                    response = { intent: 'ADD_CONTACT', data: { contactData: args }, responseText: `I am processing your request to add a contact.` };
+                    break;
+                case "findContact": 
+                    response = { intent: 'FIND_CONTACT', data: { contactIdentifier: anyArgs.identifier }, responseText: `I am processing your request to find a contact.` };
+                    break;
+                case "updateContact": 
+                    response = { intent: 'UPDATE_CONTACT', data: { contactIdentifier: anyArgs.identifier, updateData: anyArgs.updateData }, responseText: `I am processing your request to update a contact.` };
+                    break;
+                case "deleteContact": 
+                    response = { intent: 'DELETE_CONTACT', data: { contactIdentifier: anyArgs.identifier }, responseText: `I am processing your request to delete a contact.` };
+                    break;
+                case "addBook": 
+                    response = { 
+                        intent: 'ADD_BOOK', 
+                        data: { bookData: args },
+                        responseText: `Successfully parsed query into an ADD_BOOK command.`
+                    };
+                    break;
+                case "findBook": 
+                    response = { 
+                        intent: 'FIND_BOOK', 
+                        data: { bookIdentifier: anyArgs.identifier },
+                        responseText: `Successfully parsed query into a FIND_BOOK command.`
+                    };
+                    break;
+                case "updateBook": 
+                    response = { 
+                        intent: 'UPDATE_BOOK', 
+                        data: { bookIdentifier: anyArgs.bookIdentifier, updateData: anyArgs.updateData },
+                        responseText: `Successfully parsed query into an UPDATE_BOOK command.`
+                    };
+                    break;
+                case "deleteBook": 
+                    response = { 
+                        intent: 'DELETE_BOOK', 
+                        data: { bookIdentifier: anyArgs.bookIdentifier },
+                        responseText: `Successfully parsed query into a DELETE_BOOK command.`
+                    };
+                    break;
+                case "addEvent": 
+                    response = { 
+                        intent: 'ADD_EVENT', 
+                        data: { eventData: args },
+                        responseText: `Successfully parsed query into an ADD_EVENT command.`
+                    };
+                    break;
+                case "findEvent": 
+                    response = { 
+                        intent: 'FIND_EVENT', 
+                        data: { eventIdentifier: anyArgs.identifier },
+                        responseText: `Successfully parsed query into a FIND_EVENT command.`
+                    };
+                    break;
+                case "updateEvent": 
+                    response = { 
+                        intent: 'UPDATE_EVENT', 
+                        data: { eventIdentifier: anyArgs.eventIdentifier, updateData: anyArgs.updateData },
+                        responseText: `Successfully parsed query into an UPDATE_EVENT command.`
+                    };
+                    break;
+                case "deleteEvent": 
+                    response = { 
+                        intent: 'DELETE_EVENT', 
+                        data: { eventIdentifier: anyArgs.eventIdentifier },
+                        responseText: `Successfully parsed query into a DELETE_EVENT command.`
+                    };
+                    break;
+                case "addAttendee": 
+                    response = { 
+                        intent: 'ADD_ATTENDEE', 
+                        data: { eventIdentifier: anyArgs.eventIdentifier, contactIdentifier: anyArgs.contactIdentifier },
+                        responseText: `Successfully parsed query into an ADD_ATTENDEE command.`
+                    };
+                    break;
+                case "removeAttendee": 
+                    response = { 
+                        intent: 'REMOVE_ATTENDEE', 
+                        data: { eventIdentifier: anyArgs.eventIdentifier, contactIdentifier: anyArgs.contactIdentifier },
+                        responseText: `Successfully parsed query into a REMOVE_ATTENDEE command.`
+                    };
+                    break;
+                case "getMetrics": 
+                    response = { intent: 'METRICS_DATA', data: { metricsRequest: args }, responseText: `I am processing your request for metrics data.` };
+                    break;
+                default: 
+                    response = { intent: 'GENERAL_QUERY', responseText: `Function ${name} not recognized. Cannot determine specific action.` };
             }
 
             logger.info("[GEMINI] Transformed to structured response:", JSON.stringify(response, null, 2));
@@ -210,14 +267,15 @@ export const processCommand = onCall({secrets: ["GEMINI_API_KEY"], cors: true}, 
         }
 
         logger.warn("[GEMINI] No function call was returned by the model.");
-        return { intent: "GENERAL_QUERY", responseText: "I'm sorry, I could not determine a specific action to take." };
+        // If it reaches here, use the model's text response if it returned one.
+        const conversationalText = result.text || "I'm sorry, I could not determine a specific action to take.";
+        return { intent: "GENERAL_QUERY", responseText: conversationalText };
 
     } catch (error) {
         logger.error("Error processing command with Gemini:", error);
         throw new HttpsError("internal", "Gemini processing failed.");
     }
 });
-
 
 // --- User Management Functions ---
 export const setUserRole = onCall({cors: true}, async (request) => {
@@ -292,4 +350,3 @@ export const makeMeAdmin = onCall({cors: true}, async (request) => {
       throw new HttpsError("internal", "Failed to set admin role. Check the function logs.");
     }
 });
-

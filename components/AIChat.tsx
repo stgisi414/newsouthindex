@@ -144,11 +144,13 @@ const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed, isAdmin, currentUse
 
         try {
             const commandResponse = await processNaturalLanguageCommand(userMessage.text, isAdmin);
-            const { intent, ...data } = commandResponse;
+            
+            // FIX: Destructure intent, data, and responseText from the new server object
+            const { intent, data, responseText } = commandResponse;
 
             const result = await onCommandProcessed(intent, data);
             
-            let aiResponseText = result.message || commandResponse.responseText || "I'm not sure how to respond to that.";
+            let aiResponseText = result.message || responseText || "I'm not sure how to respond to that.";
 
             if (intent === 'FIND_CONTACT' && result.success) {
                  const foundContacts = result.payload as Contact[];

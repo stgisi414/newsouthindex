@@ -43,21 +43,36 @@ const AIAssistantTestSuite: React.FC<AIAssistantTestSuiteProps> = ({ onProcessAi
         for (const test of testQueries) {
             console.log(`%c[TEST SUITE] Running test for query: "${test.query}"`, 'color: blue; font-weight: bold;');
             try {
-                const response = await processNaturalLanguageCommand(test.query, true);
-                console.log('[TEST SUITE] Raw response from AI:', response);
+                // commandResponse is now { intent, data, responseText }
+                const commandResponse = await processNaturalLanguageCommand(test.query, true);
+                console.log('[TEST SUITE] Raw response from AI:', commandResponse);
+                
+                // FIX: Extract intent, data, and responseText from the new server object
+                const { intent, data, responseText } = commandResponse;
 
-                const finalResult = await onProcessAiCommand(response.intent, response);
+                // Pass the nested 'data' object to the processor
+                const finalResult = await onProcessAiCommand(intent, data);
                 console.log('[TEST SUITE] Final processed result:', finalResult);
 
-                let pass = response.intent === test.expected.intent && response.countRequest?.target === test.expected.target;
+                // Start Pass Check
+                let pass = intent === test.expected.intent;
                 
+                // FIX: Check nested structure: data.countRequest.target
+                const actualTarget = data?.countRequest?.target;
+                const expectedTarget = test.expected.target;
+                
+                if (expectedTarget) {
+                    pass = pass && (actualTarget === expectedTarget);
+                }
+
                 if (pass && test.expected.filters) {
-                  if (!response.countRequest.filters) {
+                  // FIX: Check nested structure: data.countRequest.filters
+                  const actualFilters = data?.countRequest?.filters;
+                  if (!actualFilters) {
                     pass = false;
                   } else {
                     // Case-insensitive comparison of filter values
                     const expectedFilters = test.expected.filters;
-                    const actualFilters = response.countRequest.filters;
                     pass = Object.keys(expectedFilters).every(key =>
                       actualFilters.hasOwnProperty(key) &&
                       String(actualFilters[key]).toLowerCase() === String(expectedFilters[key]).toLowerCase()
@@ -65,7 +80,7 @@ const AIAssistantTestSuite: React.FC<AIAssistantTestSuiteProps> = ({ onProcessAi
                   }
                 }
                 
-                testResults.push({ ...test, pass, actual: response, finalMessage: finalResult.message });
+                testResults.push({ ...test, pass, actual: commandResponse, finalMessage: finalResult.message });
                 console.log(`%c[TEST SUITE] Test for query "${test.query}" completed. Pass: ${pass}`, `color: ${pass ? 'green' : 'red'};`);
             } catch (error) {
                 console.error(`[TEST SUITE] Error running test for query: "${test.query}"`, error);

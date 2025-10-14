@@ -237,20 +237,20 @@ function App() {
     console.log('%c[FRONTEND LOG] Processing AI Command:', 'color: green; font-weight: bold;', { intent, data });
     switch (intent) {
       case 'ADD_CONTACT': {
-        const contactData = data.contactData || {};
-        const identifier = data.contactIdentifier || 'Unknown';
+        const { contactData } = (data || {}) as { contactData?: any };
+        const { contactIdentifier } = (data || {}) as { contactIdentifier?: string };
         
-        const nameParts = identifier.split(' ').filter(p => p.length > 0);
-        const firstName = contactData.firstName || nameParts[0] || 'Unknown';
-        const lastName = contactData.lastName || (nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Contact');
+        const nameParts = (contactIdentifier || '').split(' ').filter(p => p.length > 0);
+        const firstName = contactData?.firstName || nameParts[0] || 'Unknown';
+        const lastName = contactData?.lastName || (nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Contact');
         
         const newContact = {
             firstName: firstName,
             lastName: lastName,
-            category: contactData.category || Category.OTHER,
-            phone: contactData.phone || 'N/A',
-            email: contactData.email || `${firstName.toLowerCase()}.${lastName.toLowerCase()}@default.com`,
-            notes: contactData.notes || `Added via AI.`,
+            category: contactData?.category || Category.OTHER,
+            phone: contactData?.phone || 'N/A',
+            email: contactData?.email || `${firstName.toLowerCase()}.${lastName.toLowerCase()}@default.com`,
+            notes: contactData?.notes || `Added via AI.`,
         } as Omit<Contact, "id">;
 
         return await addContact(newContact);
@@ -260,7 +260,8 @@ function App() {
         if (userRole === UserRole.APPLICANT) {
           return { success: false, message: "You do not have permission to view contacts." };
         }
-        const identifier = (data.contactIdentifier || '').toLowerCase();
+        const { contactIdentifier } = (data || {}) as { contactIdentifier?: string };
+        const identifier = (contactIdentifier || '').toLowerCase();
         if (!identifier) {
           return { success: false, message: "Please tell me who you're looking for." };
         }
@@ -275,7 +276,8 @@ function App() {
         if (!isAdmin) {
           return { success: false, message: "I'm sorry, but only admins can update contacts." };
         }
-        const identifier = (data.contactIdentifier || '').toLowerCase();
+        const { contactIdentifier, updateData } = (data || {}) as { contactIdentifier?: string, updateData?: Partial<Contact> };
+        const identifier = (contactIdentifier || '').toLowerCase();
         if (!identifier) {
           return { success: false, message: "I'm not sure which contact you want to update. Please specify a name or email." };
         }
@@ -286,7 +288,7 @@ function App() {
         );
 
         if (foundContacts.length === 0) {
-          return { success: false, message: `I couldn't find a contact matching "${data.contactIdentifier}".` };
+          return { success: false, message: `I couldn't find a contact matching "${contactIdentifier}".` };
         }
 
         if (foundContacts.length > 1) {
@@ -294,16 +296,16 @@ function App() {
         }
 
         const contactToUpdate = foundContacts[0];
-        const updateData = data.updateData || {};
         
-        return await updateContact(contactToUpdate.id, updateData);
+        return await updateContact(contactToUpdate.id, updateData || {});
       }
 
       case 'DELETE_CONTACT': {
         if (!isAdmin) {
           return { success: false, message: "I'm sorry, but only admins can delete contacts." };
         }
-        const identifier = (data.contactIdentifier || '').toLowerCase();
+        const { contactIdentifier } = (data || {}) as { contactIdentifier?: string };
+        const identifier = (contactIdentifier || '').toLowerCase();
         if (!identifier) {
           return { success: false, message: "I'm not sure which contact you want to delete. Please specify a name or email." };
         }
@@ -314,7 +316,7 @@ function App() {
         );
 
         if (foundContacts.length === 0) {
-          return { success: false, message: `I couldn't find a contact matching "${data.contactIdentifier}".` };
+          return { success: false, message: `I couldn't find a contact matching "${contactIdentifier}".` };
         }
 
         if (foundContacts.length > 1) {
@@ -328,21 +330,25 @@ function App() {
 
       case 'ADD_BOOK': {
         if (!isAdmin) return { success: false, message: "Sorry, only admins can add books." };
-        const bookData = data.bookData || {};
+        const { bookData } = (data || {}) as { bookData?: Partial<Book> };
+        
         const newBook = {
-          title: bookData.title || "Untitled",
-          author: bookData.author || "Unknown Author",
-          isbn: bookData.isbn || "",
-          publisher: bookData.publisher || "",
-          price: bookData.price || 0,
-          stock: bookData.stock || 0,
+          title: bookData?.title || "Untitled",
+          author: bookData?.author || "Unknown Author",
+          isbn: bookData?.isbn || "",
+          publisher: bookData?.publisher || "",
+          price: bookData?.price || 0,
+          stock: bookData?.stock || 0,
+          genre: bookData?.genre || "",
+          publicationYear: bookData?.publicationYear || undefined,
         } as Omit<Book, "id">;
         await addBook(newBook);
         return { success: true, message: `Successfully added the book "${newBook.title}".` };
       }
 
       case 'FIND_BOOK': {
-        const identifier = (data.bookIdentifier || '').toLowerCase();
+        const { bookIdentifier } = (data || {}) as { bookIdentifier?: string };
+        const identifier = (bookIdentifier || '').toLowerCase();
         if (!identifier) return { success: false, message: "Please specify a book title or ISBN." };
         const foundBooks = books.filter(b => 
           b.title.toLowerCase().includes(identifier) ||
@@ -354,12 +360,14 @@ function App() {
 
       case 'UPDATE_BOOK': {
         if (!isAdmin) return { success: false, message: "Sorry, only admins can update books." };
-        const identifier = (data.bookIdentifier || '').toLowerCase();
+        const { bookIdentifier, updateData } = (data || {}) as { bookIdentifier?: string, updateData?: Partial<Book> };
+        const identifier = (bookIdentifier || '').toLowerCase();
+        
         const foundBooks = books.filter(b => b.title.toLowerCase().includes(identifier));
-        if (foundBooks.length === 0) return { success: false, message: `Could not find a book matching "${data.bookIdentifier}".`};
+        if (foundBooks.length === 0) return { success: false, message: `Could not find a book matching "${bookIdentifier}".`};
         if (foundBooks.length > 1) return { success: false, message: "Found multiple books with that title, please be more specific."};
         const bookToUpdate = foundBooks[0];
-        await updateBook({ ...bookToUpdate, ...data.updateData });
+        await updateBook({ ...bookToUpdate, ...updateData });
         return { success: true, message: `Successfully updated "${bookToUpdate.title}".` };
       }
       
@@ -368,15 +376,25 @@ function App() {
           return { success: false, message: "You do not have permission to view this information." };
         }
         
-        const { countRequest } = data;
+        // CRITICAL FIX: Destructure both the expected (countRequest) and the observed, incorrect field (updateData)
+        // Note: The previous defensive destructuring (data || {}) is already applied in the outer layer,
+        // but we must check the properties within the data object for filters.
+        const { countRequest } = (data || {}) as { countRequest?: any }; 
+        const { updateData } = (data || {}) as { updateData?: any };
+        
         if (!countRequest) {
           return { success: false, message: "I'm sorry, I couldn't understand the count request." };
         }
 
-        const { target, filters } = countRequest;
+        // CRITICAL FIX: Consolidate filters from the correct spot (countRequest.filters)
+        // or the observed, incorrect spot (updateData)
+        const filters = countRequest.filters || updateData || {};
+
+        const { target } = countRequest;
         let count = 0;
         let message = '';
-        const filterDescriptions = filters ? Object.entries(filters).map(([key, value]) => `${key} is '${value}'`).join(' and ') : '';
+        const filterDescriptions = Object.entries(filters).map(([key, value]) => `${key} is '${value}'`).join(' and ');
+
 
         if (target === 'contacts') {
           let filtered = contacts;
@@ -390,7 +408,9 @@ function App() {
                       if (c.category?.toLowerCase() !== filters.category.toLowerCase()) passes = false;
                   }
               }
-              if (filters.state && !(c.state?.toLowerCase() === filters.state.toLowerCase() || (c.state === 'AL' && filters.state.toLowerCase() === 'alabama'))) passes = false;
+              // Added check for "alabama" == "al" for state for robust filtering
+              const stateFilter = filters.state?.toLowerCase();
+              if (stateFilter && !(c.state?.toLowerCase() === stateFilter || (c.state?.toLowerCase() === 'al' && stateFilter === 'alabama'))) passes = false;
               if (filters.city && c.city?.toLowerCase() !== filters.city.toLowerCase()) passes = false;
               if (filters.zip && c.zip !== filters.zip) passes = false;
               return passes;
@@ -439,7 +459,7 @@ function App() {
         if (userRole === UserRole.APPLICANT) {
           return { success: false, message: "You do not have permission to view this information." };
         }
-        const { metricsRequest } = data;
+        const { metricsRequest } = (data || {}) as { metricsRequest?: any }; // FIXED: Safely destructure
         if (!metricsRequest) {
           return { success: false, message: "I'm sorry, I couldn't understand the metrics request." };
         }
@@ -474,9 +494,10 @@ function App() {
 
       case 'DELETE_BOOK': {
         if (!isAdmin) return { success: false, message: "Sorry, only admins can delete books." };
-        const identifier = (data.bookIdentifier || '').toLowerCase();
+        const { bookIdentifier } = (data || {}) as { bookIdentifier?: string }; // FIXED: Safely destructure
+        const identifier = (bookIdentifier || '').toLowerCase();
         const foundBooks = books.filter(b => b.title.toLowerCase().includes(identifier));
-        if (foundBooks.length === 0) return { success: false, message: `Could not find a book matching "${data.bookIdentifier}".`};
+        if (foundBooks.length === 0) return { success: false, message: `Could not find a book matching "${bookIdentifier}".`};
         if (foundBooks.length > 1) return { success: false, message: "Found multiple books with that title, please be more specific."};
         await deleteBook(foundBooks[0].id);
         return { success: true, message: `Successfully deleted "${foundBooks[0].title}".` };
@@ -486,19 +507,20 @@ function App() {
       }
       case 'ADD_EVENT': {
         if (!isAdmin) return { success: false, message: "Sorry, only admins can add events." };
-        const eventData = data.eventData || {};
+        const { eventData } = (data || {}) as { eventData?: Partial<Event> }; // FIXED: Safely destructure
         const newEvent = {
-          name: eventData.name || "Untitled Event",
-          date: eventData.date ? new Date(eventData.date) : new Date(),
-          author: eventData.author || "",
-          description: eventData.description || "",
+          name: eventData?.name || "Untitled Event",
+          date: eventData?.date ? new Date(eventData.date) : new Date(),
+          author: eventData?.author || "",
+          description: eventData?.description || "",
         } as Omit<Event, "id">;
         await addEvent(newEvent);
         return { success: true, message: `Successfully scheduled the event "${newEvent.name}".` };
       }
 
       case 'FIND_EVENT': {
-        const identifier = (data.eventIdentifier || '').toLowerCase();
+        const { eventIdentifier } = (data || {}) as { eventIdentifier?: string }; // FIXED: Safely destructure
+        const identifier = (eventIdentifier || '').toLowerCase();
         if (!identifier) return { success: false, message: "Please specify an event name." };
         const foundEvents = events.filter(e => 
           e.name.toLowerCase().includes(identifier) ||
@@ -524,13 +546,13 @@ function App() {
 
       case 'UPDATE_EVENT': {
         if (!isAdmin) return { success: false, message: "Sorry, only admins can update events." };
-        const identifier = (data.eventIdentifier || '').toLowerCase();
+        const { eventIdentifier, updateData } = (data || {}) as { eventIdentifier?: string, updateData?: Partial<Event> }; // FIXED: Safely destructure
+        const identifier = (eventIdentifier || '').toLowerCase();
         const foundEvents = events.filter(e => e.name.toLowerCase().includes(identifier));
-        if (foundEvents.length === 0) return { success: false, message: `Could not find an event matching "${data.eventIdentifier}".`};
+        if (foundEvents.length === 0) return { success: false, message: `Could not find an event matching "${eventIdentifier}".`};
         if (foundEvents.length > 1) return { success: false, message: "Found multiple events with that name, please be more specific."};
         const eventToUpdate = foundEvents[0];
-        const updateData = data.updateData || {};
-        if (updateData.date) {
+        if (updateData?.date) {
             updateData.date = new Date(updateData.date);
         }
         await updateEvent({ ...eventToUpdate, ...updateData });
@@ -539,9 +561,10 @@ function App() {
 
       case 'DELETE_EVENT': {
         if (!isAdmin) return { success: false, message: "Sorry, only admins can delete events." };
-        const identifier = (data.eventIdentifier || '').toLowerCase();
+        const { eventIdentifier } = (data || {}) as { eventIdentifier?: string }; // FIXED: Safely destructure
+        const identifier = (eventIdentifier || '').toLowerCase();
         const foundEvents = events.filter(e => e.name.toLowerCase().includes(identifier));
-        if (foundEvents.length === 0) return { success: false, message: `Could not find an event matching "${data.eventIdentifier}".`};
+        if (foundEvents.length === 0) return { success: false, message: `Could not find an event matching "${eventIdentifier}".`};
         if (foundEvents.length > 1) return { success: false, message: "Found multiple events with that name, please be more specific."};
         await deleteEvent(foundEvents[0].id);
         return { success: true, message: `Successfully deleted "${foundEvents[0].name}".` };
@@ -550,16 +573,17 @@ function App() {
       case 'ADD_ATTENDEE':
       case 'REMOVE_ATTENDEE': {
           if (!isAdmin) return { success: false, message: "Sorry, only admins can manage attendees." };
-          const eventIdentifier = (data.eventIdentifier || '').toLowerCase();
-          const contactIdentifier = (data.contactIdentifier || '').toLowerCase();
-          if (!eventIdentifier || !contactIdentifier) {
+          const { eventIdentifier, contactIdentifier } = (data || {}) as { eventIdentifier?: string, contactIdentifier?: string }; // FIXED: Safely destructure
+          const eventIdentifierLower = (eventIdentifier || '').toLowerCase();
+          const contactIdentifierLower = (contactIdentifier || '').toLowerCase();
+          if (!eventIdentifierLower || !contactIdentifierLower) {
               return { success: false, message: "Please specify both an event and a contact." };
           }
-          const foundEvents = events.filter(e => e.name.toLowerCase().includes(eventIdentifier));
-          if (foundEvents.length === 0) return { success: false, message: `Could not find an event matching "${data.eventIdentifier}".` };
+          const foundEvents = events.filter(e => e.name.toLowerCase().includes(eventIdentifierLower));
+          if (foundEvents.length === 0) return { success: false, message: `Could not find an event matching "${eventIdentifier}".` };
           if (foundEvents.length > 1) return { success: false, message: "Found multiple events with that name, please be more specific." };
-          const foundContacts = contacts.filter(c => `${c.firstName} ${c.lastName}`.toLowerCase().includes(contactIdentifier));
-          if (foundContacts.length === 0) return { success: false, message: `Could not find a contact matching "${data.contactIdentifier}".` };
+          const foundContacts = contacts.filter(c => `${c.firstName} ${c.lastName}`.toLowerCase().includes(contactIdentifierLower));
+          if (foundContacts.length === 0) return { success: false, message: `Could not find a contact matching "${contactIdentifier}".` };
           if (foundContacts.length > 1) return { success: false, message: "Found multiple contacts with that name, please be more specific." };
           const eventToUpdate = foundEvents[0];
           const contactToUpdate = foundContacts[0];
