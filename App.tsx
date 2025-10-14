@@ -22,7 +22,6 @@ import Dashboard from "./components/Dashboard";
 import { Auth } from "./components/Auth";
 import { AppUser, Contact, Category, UserRole, Book, Transaction, Event } from "./types";
 
-// NEW: Define the callable function
 const seedDatabase = httpsCallable(functions, 'seedDatabase');
 
 function App() {
@@ -35,7 +34,7 @@ function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
-  const seeded = useRef(false); // NEW: Ref to prevent multiple calls
+  const seeded = useRef(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -47,9 +46,8 @@ function App() {
         setUserRole(roleFromToken);
         setIsAdmin(roleFromToken === UserRole.ADMIN);
 
-        // NEW: Automatically seed the database in dev environment
         if (import.meta.env.DEV && roleFromToken !== UserRole.APPLICANT && !seeded.current) {
-          seeded.current = true; // Mark as attempted
+          seeded.current = true;
           console.log("In dev environment, attempting to seed database...");
           try {
             const result = await seedDatabase();
@@ -62,7 +60,7 @@ function App() {
       } else {
         setUserRole(null);
         setIsAdmin(false);
-        seeded.current = false; // Reset on logout
+        seeded.current = false;
       }
       setLoading(false);
     });
@@ -234,22 +232,8 @@ function App() {
       });
   };
 
+  // --- REWRITTEN AI Command Processor ---
   const onProcessAiCommand = async (intent: string, data: any): Promise<{ success: boolean; payload?: any; message?: string }> => {
-    if (intent === 'COUNT_DATA' && data.countRequest && (data.updateData || data.eventData)) {
-        console.log('%c[FRONTEND FIX] Detected misplaced filters. Correcting now.', 'color: orange; font-weight: bold;');
-        const misplacedFilters = data.updateData || data.eventData;
-        if (!data.countRequest.filters) {
-            data.countRequest.filters = {};
-        }
-        // Merge misplaced filters into the correct location
-        Object.assign(data.countRequest.filters, misplacedFilters);
-        // Clean up the incorrect data
-        delete data.updateData;
-        delete data.eventData;
-        console.log('%c[FRONTEND FIX] Corrected data object:', 'color: orange;', data);
-    }
-    // END FIX
-
     console.log('%c[FRONTEND LOG] Processing AI Command:', 'color: green; font-weight: bold;', { intent, data });
     switch (intent) {
       case 'ADD_CONTACT': {
@@ -394,17 +378,22 @@ function App() {
         let message = '';
         const filterDescriptions = filters ? Object.entries(filters).map(([key, value]) => `${key} is '${value}'`).join(' and ') : '';
 
-
         if (target === 'contacts') {
           let filtered = contacts;
           if (filters) {
             filtered = contacts.filter(c => {
-              // Case-insensitive and robust filtering
-              if (filters.category && c.category?.toLowerCase() !== filters.category.toLowerCase()) return false;
-              if (filters.state && !(c.state?.toLowerCase() === filters.state.toLowerCase() || (c.state === 'AL' && filters.state.toLowerCase() === 'alabama'))) return false;
-              if (filters.city && c.city?.toLowerCase() !== filters.city.toLowerCase()) return false;
-              if (filters.zip && c.zip !== filters.zip) return false;
-              return true;
+              let passes = true;
+              if (filters.category) {
+                  if (filters.category.toLowerCase() === 'not client') {
+                      if (c.category?.toLowerCase() === 'client') passes = false;
+                  } else {
+                      if (c.category?.toLowerCase() !== filters.category.toLowerCase()) passes = false;
+                  }
+              }
+              if (filters.state && !(c.state?.toLowerCase() === filters.state.toLowerCase() || (c.state === 'AL' && filters.state.toLowerCase() === 'alabama'))) passes = false;
+              if (filters.city && c.city?.toLowerCase() !== filters.city.toLowerCase()) passes = false;
+              if (filters.zip && c.zip !== filters.zip) passes = false;
+              return passes;
             });
           }
           count = filtered.length;
@@ -413,9 +402,13 @@ function App() {
           let filtered = books;
           if (filters) {
             filtered = books.filter(b => {
-              if (filters.author && !b.author.toLowerCase().includes(filters.author.toLowerCase())) return false;
-              if (filters.genre && b.genre?.toLowerCase() !== filters.genre.toLowerCase()) return false;
-              return true;
+              let passes = true;
+              if (filters.author && !b.author.toLowerCase().includes(filters.author.toLowerCase())) passes = false;
+              if (filters.genre && b.genre?.toLowerCase() !== filters.genre.toLowerCase()) passes = false;
+              if (filters.stock === 0 && b.stock !== 0) passes = false;
+              if (filters.publisher && b.publisher?.toLowerCase() !== filters.publisher.toLowerCase()) passes = false;
+              if (filters.publicationYear && b.publicationYear !== filters.publicationYear) passes = false;
+              return passes;
             });
           }
           count = filtered.length;
@@ -424,9 +417,11 @@ function App() {
             let filtered = events;
             if (filters) {
                 filtered = events.filter(e => {
-                    if (filters.author && e.author?.toLowerCase() !== filters.author.toLowerCase()) return false;
-                    if (filters.location && e.location?.toLowerCase() !== filters.location.toLowerCase()) return false;
-                    return true;
+                  let passes = true;
+                  if (filters.author && e.author?.toLowerCase() !== filters.author.toLowerCase()) passes = false;
+                  if (filters.location && e.location?.toLowerCase() !== filters.location.toLowerCase()) passes = false;
+                  if (filters.name && !e.name.toLowerCase().includes(filters.name.toLowerCase())) passes = false;
+                  return passes;
                 });
             }
             count = filtered.length;
@@ -444,14 +439,11 @@ function App() {
         if (userRole === UserRole.APPLICANT) {
           return { success: false, message: "You do not have permission to view this information." };
         }
-        
         const { metricsRequest } = data;
         if (!metricsRequest) {
           return { success: false, message: "I'm sorry, I couldn't understand the metrics request." };
         }
-
         const { target, metric, limit = 10 } = metricsRequest;
-
         if (target === 'customers' && metric === 'top-spending') {
             const customerSpending: { [key: string]: { name: string; total: number } } = {};
             transactions.forEach(t => {
@@ -463,7 +455,6 @@ function App() {
             const topCustomers = Object.values(customerSpending).sort((a, b) => b.total - a.total).slice(0, limit);
             return { success: true, payload: topCustomers, message: `Here are the top ${limit} customers by spending.` };
         }
-
         if (target === 'books' && metric === 'top-selling') {
             const bookSales: { [key: string]: { title: string; quantity: number } } = {};
             transactions.forEach(t => {
@@ -478,7 +469,6 @@ function App() {
             const bestSellingBooks = Object.values(bookSales).sort((a, b) => b.quantity - a.quantity).slice(0, limit);
             return { success: true, payload: bestSellingBooks, message: `Here are the top ${limit} best-selling books.` };
         }
-
         return { success: false, message: "I'm sorry, I can't calculate those metrics." };
       }
 
@@ -491,12 +481,9 @@ function App() {
         await deleteBook(foundBooks[0].id);
         return { success: true, message: `Successfully deleted "${foundBooks[0].title}".` };
       }
-
       case 'CREATE_TRANSACTION': {
-         // This would be complex to handle via AI and is better suited for the form.
          return { success: false, message: "Please use the 'New Transaction' form to log a sale." };
       }
-
       case 'ADD_EVENT': {
         if (!isAdmin) return { success: false, message: "Sorry, only admins can add events." };
         const eventData = data.eventData || {};
@@ -515,19 +502,18 @@ function App() {
         if (!identifier) return { success: false, message: "Please specify an event name." };
         const foundEvents = events.filter(e => 
           e.name.toLowerCase().includes(identifier) ||
-          e.description?.toLowerCase().includes(identifier) || // ADDED
-          e.author?.toLowerCase().includes(identifier) // ADDED
+          e.description?.toLowerCase().includes(identifier) ||
+          e.author?.toLowerCase().includes(identifier)
         );
 
         const enrichedEvents = foundEvents.map(e => {
             const attendees = (e.attendeeIds || [])
                 .map(id => contacts.find(c => c.id === id))
-                .filter((c): c is Contact => !!c) // Filter out null/undefined contacts
+                .filter((c): c is Contact => !!c)
                 .map(c => ({ id: c.id, firstName: c.firstName, lastName: c.lastName, email: c.email }));
             
             return {
                 ...e,
-                // Ensure date is a simple string for easy transmission/consumption
                 date: e.date?.toDate().toISOString().split('T')[0],
                 attendees: attendees,
             };
@@ -566,29 +552,22 @@ function App() {
           if (!isAdmin) return { success: false, message: "Sorry, only admins can manage attendees." };
           const eventIdentifier = (data.eventIdentifier || '').toLowerCase();
           const contactIdentifier = (data.contactIdentifier || '').toLowerCase();
-
           if (!eventIdentifier || !contactIdentifier) {
               return { success: false, message: "Please specify both an event and a contact." };
           }
-          
           const foundEvents = events.filter(e => e.name.toLowerCase().includes(eventIdentifier));
           if (foundEvents.length === 0) return { success: false, message: `Could not find an event matching "${data.eventIdentifier}".` };
           if (foundEvents.length > 1) return { success: false, message: "Found multiple events with that name, please be more specific." };
-          
           const foundContacts = contacts.filter(c => `${c.firstName} ${c.lastName}`.toLowerCase().includes(contactIdentifier));
           if (foundContacts.length === 0) return { success: false, message: `Could not find a contact matching "${data.contactIdentifier}".` };
           if (foundContacts.length > 1) return { success: false, message: "Found multiple contacts with that name, please be more specific." };
-          
           const eventToUpdate = foundEvents[0];
           const contactToUpdate = foundContacts[0];
           const isAttending = intent === 'ADD_ATTENDEE';
-
           await updateEventAttendees(eventToUpdate.id, contactToUpdate.id, isAttending);
-
           const actionText = isAttending ? "added" : "removed";
           return { success: true, message: `Successfully ${actionText} ${contactToUpdate.firstName} ${contactToUpdate.lastName} ${isAttending ? 'to' : 'from'} the event "${eventToUpdate.name}".` };
       }
-
       default:
         return { success: true };
     }
@@ -603,7 +582,7 @@ function App() {
   };
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
 
   return (
