@@ -149,7 +149,8 @@ export const responseSchema = {
         "DELETE_EVENT",
         "ADD_ATTENDEE",
         "REMOVE_ATTENDEE",
-        "SUMMARIZE_DATA",
+        "COUNT_DATA",
+        "METRICS_DATA",
         "GENERAL_QUERY",
         "UNSURE",
       ],
@@ -162,11 +163,11 @@ export const responseSchema = {
     },
     bookIdentifier: {
         type: Type.STRING,
-        description: `The title or ISBN of the book to find, update, or delete. E.g., "Dune" or "978-0451524935".`
+        description: `The title or ISBN of the book to find, update, or delete. E.g., "Dune" or "978-0451524935".`,
     },
     eventIdentifier: {
         type: Type.STRING,
-        description: `The name of the event to find, update, delete, or manage attendees for. E.g., "Author Signing".`
+        description: `The name of the event to find, update, delete, or manage attendees for. E.g., "Author Signing".`,
     },
     contactData: {
       type: Type.OBJECT,
@@ -189,27 +190,18 @@ export const responseSchema = {
         description: "Data for a new event being added.",
         properties: eventProperties,
     },
-    summaryRequest: {
+    countRequest: {
       type: Type.OBJECT,
-      description: "Details for a data summarization request.",
+      description: "Details for a data counting request.",
       properties: {
         target: {
           type: Type.STRING,
-          description: "The entity to summarize.",
-          enum: ["contacts", "customers", "books"],
-        },
-        metric: {
-          type: Type.STRING,
-          description: "The metric to calculate.",
-          enum: ["count", "top-spending", "top-selling"],
-        },
-        limit: {
-          type: Type.NUMBER,
-          description: "The number of results to return for top-N queries (e.g., top 5). Defaults to 10.",
+          description: "The entity to count.",
+          enum: ["contacts"],
         },
         filters: {
           type: Type.OBJECT,
-          description: "Filters to apply before summarizing.",
+          description: "Filters to apply before counting.",
           properties: {
             category: { type: Type.STRING, description: "Filter contacts by category." },
             state: { type: Type.STRING, description: "Filter contacts by state." },
@@ -218,13 +210,33 @@ export const responseSchema = {
         },
       },
     },
+    metricsRequest: {
+      type: Type.OBJECT,
+      description: "Details for a metrics summarization request (e.g., top 5).",
+      properties: {
+        target: {
+          type: Type.STRING,
+          description: "The entity to summarize.",
+          enum: ["customers", "books"],
+        },
+        metric: {
+          type: Type.STRING,
+          description: "The metric to calculate.",
+          enum: ["top-spending", "top-selling"],
+        },
+        limit: {
+          type: Type.NUMBER,
+          description: "The number of results to return for top-N queries. Defaults to 10.",
+        },
+      },
+    },
     transactionData: {
         type: Type.OBJECT,
         description: "Data for a new transaction, linking contacts and books.",
         properties: {
             contactIdentifier: { type: Type.STRING, description: "The name or email of the customer." },
-            bookIdentifiers: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of book titles or ISBNs being purchased." }
-        }
+            bookIdentifiers: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of book titles or ISBNs being purchased." },
+        },
     },
     responseText: {
       type: Type.STRING,

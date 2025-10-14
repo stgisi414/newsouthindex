@@ -363,19 +363,19 @@ function App() {
         return { success: true, message: `Successfully updated "${bookToUpdate.title}".` };
       }
       
-      case 'SUMMARIZE_DATA': {
+      case 'COUNT_DATA': {
         if (userRole === UserRole.APPLICANT) {
           return { success: false, message: "You do not have permission to view this information." };
         }
         
-        const { summaryRequest } = data;
-        if (!summaryRequest) {
-          return { success: false, message: "I'm sorry, I couldn't understand the summary request." };
+        const { countRequest } = data;
+        if (!countRequest) {
+          return { success: false, message: "I'm sorry, I couldn't understand the count request." };
         }
 
-        const { target, metric, filters, limit = 10 } = summaryRequest;
+        const { target, filters } = countRequest;
 
-        if (target === 'contacts' && metric === 'count') {
+        if (target === 'contacts') {
           let filtered = contacts;
           if (filters) {
             filtered = contacts.filter(c => {
@@ -389,6 +389,21 @@ function App() {
           const message = `There are ${filtered.length} contacts${filterDescriptions ? ` where ${filterDescriptions}` : ' in total'}.`;
           return { success: true, message };
         }
+
+        return { success: false, message: "I'm sorry, I can only count contacts right now." };
+      }
+
+      case 'METRICS_DATA': {
+        if (userRole === UserRole.APPLICANT) {
+          return { success: false, message: "You do not have permission to view this information." };
+        }
+        
+        const { metricsRequest } = data;
+        if (!metricsRequest) {
+          return { success: false, message: "I'm sorry, I couldn't understand the metrics request." };
+        }
+
+        const { target, metric, limit = 10 } = metricsRequest;
 
         if (target === 'customers' && metric === 'top-spending') {
             const customerSpending: { [key: string]: { name: string; total: number } } = {};
@@ -417,7 +432,7 @@ function App() {
             return { success: true, payload: bestSellingBooks, message: `Here are the top ${limit} best-selling books.` };
         }
 
-        return { success: false, message: "I'm sorry, I can't summarize that information in that way." };
+        return { success: false, message: "I'm sorry, I can't calculate those metrics." };
       }
 
       case 'DELETE_BOOK': {

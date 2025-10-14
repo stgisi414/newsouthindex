@@ -109,18 +109,15 @@ export const processCommand = onCall({secrets: ["GEMINI_API_KEY"], cors: true}, 
 
             **Core Rules:**
             1.  **Intent Identification**: First, determine the user's primary goal. This MUST map to one of the allowed 'intent' enum values.
-            2.  **Summarization (CRITICAL)**: You MUST correctly identify summarization queries.
-                -   **Counting**: Any question asking "how many", "count", "total number of", etc., MUST use the \`SUMMARIZE_DATA\` intent.
-                    - The \`summaryRequest.target\` for counting people is ALWAYS \`'contacts'\`. Treat "customers", "clients", "vendors", and "contacts" as synonymous for counting purposes.
-                    - The \`summaryRequest.metric\` is ALWAYS \`'count'\`.
-                    - Any geographic location (e.g., "in Alabama", "in Montgomery") or category (e.g., "vendors") MUST be extracted as a filter in \`summaryRequest.filters\`.
-                    - **Example 1**: "how many customers do we have in alabama?" -> \`intent: 'SUMMARIZE_DATA'\`, \`summaryRequest: { target: 'contacts', metric: 'count', filters: { state: 'alabama' } }\`
-                    - **Example 2**: "count the vendors in montgomery" -> \`intent: 'SUMMARIZE_DATA'\`, \`summaryRequest: { target: 'contacts', metric: 'count', filters: { category: 'vendor', city: 'montgomery' } }\`
-                -   **Ranking**: For questions about "top" or "best-selling", you MUST use the \`SUMMARIZE_DATA\` intent.
-                    - "top customer" or "top buying customer" MUST map to \`target: 'customers'\` and \`metric: 'top-spending'\`.
-                    - "top selling book" or "best-selling book" MUST map to \`target: 'books'\` and \`metric: 'top-selling'\`.
+            2.  **Counting vs. Metrics (CRITICAL)**: You must distinguish between counting and metrics.
+                -   If the user is asking "how many," "count," or "total number of," you MUST use the \`COUNT_DATA\` intent and populate the \`countRequest\` object. The target is always 'contacts'. Any location or category is a filter.
+                    - **Example 1**: "how many customers do we have in alabama?" -> \`intent: 'COUNT_DATA'\`, \`countRequest: { target: 'contacts', filters: { state: 'alabama' } }\`
+                    - **Example 2**: "count the vendors" -> \`intent: 'COUNT_DATA'\`, \`countRequest: { target: 'contacts', filters: { category: 'vendor' } }\`
+                -   If the user is asking for "top," "best," or "highest," you MUST use the \`METRICS_DATA\` intent and populate the \`metricsRequest\` object.
+                    - **Example 1**: "who are our top customers?" -> \`intent: 'METRICS_DATA'\`, \`metricsRequest: { target: 'customers', metric: 'top-spending' }\`
+                    - **Example 2**: "show me the best-selling books" -> \`intent: 'METRICS_DATA'\`, \`metricsRequest: { target: 'books', metric: 'top-selling' }\`
             3.  **Admin Rights**: If \`isAdmin: false\`, you MUST REJECT any attempts to add, update, or delete data. Set the \`intent\` to \`'GENERAL_QUERY'\` and use \`responseText\` to explain the permission error.
-            4.  **Field Population**: For all other intents, populate the necessary fields (\`contactIdentifier\`, \`bookData\`, etc.) as completely as possible from the user's command.
+            4.  **Field Population**: For all other intents, populate the necessary fields (\`contactIdentifier\`, \`bookData\`, etc.) as completely as possible.
             5.  **Clarity**: If unsure, use \`intent: 'UNSURE'\`.
             6.  **Response**: Always provide a friendly, conversational \`responseText\`.`,
           responseMimeType: "application/json",

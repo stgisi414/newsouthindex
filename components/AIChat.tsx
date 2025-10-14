@@ -210,18 +210,16 @@ const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed, isAdmin, currentUse
                 }
             }
 
-            if (intent === 'SUMMARIZE_DATA' && result.success) {
+            if (intent === 'METRICS_DATA' && result.success) {
                 const summaryData = result.payload as any[];
-                // Check if there is a payload to format
                 if (summaryData && summaryData.length > 0) {
-                    if (data.summaryTarget === 'customers') {
+                    if (data.metricsRequest.target === 'customers') {
                         const summaryText = summaryData.map(c => `\n- ${c.name}: $${c.total.toFixed(2)}`).join('');
                         aiResponseText = `Here are the top customers by spending:${summaryText}`;
-                    } else if (data.summaryTarget === 'books') {
+                    } else if (data.metricsRequest.target === 'books') {
                         const summaryText = summaryData.map(b => `\n- ${b.title}: ${b.quantity} sold`).join('');
                         aiResponseText = `Here are the top-selling books:${summaryText}`;
                     }
-                // If there's no payload, the message from App.tsx contains the summary (e.g., contact count)
                 } else if (result.message) {
                     aiResponseText = result.message;
                 } else {
