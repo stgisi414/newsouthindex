@@ -235,6 +235,22 @@ function App() {
   };
 
   const onProcessAiCommand = async (intent: string, data: any): Promise<{ success: boolean; payload?: any; message?: string }> => {
+    if (intent === 'COUNT_DATA' && data.countRequest && (data.updateData || data.eventData)) {
+        console.log('%c[FRONTEND FIX] Detected misplaced filters. Correcting now.', 'color: orange; font-weight: bold;');
+        const misplacedFilters = data.updateData || data.eventData;
+        if (!data.countRequest.filters) {
+            data.countRequest.filters = {};
+        }
+        // Merge misplaced filters into the correct location
+        Object.assign(data.countRequest.filters, misplacedFilters);
+        // Clean up the incorrect data
+        delete data.updateData;
+        delete data.eventData;
+        console.log('%c[FRONTEND FIX] Corrected data object:', 'color: orange;', data);
+    }
+    // END FIX
+
+    console.log('%c[FRONTEND LOG] Processing AI Command:', 'color: green; font-weight: bold;', { intent, data });
     switch (intent) {
       case 'ADD_CONTACT': {
         const contactData = data.contactData || {};
@@ -383,8 +399,9 @@ function App() {
           let filtered = contacts;
           if (filters) {
             filtered = contacts.filter(c => {
+              // Case-insensitive and robust filtering
               if (filters.category && c.category?.toLowerCase() !== filters.category.toLowerCase()) return false;
-              if (filters.state && c.state?.toLowerCase() !== filters.state.toLowerCase()) return false;
+              if (filters.state && !(c.state?.toLowerCase() === filters.state.toLowerCase() || (c.state === 'AL' && filters.state.toLowerCase() === 'alabama'))) return false;
               if (filters.city && c.city?.toLowerCase() !== filters.city.toLowerCase()) return false;
               if (filters.zip && c.zip !== filters.zip) return false;
               return true;
@@ -418,7 +435,9 @@ function App() {
             return { success: false, message: "I'm sorry, I can only count contacts, books, and events right now." };
         }
 
-        return { success: true, message };
+        const result = { success: true, message };
+        console.log('%c[FRONTEND LOG] Count Result:', 'color: green;', result);
+        return result;
       }
 
       case 'METRICS_DATA': {

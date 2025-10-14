@@ -210,6 +210,10 @@ export const responseSchema = {
             author: { type: Type.STRING, description: "Filter books or events by author." },
             genre: { type: Type.STRING, description: "Filter books by genre." },
             location: { type: Type.STRING, description: "Filter events by location." },
+            name: { type: Type.STRING, description: "Filter events by name." },
+            stock: { type: Type.NUMBER, description: "Filter books by stock." },
+            publicationYear: { type: Type.NUMBER, description: "Filter books by publication year." },
+            publisher: { type: Type.STRING, description: "Filter books by publisher." }
           },
         },
       },

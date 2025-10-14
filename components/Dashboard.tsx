@@ -14,7 +14,8 @@ import EventForm from './EventForm';
 import AIChat from './AIChat';
 import PlusIcon from './icons/PlusIcon';
 import AdminPanel from './AdminPanel';
-import Reports from './Reports'; // Import the new component
+import Reports from './Reports';
+import AIAssistantTestSuite from './AIAssistantTestSuite';
 
 interface DashboardProps {
     contacts: Contact[];
@@ -58,6 +59,7 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
     const [adminStatus, setAdminStatus] = useState<string | null>(null);
     const hasAdmins = useMemo(() => users.some(user => user.isAdmin), [users]);
     const [aiSearchResults, setAiSearchResults] = useState<any[] | null>(null);
+    const [isTestSuiteOpen, setIsTestSuiteOpen] = useState(false);
 
     const handleAiSearch = (results: any[], view: View) => {
       setAiSearchResults(results);
@@ -226,6 +228,8 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
 
                         {isAdmin && isAdminPanelOpen && <AdminPanel users={users} currentUser={currentUser} />}
 
+                        {import.meta.env.DEV && isTestSuiteOpen && <AIAssistantTestSuite onProcessAiCommand={onProcessAiCommand} />}
+
                         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                             <div className="flex-1">
                                 {isAdmin ? (
@@ -236,6 +240,15 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                                         >
                                             {isAdminPanelOpen ? 'Hide Admin' : 'Show Admin'}
                                         </button>
+
+                                        {import.meta.env.DEV && (
+                                            <button
+                                                onClick={() => setIsTestSuiteOpen(prev => !prev)}
+                                                className="px-4 py-2 bg-yellow-400 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-yellow-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-300 transition-colors"
+                                            >
+                                                {isTestSuiteOpen ? 'Hide Test Suite' : 'Show Test Suite'}
+                                            </button>
+                                        )}
                                         
                                         {currentView === 'contacts' && (
                                             <button onClick={handleNewContact} className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700"><PlusIcon className="h-5 w-5 mr-2" />New Contact</button>
