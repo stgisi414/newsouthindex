@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Contact, Transaction, Book, Category } from '../types';
 
 interface ReportsProps {
@@ -137,25 +138,29 @@ const Reports: React.FC<ReportsProps> = ({ contacts, transactions, books }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="bg-white p-6 rounded-xl shadow-lg">
                     <h3 className="text-xl font-semibold mb-4 text-gray-800">Top 10 Customers</h3>
-                    <ul className="divide-y divide-gray-200">
-                        {topCustomers.map((customer, index) => (
-                            <li key={index} className="py-3 flex justify-between items-center">
-                                <span className="text-gray-700">{customer.name}</span>
-                                <span className="font-semibold text-gray-900">${customer.total.toFixed(2)}</span>
-                            </li>
-                        ))}
-                    </ul>
+                    <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={topCustomers} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" />
+                            <YAxis />
+                            <Tooltip formatter={(value: number) => `$${value.toFixed(2)}`} />
+                            <Legend />
+                            <Bar dataKey="total" fill="#8884d8" name="Total Spent" />
+                        </BarChart>
+                    </ResponsiveContainer>
                 </div>
                 <div className="bg-white p-6 rounded-xl shadow-lg">
                     <h3 className="text-xl font-semibold mb-4 text-gray-800">Top 10 Best-Selling Books</h3>
-                     <ul className="divide-y divide-gray-200">
-                        {bestSellingBooks.map((book, index) => (
-                            <li key={index} className="py-3 flex justify-between items-center">
-                                <span className="text-gray-700">{book.title}</span>
-                                <span className="font-semibold text-gray-900">{book.quantity} sold</span>
-                            </li>
-                        ))}
-                    </ul>
+                    <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={bestSellingBooks} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="title" />
+                            <YAxis />
+                            <Tooltip />
+                            <Legend />
+                            <Bar dataKey="quantity" fill="#82ca9d" name="Quantity Sold" />
+                        </BarChart>
+                    </ResponsiveContainer>
                 </div>
             </div>
         </div>

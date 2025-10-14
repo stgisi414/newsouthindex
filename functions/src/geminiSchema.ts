@@ -191,8 +191,13 @@ export const responseSchema = {
     },
     summaryTarget: {
         type: Type.STRING,
-        description: "The type of data to summarize (e.g., 'contacts').",
-        enum: ["contacts", "books", "transactions", "events"],
+        description: "The type of data to summarize, e.g., 'customers' or 'books'.",
+        enum: ["customers", "books"],
+    },
+    summaryMetric: {
+        type: Type.STRING,
+        description: "The metric to summarize by, e.g., 'top-selling' or 'top-spending'.",
+        enum: ["top-selling", "top-spending"],
     },
     filters: {
         type: Type.OBJECT,

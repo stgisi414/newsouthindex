@@ -367,8 +367,8 @@ function App() {
         if (userRole === UserRole.APPLICANT) {
           return { success: false, message: "You do not have permission to view this information." };
         }
-        const { summaryTarget, filters } = data;
-        if (summaryTarget === 'contacts') {
+        const { summaryTarget, filters, summaryMetric } = data;
+        if (summaryTarget === 'contacts' && filters) {
           const filteredContacts = contacts.filter(c => {
             let matches = true;
             if (filters?.category) {
@@ -381,7 +381,32 @@ function App() {
           });
           return { success: true, message: `There are ${filteredContacts.length} contacts matching your criteria.` };
         }
-        return { success: false, message: "I can only summarize contacts right now." };
+        if (summaryTarget === 'customers' && summaryMetric === 'top-spending') {
+            const customerSpending: { [key: string]: { name: string; total: number } } = {};
+            transactions.forEach(t => {
+                if (!customerSpending[t.contactId]) {
+                    customerSpending[t.contactId] = { name: t.contactName, total: 0 };
+                }
+                customerSpending[t.contactId].total += t.totalPrice;
+            });
+            const topCustomers = Object.values(customerSpending).sort((a, b) => b.total - a.total).slice(0, 10);
+            return { success: true, payload: topCustomers, message: "Here are the top customers by spending." };
+        }
+        if (summaryTarget === 'books' && summaryMetric === 'top-selling') {
+            const bookSales: { [key: string]: { title: string; quantity: number } } = {};
+            transactions.forEach(t => {
+                t.books.forEach(bookInTransaction => {
+                    if (!bookSales[bookInTransaction.id]) {
+                        const bookInfo = books.find(b => b.id === bookInTransaction.id);
+                        bookSales[bookInTransaction.id] = { title: bookInfo?.title || 'Unknown Book', quantity: 0 };
+                    }
+                    bookSales[bookInTransaction.id].quantity += bookInTransaction.quantity;
+                });
+            });
+            const bestSellingBooks = Object.values(bookSales).sort((a, b) => b.quantity - a.quantity).slice(0, 10);
+            return { success: true, payload: bestSellingBooks, message: "Here are the top-selling books." };
+        }
+        return { success: false, message: "I'm sorry, I can't summarize that information." };
       }
 
       case 'DELETE_BOOK': {
