@@ -50,6 +50,8 @@ export interface Book {
     publisher?: string;
     price: number;
     stock: number;
+    genre?: string;
+    publicationYear?: number;
 }
 
 export interface Transaction {

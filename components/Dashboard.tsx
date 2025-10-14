@@ -57,22 +57,54 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
     const [isAiChatOpen, setIsAiChatOpen] = useState(true);
     const [adminStatus, setAdminStatus] = useState<string | null>(null);
     const hasAdmins = useMemo(() => users.some(user => user.isAdmin), [users]);
+    const [aiSearchResults, setAiSearchResults] = useState<any[] | null>(null);
+
+    const handleAiSearch = (results: any[], view: View) => {
+      setAiSearchResults(results);
+      setCurrentView(view);
+    };
+
+    const handleViewChange = (view: View) => {
+        setCurrentView(view);
+        setAiSearchResults(null);
+        setSearchQuery('');
+    };
+
+    const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setSearchQuery(e.target.value);
+        if (aiSearchResults) {
+            setAiSearchResults(null);
+        }
+    };
 
     const filteredContacts = useMemo(() => {
+        if (aiSearchResults && currentView === 'contacts') {
+            return aiSearchResults as Contact[];
+        }
         return contacts.filter(contact =>
             `${contact.firstName} ${contact.lastName} ${contact.email} ${contact.category}`
             .toLowerCase()
             .includes(searchQuery.toLowerCase())
         );
-    }, [contacts, searchQuery]);
+    }, [contacts, searchQuery, aiSearchResults, currentView]);
 
     const filteredBooks = useMemo(() => {
+        if (aiSearchResults && currentView === 'books') {
+            return aiSearchResults as Book[];
+        }
         return books.filter(book =>
             `${book.title} ${book.author} ${book.isbn}`
             .toLowerCase()
             .includes(searchQuery.toLowerCase())
         );
-    }, [books, searchQuery]);
+    }, [books, searchQuery, aiSearchResults, currentView]);
+
+    const filteredEvents = useMemo(() => {
+        if (aiSearchResults && currentView === 'events') {
+            return aiSearchResults as Event[];
+        }
+        return events;
+    }, [events, aiSearchResults, currentView]);
 
     const handleNewBook = () => {
         setEditingBook(null);
@@ -181,11 +213,11 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
             <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
                 <div className="mb-6 border-b border-gray-200">
                     <nav className="-mb-px flex space-x-4 overflow-x-auto scrollbar-hidden" aria-label="Tabs">
-                        <button onClick={() => setCurrentView('contacts')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'contacts' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Contacts</button>
-                        <button onClick={() => setCurrentView('books')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'books' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Book Inventory</button>
-                        <button onClick={() => setCurrentView('transactions')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'transactions' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Transactions</button>
-                        <button onClick={() => setCurrentView('events')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'events' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Events</button>
-                        <button onClick={() => setCurrentView('reports')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'reports' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Reports</button>
+                        <button onClick={() => handleViewChange('contacts')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'contacts' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Contacts</button>
+                        <button onClick={() => handleViewChange('books')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'books' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Book Inventory</button>
+                        <button onClick={() => handleViewChange('transactions')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'transactions' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Transactions</button>
+                        <button onClick={() => handleViewChange('events')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'events' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Events</button>
+                        <button onClick={() => handleViewChange('reports')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'reports' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Reports</button>
                     </nav>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -236,7 +268,7 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                                     type="text"
                                     placeholder={`Search ${currentView}...`}
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onChange={handleSearchChange}
                                     className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                 />
                             )}
@@ -257,7 +289,7 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                         </button>
                         {isAiChatOpen && (
                             <div className="h-[calc(85vh-4rem)]">
-                                <AIChat onCommandProcessed={onProcessAiCommand} isAdmin={isAdmin} currentUser={currentUser} />
+                                <AIChat onCommandProcessed={onProcessAiCommand} isAdmin={isAdmin} currentUser={currentUser} onAiSearch={handleAiSearch} />
                             </div>
                         )}
                     </div>

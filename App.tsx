@@ -362,6 +362,27 @@ function App() {
         await updateBook({ ...bookToUpdate, ...data.updateData });
         return { success: true, message: `Successfully updated "${bookToUpdate.title}".` };
       }
+      
+      case 'SUMMARIZE_DATA': {
+        if (userRole === UserRole.APPLICANT) {
+          return { success: false, message: "You do not have permission to view this information." };
+        }
+        const { summaryTarget, filters } = data;
+        if (summaryTarget === 'contacts') {
+          const filteredContacts = contacts.filter(c => {
+            let matches = true;
+            if (filters?.category) {
+              matches = matches && c.category.toLowerCase() === filters.category.toLowerCase();
+            }
+            if (filters?.state) {
+              matches = matches && c.state?.toLowerCase() === filters.state.toLowerCase();
+            }
+            return matches;
+          });
+          return { success: true, message: `There are ${filteredContacts.length} contacts matching your criteria.` };
+        }
+        return { success: false, message: "I can only summarize contacts right now." };
+      }
 
       case 'DELETE_BOOK': {
         if (!isAdmin) return { success: false, message: "Sorry, only admins can delete books." };

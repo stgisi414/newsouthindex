@@ -88,6 +88,16 @@ const BookForm: React.FC<BookFormProps> = ({ isOpen, onClose, onSave, bookToEdit
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
+                            <label htmlFor="genre" className="block text-sm font-medium text-gray-700">Genre</label>
+                            <input type="text" id="genre" name="genre" value={formState.genre || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                        </div>
+                        <div>
+                            <label htmlFor="publicationYear" className="block text-sm font-medium text-gray-700">Year</label>
+                            <input type="number" id="publicationYear" name="publicationYear" value={formState.publicationYear || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
                             <label htmlFor="price" className="block text-sm font-medium text-gray-700">Price</label>
                             {/* FIX: Show an empty string if the value is NaN */}
                             <input type="number" id="price" name="price" value={isNaN(formState.price) ? '' : formState.price} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 border ${errors.price ? 'border-red-500' : 'border-gray-300'} rounded-md`} step="0.01" />

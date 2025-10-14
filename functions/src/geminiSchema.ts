@@ -149,6 +149,7 @@ export const responseSchema = {
         "DELETE_EVENT",
         "ADD_ATTENDEE",
         "REMOVE_ATTENDEE",
+        "SUMMARIZE_DATA",
         "GENERAL_QUERY",
         "UNSURE",
       ],
@@ -187,6 +188,19 @@ export const responseSchema = {
         type: Type.OBJECT,
         description: "Data for a new event being added.",
         properties: eventProperties,
+    },
+    summaryTarget: {
+        type: Type.STRING,
+        description: "The type of data to summarize (e.g., 'contacts').",
+        enum: ["contacts", "books", "transactions", "events"],
+    },
+    filters: {
+        type: Type.OBJECT,
+        description: "Filters to apply to the summarization.",
+        properties: {
+            category: { type: Type.STRING, description: "The contact category to filter by." },
+            state: { type: Type.STRING, description: "The state to filter contacts by." },
+        },
     },
     transactionData: {
         type: Type.OBJECT,

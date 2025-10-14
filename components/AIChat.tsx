@@ -11,10 +11,11 @@ const MAX_MESSAGES = 50; // NEW CONSTANT
 interface AIChatProps {
     onCommandProcessed: (intent: string, data: any) => Promise<{ success: boolean; payload?: any; message?: string }>;
     isAdmin: boolean;
-    currentUser: User; // NEW PROP
+    currentUser: User;
+    onAiSearch: (results: any[], view: 'contacts' | 'books' | 'events') => void;
 }
 
-const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed, isAdmin, currentUser }) => {
+const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed, isAdmin, currentUser, onAiSearch }) => {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState('');
     const [isThinking, setIsThinking] = useState(false);
@@ -149,10 +150,10 @@ const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed, isAdmin, currentUse
             
             let aiResponseText = result.message || commandResponse.responseText || "I'm not sure how to respond to that.";
 
-
             if (intent === 'FIND_CONTACT' && result.success) {
                  const foundContacts = result.payload as Contact[];
                  if (foundContacts.length > 0) {
+                    onAiSearch(foundContacts, 'contacts');
                      const contactsText = foundContacts.map(c => {
                         const email = c.email || 'N/A';
                         const phone = c.phone || 'N/A';
@@ -168,6 +169,7 @@ const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed, isAdmin, currentUse
             if (intent === 'FIND_BOOK' && result.success) {
                 const foundBooks = result.payload as Book[];
                 if (foundBooks.length > 0) {
+                    onAiSearch(foundBooks, 'books');
                     const booksText = foundBooks.map(b => {
                         const isbn = b.isbn ? ` (ISBN: ${b.isbn})` : '';
                         const publisher = b.publisher ? ` by ${b.publisher}` : '';
@@ -184,6 +186,7 @@ const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed, isAdmin, currentUse
                 const foundEvents = result.payload as (Event & { attendees?: { firstName: string, lastName: string, email: string }[] })[];
                 
                 if (foundEvents.length > 0) {
+                    onAiSearch(foundEvents, 'events');
                     const eventsText = foundEvents.map(e => {
                         const date = e.date ? new Date(e.date).toLocaleDateString() : 'N/A';
                         const time = e.time || 'N/A';

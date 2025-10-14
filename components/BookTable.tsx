@@ -33,6 +33,8 @@ const BookTable: React.FC<BookTableProps> = ({ books, onEdit, onDelete }) => {
                         <tr>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Author</th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Genre</th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Year</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
                             <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
@@ -44,6 +46,8 @@ const BookTable: React.FC<BookTableProps> = ({ books, onEdit, onDelete }) => {
                                 <tr className="hover:bg-gray-50">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{book.title}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{book.author}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{book.genre}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{book.publicationYear}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${book.price.toFixed(2)}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{book.stock}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
