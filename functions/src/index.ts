@@ -160,7 +160,7 @@ CRITICAL INSTRUCTION:
             let response: any;
             const anyArgs = args as any;
 
-            // CRITICAL FIX: Ensure ALL function calls return the required { intent, data, responseText } structure.
+            // CRITICAL FIX: Enforce correct nested data structure for all intents
             switch (name) {
                 case "countContacts": 
                 case "countBooks":
@@ -168,120 +168,125 @@ CRITICAL INSTRUCTION:
                     response = { 
                         intent: 'COUNT_DATA', 
                         data: {
-                            // FIX: Correctly map args to countRequest.filters
-                            countRequest: { target: name.replace('count', '').toLowerCase(), filters: args || {} }, 
+                            // FIX: Correctly nest target and filters under countRequest.filters
+                            countRequest: { 
+                                target: name.replace('count', '').toLowerCase(), 
+                                filters: args || {},
+                            }, 
                         },
-                        // Removed responseText to prevent conversational output when a function call is made
+                        // OPTIONAL: Provide a responseText if the model didn't, for completeness.
+                        responseText: result.text || `Query received for counting ${name.replace('count', '').toLowerCase()}.`,
                     };
                     break;
                 case "addContact": 
                     response = { 
                         intent: 'ADD_CONTACT', 
                         data: { contactData: args }, 
-                        // Removed responseText
+                        responseText: result.text || `Adding contact.`,
                     };
                     break;
                 case "findContact": 
                     response = { 
                         intent: 'FIND_CONTACT', 
                         data: { contactIdentifier: anyArgs.identifier }, 
-                        // Removed responseText
+                        responseText: result.text || `Finding contact.`,
                     };
                     break;
                 case "updateContact": 
                     response = { 
                         intent: 'UPDATE_CONTACT', 
                         data: { contactIdentifier: anyArgs.identifier, updateData: anyArgs.updateData }, 
-                        // Removed responseText
+                        responseText: result.text || `Updating contact.`,
                     };
                     break;
                 case "deleteContact": 
                     response = { 
                         intent: 'DELETE_CONTACT', 
                         data: { contactIdentifier: anyArgs.identifier }, 
-                        // Removed responseText
+                        responseText: result.text || `Deleting contact.`,
                     };
                     break;
                 case "addBook": 
                     response = { 
                         intent: 'ADD_BOOK', 
                         data: { bookData: args },
-                        // Removed responseText
+                        responseText: result.text || `Adding book.`,
                     };
                     break;
                 case "findBook": 
                     response = { 
                         intent: 'FIND_BOOK', 
                         data: { bookIdentifier: anyArgs.identifier },
-                        // Removed responseText
+                        responseText: result.text || `Finding book.`,
                     };
                     break;
                 case "updateBook": 
                     response = { 
                         intent: 'UPDATE_BOOK', 
                         data: { bookIdentifier: anyArgs.bookIdentifier, updateData: anyArgs.updateData },
-                        // Removed responseText
+                        responseText: result.text || `Updating book.`,
                     };
                     break;
                 case "deleteBook": 
                     response = { 
                         intent: 'DELETE_BOOK', 
                         data: { bookIdentifier: anyArgs.bookIdentifier },
-                        // Removed responseText
+                        responseText: result.text || `Deleting book.`,
                     };
                     break;
                 case "addEvent": 
                     response = { 
                         intent: 'ADD_EVENT', 
                         data: { eventData: args },
-                        // Removed responseText
+                        responseText: result.text || `Adding event.`,
                     };
                     break;
                 case "findEvent": 
                     response = { 
                         intent: 'FIND_EVENT', 
                         data: { eventIdentifier: anyArgs.identifier },
-                        // Removed responseText
+                        responseText: result.text || `Finding event.`,
                     };
                     break;
                 case "updateEvent": 
                     response = { 
                         intent: 'UPDATE_EVENT', 
                         data: { eventIdentifier: anyArgs.eventIdentifier, updateData: anyArgs.updateData },
-                        // Removed responseText
+                        responseText: result.text || `Updating event.`,
                     };
                     break;
                 case "deleteEvent": 
                     response = { 
                         intent: 'DELETE_EVENT', 
                         data: { eventIdentifier: anyArgs.eventIdentifier },
-                        // Removed responseText
+                        responseText: result.text || `Deleting event.`,
                     };
                     break;
                 case "addAttendee": 
                     response = { 
                         intent: 'ADD_ATTENDEE', 
                         data: { eventIdentifier: anyArgs.eventIdentifier, contactIdentifier: anyArgs.contactIdentifier },
-                        // Removed responseText
+                        responseText: result.text || `Adding attendee.`,
                     };
                     break;
                 case "removeAttendee": 
                     response = { 
                         intent: 'REMOVE_ATTENDEE', 
                         data: { eventIdentifier: anyArgs.eventIdentifier, contactIdentifier: anyArgs.contactIdentifier },
-                        // Removed responseText
+                        responseText: result.text || `Removing attendee.`,
                     };
                     break;
                 case "getMetrics": 
                     response = { 
                         intent: 'METRICS_DATA', 
                         data: { metricsRequest: args }, 
-                        // Removed responseText
+                        responseText: result.text || `Getting metrics.`,
                     };
                     break;
                 default: 
-                    // Only conversational responses for non-function calls
-                    response = { intent: 'GENERAL_QUERY', responseText: conversationalText };
+                    // If no function call, use the model's response text if it exists
+                    const conversationalText = result.text || "I'm sorry, I could not determine a specific action to take.";
+                    response = { intent: "GENERAL_QUERY", responseText: conversationalText };
             }
 
             logger.info("[GEMINI] Transformed to structured response:", JSON.stringify(response, null, 2));

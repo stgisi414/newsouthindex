@@ -376,23 +376,25 @@ function App() {
           return { success: false, message: "You do not have permission to view this information." };
         }
         
-        // CRITICAL FIX: Destructure the expected shape and observed incorrect fields defensively
+        // CRITICAL FIX: Destructure both the expected 'countRequest' and the observed 'updateData'
         const { countRequest, updateData } = (data || {}) as { countRequest?: any, updateData?: any };
 
-        // Determine if the request is valid (must have a count target)
+        // Determine if the request is valid (this check usually passes based on your observed data)
         if (!countRequest?.target) {
             return { success: false, message: "I'm sorry, I couldn't understand the count request." };
         }
 
-        // CRITICAL FIX: Consolidate filters. Prioritize the correct nested field, then the old incorrect field.
-        const filters = countRequest.filters || updateData || {};
+        // CRITICAL FIX: CONSOLIDATE FILTERS TO MATCH STUCK BACKEND BEHAVIOR
+        // 1. First, check the ERRONEOus location where the backend is putting filters.
+        // 2. Fallback to the intended location, in case the backend suddenly fixes itself.
+        const filters = updateData || countRequest.filters || {};
         
         const { target } = countRequest;
         let count = 0;
         let message = '';
         
-        // FIX: Implement explicit check for filters length before building description string
-        const filterDescriptions = filters && Object.keys(filters).length > 0
+        // FIX: Simplify check for empty filters since 'filters' is guaranteed to be an object ({}).
+        const filterDescriptions = Object.keys(filters).length > 0
             ? Object.entries(filters).map(([key, value]) => `${key} is '${value}'`).join(' and ')
             : '';
 
