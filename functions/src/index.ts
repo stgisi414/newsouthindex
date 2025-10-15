@@ -71,7 +71,7 @@ export const seedDatabase = onCall({cors: true}, async (request) => {
 
 
 // Initialize the GoogleGenAI client
-const ai = new GoogleGenAI({});
+const ai = new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY as string});
 const model = "gemini-2.5-flash-lite";
 
 // --- Function Declarations ---
@@ -429,6 +429,9 @@ const fewShotExamples: GenerativeContent[] = [
 export const processCommand = onCall( // Now uses the v2/https onCall
     { cors: true }, // Explicitly configure for v2, preventing the resource error
     async (request) => {
+        logger.info("Starting up process comamand");
+        logger.info("Credential Path Check:", process.env.GOOGLE_APPLICATION_CREDENTIALS || "Not Set");
+
         // CRITICAL: Get command from request.data for v2 functions
         const command = request.data.command;
         if (!command) {
