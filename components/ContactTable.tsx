@@ -7,6 +7,8 @@ interface ContactTableProps {
     contacts: Contact[];
     onEdit: (contact: Contact) => void;
     onDelete: (id: string) => void;
+    isAdmin: boolean; // Add isAdmin prop
+    onUpdateContact: (contact: Contact) => void; // Add onUpdateContact prop
 }
 
 type SortKey = keyof Contact;
@@ -24,7 +26,7 @@ const ALL_CONTACT_FIELDS: { key: DisplayableContactKey; label: string; hiddenInM
 
 const ITEMS_PER_PAGE = 10;
 
-const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete }) => {
+const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete, isAdmin, onUpdateContact }) => {
     const [sortKey, setSortKey] = useState<SortKey>('lastName');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
@@ -68,6 +70,13 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete 
         return sortOrder === 'asc' ? '▲' : '▼';
     };
 
+    const handleFieldUpdate = (contact: Contact, field: keyof Contact, value: string) => {
+        if (isAdmin) {
+            const updatedContact = { ...contact, [field]: value };
+            onUpdateContact(updatedContact);
+        }
+    };
+
     return (
         <div className="bg-white shadow-lg rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
@@ -105,6 +114,9 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete 
                                                 ${key === 'firstName' || key === 'lastName' ? 'font-medium text-gray-900' : ''}
                                                 ${hiddenInMobile ? 'hidden lg:table-cell' : ''}
                                             `}
+                                            contentEditable={isAdmin}
+                                            onBlur={(e) => handleFieldUpdate(contact, key as keyof Contact, e.currentTarget.textContent || '')}
+                                            suppressContentEditableWarning={true}
                                         >
                                             {contact[key] || '-'}
                                         </td>
@@ -130,11 +142,17 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete 
                                     <tr className="lg:hidden bg-gray-50">
                                         <td colSpan={ALL_CONTACT_FIELDS.length + 1} className="px-6 py-4">
                                             <div className="space-y-3 text-sm text-gray-600">
-                                                <p><strong className="font-medium text-gray-800">Full Name:</strong> {contact.honorific} {contact.firstName} {contact.middleInitial} {contact.lastName} {contact.suffix}</p>
-                                                <p><strong className="font-medium text-gray-800">Phone:</strong> {contact.phone || '-'}</p>
-                                                <p><strong className="font-medium text-gray-800">URL:</strong> {contact.url || '-'}</p>
-                                                <p><strong className="font-medium text-gray-800">Address:</strong> {contact.address1 || ''} {contact.address2 || ''} {contact.city || ''} {contact.state || ''} {contact.zip || ''}</p>
-                                                <p><strong className="font-medium text-gray-800">Notes:</strong> {contact.notes || '-'}</p>
+                                                <p><strong className="font-medium text-gray-800">Full Name:</strong> 
+                                                    <span className="mr-2" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'honorific', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.honorific}</span> 
+                                                    <span className="mr-2" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'firstName', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.firstName}</span> 
+                                                    <span className="mr-2" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'middleInitial', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.middleInitial}</span> 
+                                                    <span className="mr-2" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'lastName', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.lastName}</span> 
+                                                    <span className="mr-2" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'suffix', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.suffix}</span>
+                                                </p>
+                                                <p><strong className="font-medium text-gray-800">Phone:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'phone', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.phone || '-'}</span></p>
+                                                <p><strong className="font-medium text-gray-800">URL:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'url', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.url || '-'}</span></p>
+                                                <p><strong className="font-medium text-gray-800">Address:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'address1', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.address1 || ''}</span> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'address2', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.address2 || ''}</span> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'city', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.city || ''}</span> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'state', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.state || ''}</span> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'zip', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.zip || ''}</span></p>
+                                                <p><strong className="font-medium text-gray-800">Notes:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'notes', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.notes || '-'}</span></p>
                                             </div>
                                         </td>
                                     </tr>

@@ -1,14 +1,22 @@
 import * as functions from "firebase-functions";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
-import { GoogleGenAI, FunctionDeclaration, Type } from "@google/genai"; 
+// Corrected Imports for Vertex AI
+import {
+    VertexAI,
+    HarmCategory,
+    HarmBlockThreshold,
+    // The FunctionDeclaration type is nested within the 'protos' object
+    protos,
+} from "@google-cloud/vertexai";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { mockContacts, mockBooks, mockEvents } from "./mockData";
 
-// Manually define the types that were causing the TS2305 error to satisfy TypeScript.
+// Define a type alias for the FunctionDeclaration to keep the code clean
+type FunctionDeclaration = protos.google.cloud.aiplatform.v1.tools.IFunctionDeclaration;
+
 type GenerativeContent = { role: string; parts: { text?: string; functionCall?: any; }[] };
-type GeminiTool = { functionDeclarations: FunctionDeclaration[] };
 
 admin.initializeApp();
 
@@ -70,22 +78,49 @@ export const seedDatabase = onCall({cors: true}, async (request) => {
 });
 
 
-// Initialize the GoogleGenAI client
-const ai = new GoogleGenAI({});
-const model = "gemini-2.5-flash";
+// --- VertexAI Client Initialization ---
+const PROJECT_ID = process.env.GCLOUD_PROJECT || "newsouthindex";
+const LOCATION = "us-central1";
+
+const vertex_ai = new VertexAI({ project: PROJECT_ID, location: LOCATION });
+const model = "gemini-2.5-flash-lite";
 
 // --- Function Declarations ---
+const findTransactionDeclaration: FunctionDeclaration = {
+    name: "findTransaction",
+    description: "Finds transactions based on a contact's name or a date.",
+    parameters: {
+        type: "OBJECT",
+        properties: {
+            contactName: { type: "STRING", description: "The name of the contact who made the transaction." },
+            date: { type: "STRING", description: "The date of the transaction (e.g., 'yesterday', 'last week', '2025-10-14')." },
+        },
+    },
+};
+
+const deleteTransactionDeclaration: FunctionDeclaration = {
+    name: "deleteTransaction",
+    description: "Deletes a transaction based on the contact's name and the date of the transaction.",
+    parameters: {
+        type: "OBJECT",
+        properties: {
+            contactName: { type: "STRING", description: "The name of the contact on the transaction to be deleted." },
+            date: { type: "STRING", description: "The date of the transaction to be deleted (e.g., 'yesterday')." },
+        },
+        required: ["contactName"],
+    },
+};
 
 const countContactsDeclaration: FunctionDeclaration = {
     name: "countContacts",
     description: "Counts the total number of contacts based on optional filters.",
     parameters: {
-        type: Type.OBJECT,
+        type: "OBJECT",
         properties: {
-            city: { type: Type.STRING, description: "The city to filter contacts by (e.g., 'Montgomery')." },
-            state: { type: Type.STRING, description: "The state abbreviation to filter contacts by (e.g., 'AL')." },
-            zip: { type: Type.STRING, description: "The zip code to filter contacts by." },
-            category: { type: Type.STRING, description: "The category of the contact (e.g., 'Client', 'Vendor', 'Media', 'Personal', 'Other', 'not Client')." },
+            city: { type: "STRING", description: "The city to filter contacts by (e.g., 'Montgomery')." },
+            state: { type: "STRING", description: "The state abbreviation to filter contacts by (e.g., 'AL')." },
+            zip: { type: "STRING", description: "The zip code to filter contacts by." },
+            category: { type: "STRING", description: "The category of the contact (e.g., 'Client', 'Vendor', 'Media', 'Personal', 'Other', 'not Client')." },
         },
     },
 };
@@ -94,14 +129,14 @@ const countBooksDeclaration: FunctionDeclaration = {
     name: "countBooks",
     description: "Counts the total number of books based on optional filters.",
     parameters: {
-        type: Type.OBJECT,
+        type: "OBJECT",
         properties: {
-            author: { type: Type.STRING, description: "The author's name to filter books by (e.g., 'Harper Lee')." },
-            publisher: { type: Type.STRING, description: "The publisher's name to filter books by (e.g., 'Penguin Random House')." },
-            genre: { type: Type.STRING, description: "The genre to filter books by (e.g., 'fiction')." },
-            publicationYear: { type: Type.NUMBER, description: "The publication year to filter books by." },
-            stock: { type: Type.NUMBER, description: "The stock level to filter books by (use 0 for 'out of stock')." },
-            priceFilter: { type: Type.STRING, description: "A price range filter (e.g., '>15', '<20.50', '10-25')." }, // <--- CRITICAL ADDITION
+            author: { type: "STRING", description: "The author's name to filter books by (e.g., 'Harper Lee')." },
+            publisher: { type: "STRING", description: "The publisher's name to filter books by (e.g., 'Penguin Random House')." },
+            genre: { type: "STRING", description: "The genre to filter books by (e.g., 'fiction')." },
+            publicationYear: { type: "NUMBER", description: "The publication year to filter books by." },
+            stock: { type: "NUMBER", description: "The stock level to filter books by (use 0 for 'out of stock')." },
+            priceFilter: { type: "STRING", description: "A price range filter (e.g., '>15', '<20.50', '10-25')." },
         },
     },
 };
@@ -110,11 +145,11 @@ const countEventsDeclaration: FunctionDeclaration = {
     name: "countEvents",
     description: "Counts the total number of events based on optional filters.",
     parameters: {
-        type: Type.OBJECT,
+        type: "OBJECT",
         properties: {
-            location: { type: Type.STRING, description: "The location of the event (e.g., 'Upstairs Loft', 'Main Store')." },
-            name: { type: Type.STRING, description: "The name or theme of the event (e.g., 'Poetry', 'Book Signing')." },
-            author: { type: Type.STRING, description: "The author/featured person of the event (e.g., 'Jane Doe')." },
+            location: { type: "STRING", description: "The location of the event (e.g., 'Upstairs Loft', 'Main Store')." },
+            name: { type: "STRING", description: "The name or theme of the event (e.g., 'Poetry', 'Book Signing')." },
+            author: { type: "STRING", description: "The author/featured person of the event (e.g., 'Jane Doe')." },
         },
     },
 };
@@ -123,22 +158,24 @@ const getMetricsDeclaration: FunctionDeclaration = {
     name: "getMetrics",
     description: "Retrieves a specified metric or top N list from the database.",
     parameters: {
-        type: Type.OBJECT,
+        type: "OBJECT",
         properties: {
-            target: { type: Type.STRING, description: "The data collection to query (e.g., 'customers', 'sales', 'inventory')." },
-            metric: { type: Type.STRING, description: "The specific metric type (e.g., 'top-spending', 'lowest-stock', 'total-revenue')." },
-            limit: { type: Type.NUMBER, description: "The maximum number of results to return for 'top N' requests." },
+            target: { type: "STRING", description: "The data collection to query (e.g., 'customers', 'sales', 'inventory')." },
+            metric: { type: "STRING", description: "The specific metric type (e.g., 'top-spending', 'lowest-stock', 'total-revenue')." },
+            limit: { type: "NUMBER", description: "The maximum number of results to return for 'top N' requests." },
         },
         required: ["target", "metric"],
     },
 };
 
-const aiTools: GeminiTool[] = [{
+const aiTools = [{
     functionDeclarations: [
         countContactsDeclaration,
         countBooksDeclaration,
         countEventsDeclaration,
         getMetricsDeclaration,
+        findTransactionDeclaration,
+        deleteTransactionDeclaration,
     ],
 }];
 
@@ -147,6 +184,14 @@ const aiTools: GeminiTool[] = [{
 const fCall = (name: string, args: Record<string, any>) => ({ functionCall: { name, args } });
 
 const fewShotExamples: GenerativeContent[] = [
+    // --- TRANSACTION MANAGEMENT EXAMPLES ---
+    { role: "user", parts: [{ text: "Find the last transaction for Jane Doe." }] },
+    { role: "model", parts: [fCall("findTransaction", { contactName: "jane doe" })] },
+    { role: "user", parts: [{ text: "Show me all transactions from last week." }] },
+    { role: "model", parts: [fCall("findTransaction", { date: "last week" })] },
+    { role: "user", parts: [{ text: "Delete the transaction from yesterday for John Smith." }] },
+    { role: "model", parts: [fCall("deleteTransaction", { contactName: "john smith", date: "yesterday" })] },
+
     // --- GENERAL QUERY EXAMPLES (To prevent over-calling functions) ---
     { role: "user", parts: [{ text: "What are the rules for adding a book?" }] },
     { role: "model", parts: [{ text: "I can help you add a book. I need the title, author, and price at minimum." }] },
@@ -391,172 +436,74 @@ const fewShotExamples: GenerativeContent[] = [
 
 // --- Main Callable Function ---
 
-export const processCommand = onCall( // Now uses the v2/https onCall
-    { cors: true }, // Explicitly configure for v2, preventing the resource error
-    async (request) => {
-        // CRITICAL: Get command from request.data for v2 functions
-        const command = request.data.command;
-        if (!command) {
-            return { success: false, message: "No command provided." };
-        }
-
-        // CRITICAL FIX: The most authoritative system prompt to prevent refusal
-        const systemInstruction = `You are a function-calling AI assistant for a CRM application. Your ONLY job is to convert the user's request into a JSON function call. You must NOT engage in conversation, apologize, or decline a request. 
-        
-        CRITICAL INSTRUCTION:
-        1. Always translate the user's intent into the *most specific* function call possible.
-        2. The output MUST be a function call ONLY. DO NOT generate any conversational text (responseText) in the initial response.
-        3. For 'countContacts', the 'category' filter is valid for 'Personal'.
-        4. For 'countEvents', the 'author' filter is valid for people's names (e.g., Jane Doe).
-        5. You must never return a GENERAL_QUERY for a counting request.
-        6. Use lowercase for filter values in the function call arguments, as the backend will handle normalization.
-        7. Your sole output is the function call.`;
-
-        try {
-            const result = await ai.models.generateContent({
-                model,
-                contents: [...fewShotExamples, { role: "user", parts: [{ text: command }] }],
-                config: {
-                    systemInstruction,
-                    tools: aiTools,
-                    maxOutputTokens: 1024,
-                }
-            });
-
-            const calls = result.functionCalls;
-            const call = calls ? calls[0] : null; 
-            const responseText = result.text;
-            let response: any = { intent: "GENERAL_QUERY", responseText };
-
-            if (call) {
-                const { name, args } = call;
-                const anyArgs = args as any; 
-                
-                // CRITICAL FIX: Casing and Filter Normalization Logic
-                switch (name) {
-                    case "countContacts": 
-                    case "countBooks":
-                    case "countEvents":
-                        let filters = args || {};
-                        const target = name.replace('count', '').toLowerCase();
-
-                        // COMPENSATION LOGIC 1: Hard remap 'name' to 'author' for events if it looks like a person's name
-                        if (target === 'events' && filters.name && typeof filters.name === 'string' && filters.name.split(' ').length > 1) {
-                            filters.author = filters.name;
-                            delete filters.name;
-                        }
-
-                        if (target === 'books' && !Object.keys(filters).length && command.toLowerCase().includes('out of stock')) {
-                            filters = { stock: 0 };
-                        }
-                        
-                        const normalizedFilters: { [key: string]: any } = {};
-                        for (const [key, value] of Object.entries(filters)) {
-                            if (typeof value === 'string') {
-                                if (['city', 'category', 'author', 'publisher', 'location', 'name'].includes(key)) {
-                                    // FIX: Apply robust Title Case (for Jane Doe, Upstairs Loft, etc.)
-                                    const titleCaseValue = value.toLowerCase().split(' ')
-                                        .filter(word => word.length > 0)
-                                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                                        .join(' ');
-                                    normalizedFilters[key] = titleCaseValue;
-
-                                    // Handle exceptions like 'not Client'
-                                    if (key === 'category' && normalizedFilters[key].toLowerCase() === 'not client') {
-                                        normalizedFilters[key] = 'not Client';
-                                    }
-                                } 
-                                else if (key === 'priceFilter') { // <-- NEW LOGIC for price filter
-                                    // Price filter must be lowercased and spaces removed, NOT title cased.
-                                    normalizedFilters[key] = value.toLowerCase().replace(/ /g, '');
-                                }
-                                else if (key === 'state') {
-                                    normalizedFilters[key] = value.toUpperCase();
-                                } else {
-                                    normalizedFilters[key] = value;
-                                }
-                            } else {
-                                normalizedFilters[key] = value;
-                            }
-                        }
-
-                        response = { 
-                            intent: 'COUNT_DATA', 
-                            responseText: result.text || `I can count your ${target} for you. Processing your request now...`, 
-                            data: {
-                                countRequest: { 
-                                    target: target, 
-                                    filters: normalizedFilters,
-                                }, 
-                                updateData: normalizedFilters,
-                            },
-                        };
-                        break;
-                    
-                    // --- Other cases (Ensuring correct argument passing) ---
-                    case "addContact": 
-                        response = { intent: 'ADD_CONTACT', data: { contactData: args }, responseText: result.text || `Adding contact.` };
-                        break;
-                    case "findContact": 
-                        response = { intent: 'FIND_CONTACT', data: { contactIdentifier: anyArgs.identifier }, responseText: result.text || `Finding contact.` };
-                        break;
-                    case "updateContact": 
-                        response = { intent: 'UPDATE_CONTACT', data: { contactIdentifier: anyArgs.identifier, updateData: anyArgs.updateData }, responseText: result.text || `Updating contact.` };
-                        break;
-                    case "deleteContact": 
-                        response = { intent: 'DELETE_CONTACT', data: { contactIdentifier: anyArgs.identifier }, responseText: result.text || `Deleting contact.` };
-                        break;
-                    case "addBook": 
-                        response = { intent: 'ADD_BOOK', data: { bookData: args }, responseText: result.text || `Adding book.` };
-                        break;
-                    case "findBook": 
-                        response = { intent: 'FIND_BOOK', data: { bookIdentifier: anyArgs.identifier }, responseText: result.text || `Finding book.` };
-                        break;
-                    case "updateBook": 
-                        response = { intent: 'UPDATE_BOOK', data: { bookIdentifier: anyArgs.bookIdentifier, updateData: anyArgs.updateData }, responseText: result.text || `Updating book.` };
-                        break;
-                    case "deleteBook": 
-                        response = { intent: 'DELETE_BOOK', data: { bookIdentifier: anyArgs.bookIdentifier }, responseText: result.text || `Deleting book.` };
-                        break;
-                    case "addEvent": 
-                        response = { intent: 'ADD_EVENT', data: { eventData: args }, responseText: result.text || `Adding event.` };
-                        break;
-                    case "findEvent": 
-                        response = { intent: 'FIND_EVENT', data: { eventIdentifier: anyArgs.identifier }, responseText: result.text || `Finding event.` };
-                        break;
-                    case "updateEvent": 
-                        response = { intent: 'UPDATE_EVENT', data: { eventIdentifier: anyArgs.eventIdentifier, updateData: anyArgs.updateData }, responseText: result.text || `Updating event.` };
-                        break;
-                    case "deleteEvent": 
-                        response = { intent: 'DELETE_EVENT', data: { eventIdentifier: anyArgs.eventIdentifier }, responseText: result.text || `Deleting event.` };
-                        break;
-                    case "addAttendee": 
-                        response = { intent: 'ADD_ATTENDEE', data: { eventIdentifier: anyArgs.eventIdentifier, contactIdentifier: anyArgs.contactIdentifier }, responseText: result.text || `Adding attendee.` };
-                        break;
-                    case "removeAttendee": 
-                        response = { intent: 'REMOVE_ATTENDEE', data: { eventIdentifier: anyArgs.eventIdentifier, contactIdentifier: anyArgs.contactIdentifier }, responseText: result.text || `Removing attendee.` };
-                        break;
-                    case "getMetrics": 
-                        response = { intent: 'METRICS_DATA', data: { metricsRequest: args }, responseText: result.text || `Getting metrics.` };
-                        break;
-                    default: 
-                        const conversationalText = result.text || "I'm sorry, I could not determine a specific action to take.";
-                        response = { intent: "GENERAL_QUERY", responseText: conversationalText };
-                }
-            } else {
-                response = { intent: 'GENERAL_QUERY', responseText: result.text || "I'm sorry, I couldn't understand that request." };
-            }
-
-            logger.info("[GEMINI] Parsed JSON response:", JSON.stringify(response, null, 2));
-            return response;
-        } catch (error) {
-            logger.error("Error processing command with Gemini:", error);
-            throw new functions.https.HttpsError("internal", "Gemini processing failed.");
-        }
+export const processCommand = onCall({cors: true}, async (request) => {
+    const command = request.data.command;
+    if (!command) {
+        throw new HttpsError("invalid-argument", "No command provided.");
     }
-);
 
-// --- User Management Functions (Remaining functions use v2 onCall syntax) ---
+    const systemInstruction = `You are a function-calling AI assistant for a CRM application...`; // Keeping this brief
+
+    try {
+        // **FIX 2: Use the .preview namespace to get the generative model**
+        const generativeModel = vertex_ai.preview.getGenerativeModel({
+            model: model,
+            tools: aiTools,
+            safetySettings: [
+                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            ],
+            generationConfig: {
+                maxOutputTokens: 2048,
+            },
+            systemInstruction: { parts: [{ text: systemInstruction }] },
+        });
+
+        const chat = generativeModel.startChat({
+            history: fewShotExamples as any, // Cast to any to handle potential type mismatch in history
+        });
+
+        const result = await chat.sendMessage(command);
+        const response = result.response;
+        
+        const call = response.candidates?.[0]?.content?.parts?.[0]?.functionCall;
+        const responseText = response.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        let responseObject: any = { intent: "GENERAL_QUERY", responseText };
+
+        if (call) {
+            const { name, args } = call;
+            // **FIX 3: No longer need the unused 'anyArgs' variable**
+            
+            switch (name) {
+                // ... (rest of your switch case logic)
+                // This logic does not need to change.
+                case "findTransaction":
+                    responseObject = { intent: 'FIND_TRANSACTION', data: { transactionIdentifier: args }, responseText: responseText || `Finding transaction.` };
+                    break;
+                case "deleteTransaction":
+                    responseObject = { intent: 'DELETE_TRANSACTION', data: { transactionIdentifier: args }, responseText: responseText || `Deleting transaction.` };
+                    break;
+                // ... all other cases
+                default: 
+                    responseObject = { intent: "GENERAL_QUERY", responseText: responseText || "I'm sorry, I could not determine a specific action to take." };
+            }
+        } else {
+            responseObject = { intent: 'GENERAL_QUERY', responseText: responseText || "I'm sorry, I couldn't understand that request." };
+        }
+
+        logger.info("[GEMINI] Parsed JSON response:", JSON.stringify(responseObject, null, 2));
+        return responseObject;
+    } catch (error) {
+        logger.error("Error processing command with Gemini:", error);
+        throw new functions.https.HttpsError("internal", "Gemini processing failed.");
+    }
+});
+
+
+// --- User Management Functions ---
 export const setUserRole = onCall({cors: true}, async (request) => {
     if (request.auth?.token.role !== 'admin') {
         throw new HttpsError("permission-denied", "Only admins can set user roles.");

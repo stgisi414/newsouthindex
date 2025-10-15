@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { AppUser, Contact, Book, Transaction } from '../types';
+import { AppUser, Contact, Book, Transaction, Event } from '../types';
 import { User } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { functions, auth } from '../src/firebaseConfig';
@@ -28,6 +28,7 @@ interface DashboardProps {
     onDeleteBook: (id: string) => void;
     transactions: Transaction[];
     onAddTransaction: (data: { contactId: string; booksWithQuantity: { book: Book, quantity: number }[] }) => void;
+    onDeleteTransaction: (id: string) => void;
     events: Event[];
     onAddEvent: (eventData: Omit<Event, 'id'>) => void;
     onUpdateEvent: (event: Event) => void;
@@ -44,7 +45,7 @@ const makeMeAdmin = httpsCallable(functions, 'makeMeAdmin');
 
 type View = 'contacts' | 'books' | 'transactions' | 'reports' | 'events';
 
-const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateContact, onDeleteContact, books, onAddBook, onUpdateBook, onDeleteBook, transactions, onAddTransaction, events, onAddEvent, onUpdateEvent, onDeleteEvent, onUpdateEventAttendees, onProcessAiCommand, onLogout, isAdmin, users, currentUser }) => {
+const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateContact, onDeleteContact, books, onAddBook, onUpdateBook, onDeleteBook, transactions, onAddTransaction, onDeleteTransaction, events, onAddEvent, onUpdateEvent, onDeleteEvent, onUpdateEventAttendees, onProcessAiCommand, onLogout, isAdmin, users, currentUser }) => {
     const [currentView, setCurrentView] = useState<View>('contacts');
     const [searchQuery, setSearchQuery] = useState('');
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -101,6 +102,15 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
         );
     }, [books, searchQuery, aiSearchResults, currentView]);
 
+    const filteredTransactions = useMemo(() => {
+        if (aiSearchResults && currentView === 'transactions') {
+            return aiSearchResults as Transaction[];
+        }
+        return transactions.filter(transaction =>
+            transaction.contactName.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    }, [transactions, searchQuery, aiSearchResults, currentView]);
+
     const filteredEvents = useMemo(() => {
         if (aiSearchResults && currentView === 'events') {
             return aiSearchResults as Event[];
@@ -116,7 +126,7 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
         // 2. Handle the view switch based on the result
         if (result.targetView) {
             // Determine if the action is a search/count that returns a filtered payload (list of items)
-            const isSearchOrCount = ['FIND_CONTACT', 'FIND_BOOK', 'FIND_EVENT', 'COUNT_DATA'].includes(intent);
+            const isSearchOrCount = ['FIND_CONTACT', 'FIND_BOOK', 'FIND_EVENT', 'FIND_TRANSACTION', 'COUNT_DATA'].includes(intent);
 
             if (isSearchOrCount && result.payload) {
                 // For search/count, switch view and apply filter results
@@ -313,10 +323,10 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                             )}
                         </div>
 
-                        {currentView === 'contacts' && <ContactTable contacts={filteredContacts} onEdit={isAdmin ? handleEditContact : () => {}} onDelete={isAdmin ? handleDeleteContact : () => {}} />}
-                        {currentView === 'books' && <BookTable books={filteredBooks} onEdit={isAdmin ? handleEditBook : () => {}} onDelete={isAdmin ? onDeleteBook : () => {}} />}
-                        {currentView === 'transactions' && <TransactionTable transactions={transactions} />}
-                        {currentView === 'events' && <EventTable events={events} contacts={contacts} onEdit={handleEditEvent} onDelete={onDeleteEvent} onUpdateAttendees={onUpdateEventAttendees} />}
+                        {currentView === 'contacts' && <ContactTable contacts={filteredContacts} onEdit={handleEditContact} onDelete={handleDeleteContact} isAdmin={isAdmin} onUpdateContact={onUpdateContact} />}
+                        {currentView === 'books' && <BookTable books={filteredBooks} onEdit={handleEditBook} onDelete={onDeleteBook} isAdmin={isAdmin} onUpdateBook={onUpdateBook} />}
+                        {currentView === 'transactions' && <TransactionTable transactions={filteredTransactions} onDelete={onDeleteTransaction} isAdmin={isAdmin} />}
+                        {currentView === 'events' && <EventTable events={events} contacts={contacts} onEdit={handleEditEvent} onDelete={onDeleteEvent} onUpdateAttendees={onUpdateEventAttendees} isAdmin={isAdmin} onUpdateEvent={onUpdateEvent} />}
                         {currentView === 'reports' && <Reports contacts={contacts} transactions={transactions} books={books} />}
                     </div>
                     <div className="lg:col-span-1 space-y-4">

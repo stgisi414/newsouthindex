@@ -7,6 +7,8 @@ interface BookTableProps {
     books: Book[];
     onEdit: (book: Book) => void;
     onDelete: (id: string) => void;
+    isAdmin: boolean;
+    onUpdateBook: (book: Book) => void;
 }
 
 const ITEMS_PER_PAGE = 10;
@@ -15,7 +17,7 @@ const ITEMS_PER_PAGE = 10;
 type SortKey = 'title' | 'author' | 'genre' | 'publicationYear' | 'price' | 'stock';
 type SortDirection = 'asc' | 'desc';
 
-const BookTable: React.FC<BookTableProps> = ({ books, onEdit, onDelete }) => {
+const BookTable: React.FC<BookTableProps> = ({ books, onEdit, onDelete, isAdmin, onUpdateBook }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [expandedBookId, setExpandedBookId] = useState<string | null>(null);
     // State for sorting
@@ -77,6 +79,13 @@ const BookTable: React.FC<BookTableProps> = ({ books, onEdit, onDelete }) => {
         return sortDirection === 'asc' ? ' ▲' : ' ▼';
     };
 
+    const handleFieldUpdate = (book: Book, field: keyof Book, value: string) => {
+        if (isAdmin) {
+            const updatedBook = { ...book, [field]: value };
+            onUpdateBook(updatedBook);
+        }
+    };
+
     const headerConfigs: { key: SortKey; label: string; hideOnSmall?: boolean }[] = [
         { key: 'title', label: 'Title' },
         { key: 'author', label: 'Author', hideOnSmall: true },
@@ -111,13 +120,13 @@ const BookTable: React.FC<BookTableProps> = ({ books, onEdit, onDelete }) => {
                         {paginatedBooks.map((book) => (
                             <Fragment key={book.id}>
                                 <tr className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{book.title}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">{book.author}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{book.genre}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{book.publicationYear}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(book, 'title', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{book.title}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(book, 'author', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{book.author}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(book, 'genre', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{book.genre}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(book, 'publicationYear', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{book.publicationYear}</td>
                                     {/* Use toLocaleString for currency formatting */}
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{book.price.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{book.stock}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(book, 'price', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{book.price.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(book, 'stock', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{book.stock}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <div className="flex items-center justify-end space-x-4">
                                             <button
@@ -135,9 +144,9 @@ const BookTable: React.FC<BookTableProps> = ({ books, onEdit, onDelete }) => {
                                     <tr className="lg:hidden bg-gray-50">
                                         <td colSpan={6} className="px-6 py-4">
                                             <div className="space-y-3 text-sm text-gray-600">
-                                                <p><strong className="font-medium text-gray-800">Author:</strong> {book.author || '-'}</p>
-                                                <p><strong className="font-medium text-gray-800">ISBN:</strong> {book.isbn || '-'}</p>
-                                                <p><strong className="font-medium text-gray-800">Publisher:</strong> {book.publisher || '-'}</p>
+                                                <p><strong className="font-medium text-gray-800">Author:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(book, 'author', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{book.author || '-'}</span></p>
+                                                <p><strong className="font-medium text-gray-800">ISBN:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(book, 'isbn', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{book.isbn || '-'}</span></p>
+                                                <p><strong className="font-medium text-gray-800">Publisher:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(book, 'publisher', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{book.publisher || '-'}</span></p>
                                             </div>
                                         </td>
                                     </tr>

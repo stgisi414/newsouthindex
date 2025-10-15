@@ -1,15 +1,19 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, Fragment } from 'react';
 import { Transaction } from '../types';
+import DeleteIcon from './icons/DeleteIcon';
 
 interface TransactionTableProps {
     transactions: Transaction[];
+    onDelete: (id: string) => void;
+    isAdmin: boolean;
 }
 
 const ITEMS_PER_PAGE = 10;
 
-const TransactionTable: React.FC<TransactionTableProps> = ({ transactions }) => {
+const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDelete, isAdmin }) => {
     const [currentPage, setCurrentPage] = useState(1);
-    
+    const [expandedTransactionId, setExpandedTransactionId] = useState<string | null>(null);
+
     const sortedTransactions = useMemo(() => {
         return [...transactions].sort((a, b) => b.transactionDate.seconds - a.transactionDate.seconds);
     }, [transactions]);
@@ -20,10 +24,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions }) => 
         const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
         return sortedTransactions.slice(startIndex, startIndex + ITEMS_PER_PAGE);
     }, [currentPage, sortedTransactions]);
-    
-    const formatDate = (timestamp: { seconds: number; nanoseconds: number }) => {
-        if (!timestamp) return 'N/A';
-        return new Date(timestamp.seconds * 1000).toLocaleDateString();
+
+    const handleToggleExpand = (transactionId: string) => {
+        setExpandedTransactionId(prevId => (prevId === transactionId ? null : transactionId));
     };
 
     return (
@@ -32,28 +35,52 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions }) => 
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items Purchased</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                            <th className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                         {paginatedTransactions.map((transaction) => (
-                            <tr key={transaction.id} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {transaction.transactionDate?.toDate().toLocaleDateString()}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    {transaction.contactName}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {transaction.books.map(book => `${book.title} (x${book.quantity})`).join(', ')}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
-                                    ${transaction.totalPrice.toFixed(2)}
-                                </td>
-                            </tr>
+                            <Fragment key={transaction.id}>
+                                <tr className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{transaction.contactName}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{transaction.transactionDate?.toDate().toLocaleDateString()}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${transaction.totalPrice.toFixed(2)}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <div className="flex items-center justify-end space-x-4">
+                                            <button 
+                                                onClick={() => handleToggleExpand(transaction.id)}
+                                                className="px-2 py-1 text-xs font-semibold text-indigo-600 bg-indigo-100 rounded hover:bg-indigo-200"
+                                            >
+                                                {expandedTransactionId === transaction.id ? 'Hide' : 'View'}
+                                            </button>
+                                            {isAdmin && (
+                                                <button onClick={() => onDelete(transaction.id)} className="text-red-600 hover:text-red-900">
+                                                    <DeleteIcon className="h-5 w-5" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {expandedTransactionId === transaction.id && (
+                                    <tr>
+                                        <td colSpan={4} className="p-4 bg-gray-50">
+                                            <div>
+                                                <h4 className="text-md font-semibold mb-2">Purchased Books</h4>
+                                                <ul className="list-disc pl-5">
+                                                    {transaction.books.map(book => (
+                                                        <li key={book.id} className="text-sm">
+                                                            {book.title} (x{book.quantity}) - ${book.price.toFixed(2)} each
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </Fragment>
                         ))}
                     </tbody>
                 </table>

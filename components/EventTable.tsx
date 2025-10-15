@@ -9,11 +9,13 @@ interface EventTableProps {
     onEdit: (event: Event) => void;
     onDelete: (id: string) => void;
     onUpdateAttendees: (eventId: string, contactId: string, isAttending: boolean) => void;
+    isAdmin: boolean;
+    onUpdateEvent: (event: Event) => void;
 }
 
 const ITEMS_PER_PAGE = 5; // Using 5 since event rows can be taller
 
-const EventTable: React.FC<EventTableProps> = ({ events, contacts, onEdit, onDelete, onUpdateAttendees }) => {
+const EventTable: React.FC<EventTableProps> = ({ events, contacts, onEdit, onDelete, onUpdateAttendees, isAdmin, onUpdateEvent }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
@@ -39,6 +41,20 @@ const EventTable: React.FC<EventTableProps> = ({ events, contacts, onEdit, onDel
         setExpandedEventId(prevId => (prevId === eventId ? null : eventId));
     };
 
+    const handleFieldUpdate = (event: Event, field: keyof Event, value: string) => {
+        if (isAdmin) {
+            const updatedEvent = { ...event, [field]: value };
+            onUpdateEvent(updatedEvent);
+        }
+    };
+
+    const handleDateChange = (event: Event, newDate: string) => {
+        if (isAdmin) {
+            const updatedEvent = { ...event, date: new Date(newDate) };
+            onUpdateEvent(updatedEvent);
+        }
+    };
+
     return (
         <div className="bg-white shadow-lg rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
@@ -55,9 +71,20 @@ const EventTable: React.FC<EventTableProps> = ({ events, contacts, onEdit, onDel
                         {eventsWithAttendeeDetails.map((event) => (
                             <Fragment key={event.id}>
                                 <tr className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{event.name}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{event.date?.toDate().toLocaleDateString()}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{event.attendees.length}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(event, 'name', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{event.name}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {isAdmin ? (
+                                            <input 
+                                                type="date" 
+                                                value={event.date?.toDate().toISOString().split('T')[0]} 
+                                                onChange={(e) => handleDateChange(event, e.target.value)}
+                                                className="border-gray-300 rounded-md shadow-sm"
+                                            />
+                                        ) : (
+                                            event.date?.toDate().toLocaleDateString()
+                                        )}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{event.attendeeIds?.length || 0}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <div className="flex items-center justify-end space-x-4">
                                             <button 
@@ -76,10 +103,10 @@ const EventTable: React.FC<EventTableProps> = ({ events, contacts, onEdit, onDel
                                         <td colSpan={4} className="p-4 bg-gray-50">
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div className="space-y-3 text-sm text-gray-600">
-                                                    <p><strong className="font-medium text-gray-800">Time:</strong> {event.time || '-'}</p>
-                                                    <p><strong className="font-medium text-gray-800">Location:</strong> {event.location || '-'}</p>
-                                                    <p><strong className="font-medium text-gray-800">Author:</strong> {event.author || '-'}</p>
-                                                    <p><strong className="font-medium text-gray-800">Description:</strong> {event.description || '-'}</p>
+                                                    <p><strong className="font-medium text-gray-800">Time:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(event, 'time', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{event.time || '-'}</span></p>
+                                                    <p><strong className="font-medium text-gray-800">Location:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(event, 'location', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{event.location || '-'}</span></p>
+                                                    <p><strong className="font-medium text-gray-800">Author:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(event, 'author', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{event.author || '-'}</span></p>
+                                                    <p><strong className="font-medium text-gray-800">Description:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(event, 'description', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{event.description || '-'}</span></p>
                                                 </div>
                                                 <div className="max-h-48 overflow-y-auto">
                                                     <h4 className="text-md font-semibold mb-2">Manage Attendees</h4>

@@ -210,6 +210,24 @@ function App() {
     await batch.commit();
   };
 
+  const deleteTransaction = async (transactionId: string) => {
+    if (!isAdmin) return;
+    const transactionToDelete = transactions.find(t => t.id === transactionId);
+    if (!transactionToDelete) return;
+
+    const batch = writeBatch(db);
+
+    const transactionRef = doc(db, "transactions", transactionId);
+    batch.delete(transactionRef);
+
+    transactionToDelete.books.forEach(bookInTransaction => {
+      const bookRef = doc(db, "books", bookInTransaction.id);
+      batch.update(bookRef, { stock: increment(bookInTransaction.quantity) });
+    });
+
+    await batch.commit();
+  };
+
   const addEvent = async (eventData: Omit<Event, "id">) => {
     if (!isAdmin) return;
     await addDoc(collection(db, "events"), { ...eventData, attendeeIds: [] });
@@ -238,6 +256,30 @@ function App() {
   const onProcessAiCommand = async (intent: string, data: any): Promise<{ success: boolean; payload?: any; message?: string; targetView?: View }> => {
     console.log('%c[FRONTEND LOG] Processing AI Command:', 'color: green; font-weight: bold;', { intent, data });
     switch (intent) {
+      case 'DELETE_TRANSACTION': {
+        if (!isAdmin) return { success: false, message: "Sorry, only admins can delete transactions." };
+        const { transactionIdentifier } = (data || {}) as { transactionIdentifier?: { contactName?: string, date?: string } };
+        const contactName = transactionIdentifier?.contactName?.toLowerCase();
+        
+        if (!contactName) return { success: false, message: "Please specify a contact name for the transaction to delete." };
+
+        const foundTransactions = transactions.filter(t => t.contactName.toLowerCase().includes(contactName));
+
+        if (foundTransactions.length === 0) return { success: false, message: `Could not find any transactions for "${contactName}".` };
+        if (foundTransactions.length > 1) return { success: false, message: `Found multiple transactions for "${contactName}". Please be more specific.` };
+        
+        await deleteTransaction(foundTransactions[0].id);
+        return { success: true, message: `Successfully deleted transaction for ${foundTransactions[0].contactName}.`, targetView: 'transactions' };
+      }
+      case 'FIND_TRANSACTION': {
+        const { transactionIdentifier } = (data || {}) as { transactionIdentifier?: { contactName?: string, date?: string } };
+        const contactName = transactionIdentifier?.contactName?.toLowerCase();
+        
+        if (!contactName) return { success: false, message: "Please specify a contact name to find transactions." };
+
+        const foundTransactions = transactions.filter(t => t.contactName.toLowerCase().includes(contactName));
+        return { success: true, payload: foundTransactions, targetView: 'transactions' };
+      }
       case 'ADD_CONTACT': {
         const { contactData } = (data || {}) as { contactData?: any };
         const { contactIdentifier } = (data || {}) as { contactIdentifier?: string };
@@ -655,7 +697,7 @@ function App() {
     <div className="flex flex-col min-h-screen">
       <main className="flex-grow">
         {user ? (
-          userRole === UserRole.APPLICANT ? (
+         /* userRole === UserRole.APPLICANT ? (
             <div className="flex items-center justify-center min-h-screen bg-gray-50">
               <div className="text-center p-8 bg-white rounded-lg shadow-md">
                 <h2 className="text-2xl font-bold mb-4 text-gray-800">Waiting for Approval</h2>
@@ -668,7 +710,7 @@ function App() {
                 </button>
               </div>
             </div>
-          ) : (
+          ) : ( */
             <Dashboard
               contacts={contacts}
               onAddContact={addContact}
@@ -680,6 +722,7 @@ function App() {
               onDeleteBook={deleteBook}
               transactions={transactions}
               onAddTransaction={addTransaction}
+              onDeleteTransaction={deleteTransaction}
               events={events}
               onAddEvent={addEvent}
               onUpdateEvent={updateEvent}
@@ -691,7 +734,7 @@ function App() {
               users={users}
               currentUser={user}
             />
-          )
+          //)
         ) : (
           <Auth />
         )}
