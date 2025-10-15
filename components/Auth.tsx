@@ -83,6 +83,13 @@ export const Auth = () => {
           <p className="mt-2 text-sm">
             Please sign in to continue.
           </p>
+          <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-xs text-yellow-800">
+              <strong>This is a private system for authorized New South Bookstore staff only.</strong>
+              <br />
+              Do not attempt to log in if you are not an employee.
+            </p>
+          </div>
         </div>
         <form className="space-y-6">
           <div>
