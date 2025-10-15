@@ -1,3 +1,25 @@
+Setup for Remote/Mobile Demo (IMPORTANT)
+
+For the Cloudflare link to work correctly on other devices (like a phone), you must update the Firebase configuration to use your computer's local network IP address. This needs to be checked each time you start a new demo session, as your IP address can change.
+
+Find Your Local IP Address:
+Open PowerShell and run ipconfig. Look for the "IPv4 Address" under your main network connection (it usually starts with 192.168.x.x).
+
+Update the Firebase Config:
+Open the file src/firebaseConfig.ts. Find the emulatorHost variable and replace its value with the IP address you just found.
+
+// src/firebaseConfig.ts
+
+if (import.meta.env.DEV) {
+  // Replace this IP with the one from ipconfig
+  const emulatorHost = "192.168.1.123"; 
+
+  connectAuthEmulator(auth, `http://${emulatorHost}:9099`);
+  connectFirestoreEmulator(db, emulatorHost, 8080);
+  connectFunctionsEmulator(functions, emulatorHost, 5003);
+}
+
+
 Running the Development Environment
 
 You will need to open three separate PowerShell terminals.
