@@ -1,8 +1,7 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, connectAuthEmulator } from "firebase/auth";
-// UPDATE: Import initializeFirestore instead of getFirestore directly for this block
-import { initializeFirestore, connectFirestoreEmulator } from "firebase/firestore"; 
-import { getFunctions } from "firebase/functions";
+import { getAuth, Auth, connectAuthEmulator } from "firebase/auth"; // <-- Import Auth type
+import { initializeFirestore, Firestore } from "firebase/firestore"; // <-- Import Firestore type
+import { getFunctions, FirebaseFunctions } from "firebase/functions"; // <-- Import FirebaseFunctions type
 
 // Your web app's Firebase configuration using environment variables
 const firebaseConfig = {
@@ -16,12 +15,10 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// Export the instances of the services
-export const auth = getAuth(app);
-export const functions = getFunctions(app);
-
-// Initialize db here but it will be reassigned in the DEV block
-export let db = initializeFirestore(app, {});
+// FIX 1: Declare exported services using 'let' so they can be re-assigned.
+export let auth: Auth = getAuth(app);
+export let functions: FirebaseFunctions = getFunctions(app); 
+export let db: Firestore; // Declare db, initialize later
 
 // Connect to emulators using permanent Cloudflare Tunnels in development
 if (import.meta.env.DEV) {
@@ -30,20 +27,21 @@ if (import.meta.env.DEV) {
   const functionsTunnelUrl = "https://functions.projectgrid.tech";
   const firestoreTunnelHostname = "firestore.projectgrid.tech";
 
-  // 1. Auth Emulator (uses a full URL)
+  // 1. Auth Emulator: Re-configures the existing 'auth' object
   connectAuthEmulator(auth, authTunnelUrl, { disableWarnings: true });
 
-  // 2. Functions Emulator (set customDomain to the full URL)
-  functions.customDomain = functionsTunnelUrl;
+  // FIX 2: Re-initialize 'functions' for the DEV environment, passing the custom domain.
+  functions = getFunctions(app, { customDomain: functionsTunnelUrl }); 
 
-  // 3. Firestore Emulator (Explicitly set SSL to true)
+  // 3. Firestore Emulator: Initialize 'db' for DEV (only runs here)
   db = initializeFirestore(app, {
     host: firestoreTunnelHostname,
     port: 443,
-    ssl: true, // This is the critical line that forces HTTPS
+    ssl: true, 
   });
 
 } else {
-  // For production, initialize Firestore normally
+  // For production, initialize db normally (only runs here)
   db = initializeFirestore(app, {});
+  // functions and auth remain as their default initializations.
 }

@@ -16,4 +16,4 @@ PowerShell
 
 cd C:\code2\newsouthindex
 npm run tunnel
-Your client can now access the app and all its features at https://app.projectgrid.tech.
+Your client can now access the app and all its features at https://app.projectgrid.tech
