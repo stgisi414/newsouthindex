@@ -11,9 +11,11 @@ interface TransactionFormProps {
 }
 
 const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSave, contacts, books, transactionToEdit }) => {
+    const initialDate = new Date().toISOString().split('T')[0];
     const [contactId, setContactId] = useState('');
     const [selectedBooks, setSelectedBooks] = useState<Map<string, { book: Book; quantity: number }>>(new Map());
     const [bookSearch, setBookSearch] = useState('');
+    const [transactionDate, setTransactionDate] = useState(initialDate); // NEW STATE
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
     useEffect(() => {
@@ -22,6 +24,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
             setSelectedBooks(new Map());
             setBookSearch('');
             setErrors({});
+            setTransactionDate(initialDate); // RESET DATE
         } else if (transactionToEdit) {
             setContactId(transactionToEdit.contactId);
             const initialMap = new Map<string, { book: Book; quantity: number }>();
@@ -32,6 +35,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
                 }
             });
             setSelectedBooks(initialMap);
+            // SET DATE FROM TRANSACTION
+            const dateObj = transactionToEdit.transactionDate?.toDate ? transactionToEdit.transactionDate.toDate() : new Date();
+            setTransactionDate(dateObj.toISOString().split('T')[0]); 
         }
     }, [isOpen, transactionToEdit, books]);
 
@@ -101,7 +107,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
         const newErrors: { [key: string]: string } = {};
         if (!contactId) newErrors.contactId = 'A customer must be selected.';
         if (selectedBooks.size === 0) newErrors.books = 'At least one book must be selected.';
-        
+        // NEW DATE VALIDATION
+        if (!transactionDate || isNaN(new Date(transactionDate).getTime())) newErrors.transactionDate = 'A valid date is required.';
+
         for (const { book, quantity } of selectedBooks.values()) {
             if (quantity === 0 || isNaN(quantity)) {
                 newErrors.books = `Quantity for "${book.title}" cannot be zero.`;
@@ -122,11 +130,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (validate()) {
-            // Pass the transactionToEdit object back so App.tsx knows whether to add or update
             onSave({
                 transactionToEdit,
                 contactId,
-                booksWithQuantity: Array.from(selectedBooks.values()).map(item => ({...item, quantity: item.quantity || 0}))
+                booksWithQuantity: Array.from(selectedBooks.values()).map(item => ({...item, quantity: item.quantity || 0})),
+                transactionDate: new Date(transactionDate), // PASS DATE OBJECT TO SAVE HANDLER
             });
             onClose();
         }
@@ -138,6 +146,19 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
                 <h2 className="text-2xl font-bold text-gray-800 mb-6">{transactionToEdit ? 'Edit Transaction' : 'New Transaction'}</h2>
                 <form onSubmit={handleSubmit} className="flex-grow flex flex-col overflow-hidden">
                     <div className="space-y-6 flex-grow overflow-y-auto pr-2">
+                        <div>
+                            <label htmlFor="transactionDate" className="block text-sm font-medium text-gray-700">Date <span className="text-red-500">*</span></label>
+                            <input 
+                                type="date" 
+                                id="transactionDate" 
+                                name="transactionDate" 
+                                value={transactionDate} 
+                                onChange={(e) => setTransactionDate(e.target.value)} 
+                                className={`mt-1 block w-full px-3 py-2 border ${errors.transactionDate ? 'border-red-500' : 'border-gray-300'} rounded-md`} 
+                                required 
+                            />
+                            {errors.transactionDate && <p className="text-red-500 text-xs mt-1">{errors.transactionDate}</p>}
+                        </div>
                         <div>
                             <label htmlFor="contactId" className="block text-sm font-medium text-gray-700">Customer <span className="text-red-500">*</span></label>
                             {/* Disable customer change if editing an existing transaction to maintain integrity */}

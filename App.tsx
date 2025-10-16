@@ -189,9 +189,10 @@ function App() {
     await deleteDoc(doc(db, "books", id));
   };
 
-  const addTransaction = async (transactionData: { contactId: string; booksWithQuantity: { book: Book, quantity: number }[] }) => {
+  const addTransaction = async (transactionData: { contactId: string; booksWithQuantity: { book: Book, quantity: number }[], transactionDate?: Date }) => {
     if (!isAdmin) return;
-    const { contactId, booksWithQuantity } = transactionData;
+    // THIS LINE IS THE MAIN CHANGE: Destructure the new field
+    const { contactId, booksWithQuantity, transactionDate } = transactionData;
     const contact = contacts.find(c => c.id === contactId);
     if (!contact) return;
 
@@ -210,7 +211,8 @@ function App() {
         quantity 
       })),
       totalPrice,
-      transactionDate: serverTimestamp(),
+      // CRITICAL FIX: Use provided date or serverTimestamp()
+      transactionDate: transactionDate ? transactionDate : serverTimestamp(),
     });
 
     booksWithQuantity.forEach(({ book, quantity }) => {
@@ -219,7 +221,7 @@ function App() {
     });
 
     await batch.commit();
-  };
+};
   
   // NEW: Handler for inline transaction field updates
   const updateTransaction = async (transaction: Transaction, updatedData: Partial<Transaction>) => {

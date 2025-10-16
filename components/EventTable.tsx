@@ -18,6 +18,7 @@ const ITEMS_PER_PAGE = 5; // Using 5 since event rows can be taller
 const EventTable: React.FC<EventTableProps> = ({ events, contacts, onEdit, onDelete, onUpdateAttendees, isAdmin, onUpdateEvent }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+    const [editingCell, setEditingCell] = useState<{ id: string; field: string; value: string } | null>(null);
 
     const sortedEvents = useMemo(() => {
         return [...events].sort((a, b) => b.date.seconds - a.date.seconds);
@@ -48,11 +49,40 @@ const EventTable: React.FC<EventTableProps> = ({ events, contacts, onEdit, onDel
         }
     };
 
-    const handleDateChange = (event: Event, newDate: string) => {
+    const handleCellClick = (id: string, field: string, currentValue: string) => {
         if (isAdmin) {
-            const updatedEvent = { ...event, date: new Date(newDate) };
-            onUpdateEvent(updatedEvent);
+            setEditingCell({ id, field, value: currentValue });
         }
+    };
+
+    const handleLocalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (editingCell) {
+            setEditingCell({ ...editingCell, value: e.target.value });
+        }
+    };
+
+    const handleDateBlur = (event: Event) => {
+        if (!editingCell || editingCell.field !== 'date' || !isAdmin) return;
+
+        const newDateString = editingCell.value;
+        const dateObj = new Date(newDateString);
+
+        // 1. Validate the date before sending it to Firestore
+        if (!newDateString || isNaN(dateObj.getTime())) {
+             console.error(`Invalid date entry for event ${event.id}: ${newDateString}. Resetting field.`);
+             setEditingCell(null);
+             return;
+        }
+
+        // 2. Commit the change to the database
+        const updatedEvent = { 
+            ...event, 
+            date: dateObj // Send the valid Date object
+        };
+        onUpdateEvent(updatedEvent);
+
+        // 3. Clear the editing state
+        setEditingCell(null);
     };
 
     return (
@@ -73,15 +103,30 @@ const EventTable: React.FC<EventTableProps> = ({ events, contacts, onEdit, onDel
                                 <tr className="hover:bg-gray-50">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(event, 'name', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{event.name}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {isAdmin ? (
+                                        {isAdmin && editingCell?.id === event.id && editingCell.field === 'date' ? (
                                             <input 
                                                 type="date" 
-                                                value={event.date?.toDate().toISOString().split('T')[0]} 
-                                                onChange={(e) => handleDateChange(event, e.target.value)}
-                                                className="border-gray-300 rounded-md shadow-sm"
+                                                value={editingCell.value}
+                                                onChange={handleLocalChange}
+                                                onBlur={() => handleDateBlur(event)} // Trigger update on blur
+                                                // Allows the input to immediately receive focus for typing
+                                                autoFocus
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') handleDateBlur(event);
+                                                }}
+                                                className="border-gray-300 rounded-md shadow-sm w-36"
                                             />
                                         ) : (
-                                            event.date?.toDate().toLocaleDateString()
+                                            <span 
+                                                className={isAdmin ? "cursor-pointer hover:bg-gray-200 p-1 rounded transition-colors" : ""}
+                                                onClick={() => {
+                                                    // Convert Firestore Timestamp to YYYY-MM-DD string
+                                                    const dateValue = event.date?.toDate().toISOString().split('T')[0] || '';
+                                                    handleCellClick(event.id, 'date', dateValue);
+                                                }}
+                                            >
+                                                {event.date?.toDate().toLocaleDateString()}
+                                            </span>
                                         )}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{event.attendeeIds?.length || 0}</td>

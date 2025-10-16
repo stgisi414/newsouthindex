@@ -72,6 +72,24 @@ const EventForm: React.FC<EventFormProps> = ({ isOpen, onClose, onSave, eventToE
         }
     };
 
+    const handleDateChange = (event: Event, newDate: string) => {
+        if (isAdmin) {
+            const dateObj = new Date(newDate);
+            
+            // CRITICAL FIX: Block update if the input does not form a valid date yet.
+            if (isNaN(dateObj.getTime())) {
+                console.error("Invalid Date entered. Update blocked.");
+                return; 
+            }
+
+            const updatedEvent = { 
+                ...event, 
+                date: dateObj // Pass the valid Date object
+            };
+            onUpdateEvent(updatedEvent);
+        }
+    };
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center">
             <div className="bg-white rounded-lg shadow-2xl p-8 m-4 max-w-lg w-full">

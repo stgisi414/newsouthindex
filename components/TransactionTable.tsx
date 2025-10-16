@@ -16,6 +16,7 @@ const ITEMS_PER_PAGE = 10;
 const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onEdit, onDelete, isAdmin, onUpdateTransaction }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [expandedTransactionId, setExpandedTransactionId] = useState<string | null>(null);
+    const [editingCell, setEditingCell] = useState<{ id: string; field: string; value: string } | null>(null);
 
     const sortedTransactions = useMemo(() => {
         // NOTE: Sorting by transactionDate.seconds is correct for Firestore Timestamps
@@ -31,6 +32,40 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onEdi
 
     const handleToggleExpand = (transactionId: string) => {
         setExpandedTransactionId(prevId => (prevId === transactionId ? null : transactionId));
+    };
+
+    const handleCellClick = (id: string, field: string, currentValue: string) => {
+        if (isAdmin) {
+            setEditingCell({ id, field, value: currentValue });
+        }
+    };
+
+    // Handler for local input change (same as EventTable)
+    const handleLocalChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (editingCell) {
+            setEditingCell({ ...editingCell, value: e.target.value });
+        }
+    };
+
+    // CRITICAL FIX: Handler for saving the date when the field loses focus (onBlur)
+    const handleDateBlur = (transaction: Transaction) => {
+        if (!editingCell || editingCell.field !== 'transactionDate' || !isAdmin) return;
+
+        const newDateString = editingCell.value;
+        const dateObj = new Date(newDateString);
+
+        // 1. Validate the date before sending it to Firestore
+        if (!newDateString || isNaN(dateObj.getTime())) {
+             console.error(`Invalid date entry for transaction ${transaction.id}: ${newDateString}. Resetting field.`);
+             setEditingCell(null); 
+             return;
+        }
+
+        // 2. Commit the change to the database
+        onUpdateTransaction(transaction, { transactionDate: dateObj });
+
+        // 3. Clear the editing state
+        setEditingCell(null);
     };
     
     // NEW: Handle inline field updates
@@ -78,7 +113,30 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onEdi
                                         {transaction.contactName}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {transaction.transactionDate?.toDate().toLocaleDateString()}
+                                        {isAdmin && editingCell?.id === transaction.id && editingCell.field === 'transactionDate' ? (
+                                            <input 
+                                                type="date" 
+                                                value={editingCell.value}
+                                                onChange={handleLocalChange}
+                                                onBlur={() => handleDateBlur(transaction)} // Trigger update on blur
+                                                // Allows the input to immediately receive focus for typing
+                                                autoFocus
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') handleDateBlur(transaction);
+                                                }}
+                                                className="border-gray-300 rounded-md shadow-sm w-36"
+                                            />
+                                        ) : (
+                                            <span
+                                                className={isAdmin ? "cursor-pointer hover:bg-gray-200 p-1 rounded transition-colors" : ""}
+                                                onClick={() => {
+                                                    const dateValue = transaction.transactionDate?.toDate().toISOString().split('T')[0] || '';
+                                                    handleCellClick(transaction.id, 'transactionDate', dateValue);
+                                                }}
+                                            >
+                                                {transaction.transactionDate?.toDate().toLocaleDateString()}
+                                            </span>
+                                        )}
                                     </td>
                                     {/* Inline Editable Total Price */}
                                     <td 
@@ -122,6 +180,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onEdi
                                                         </li>
                                                     ))}
                                                 </ul>
+                                                <p className="text-xs text-gray-500 mt-2">
+                                                    To modify the books or quantities, please click the **Edit** button.
+                                                </p>
                                             </div>
                                         </td>
                                     </tr>

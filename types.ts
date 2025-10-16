@@ -134,3 +134,9 @@ export const isValidTime = (time: string): boolean => {
     if (!time) return true; 
     return /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time);
 };
+
+export const isValidPrice = (price: number): boolean => {
+    if (typeof price !== 'number' || isNaN(price)) return false;
+    // Check if the number is non-negative and has at most two decimal places
+    return price >= 0 && /^\d+(\.\d{1,2})?$/.test(price.toFixed(2));
+};

@@ -48,6 +48,20 @@ service cloud.firestore {
         // Transactions should be immutable
     }
 
+    match /transactions/{transactionId} {
+        allow read: if isViewer() ||
+        isAdmin();
+        allow create: if isAdmin(); // Only admins can create transactions
+        // FIX: Allow admin to update and delete for inline editing / correction purposes
+        allow update, delete: if isAdmin(); 
+        
+        // Optional: Add specific update validation if needed (e.g., only update date)
+        // allow update: if isAdmin() && (
+        //     request.resource.data.keys().hasOnly(['transactionDate', 'totalPrice']) ||
+        //     request.resource.data.keys().hasOnly(['transactionDate'])
+        // );
+    }
+
     match /events/{eventId} {
         allow read: if isViewer() ||
         isAdmin();

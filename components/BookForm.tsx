@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Book } from '../types';
+import { Book, isValidPrice } from '../types';
 
 interface BookFormProps {
     isOpen: boolean;
@@ -56,11 +56,11 @@ const BookForm: React.FC<BookFormProps> = ({ isOpen, onClose, onSave, bookToEdit
         if (!formState.title) newErrors.title = 'Title is required.';
         if (!formState.author) newErrors.author = 'Author is required.';
         
-        if (price !== undefined) {
-             if (isNaN(price)) newErrors.price = 'Price must be a number.';
-             else if (price < 0) newErrors.price = 'Price cannot be negative.';
-        } else {
+        // UPDATED VALIDATION USING isValidPrice
+        if (price === undefined || isNaN(price)) {
              newErrors.price = 'Price is required.';
+        } else if (!isValidPrice(price)) {
+             newErrors.price = 'Price must be a valid positive currency value (e.g., 12.99).';
         }
         
         if (stock !== undefined) {
