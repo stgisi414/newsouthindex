@@ -1,73 +1,77 @@
 Setup for Remote/Mobile Demo (IMPORTANT)
 
-For the Cloudflare link to work correctly on other devices (like a phone), you must update the Firebase configuration to use your computer's local network IP address. This needs to be checked each time you start a new demo session, as your IP address can change.
+For the Cloudflare link to work correctly on other devices (like a phone), you must make both the Vite server and the Firebase Auth Emulator accessible via public URLs.
+
+One-Time Firewall Setup
+
+If you haven't already, you must create firewall rules to allow local network access to your emulators. Run PowerShell as an Administrator and execute each of these commands once:
+
+New-NetFirewallRule -DisplayName "Firebase Auth Emulator" -Direction Inbound -Protocol TCP -LocalPort 9099 -Action Allow
+New-NetFirewallRule -DisplayName "Firebase Firestore Emulator" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow
+New-NetFirewallRule -DisplayName "Firebase Functions Emulator" -Direction Inbound -Protocol TCP -LocalPort 5003 -Action Allow
+New-NetFirewallRule -DisplayName "Vite Dev Server" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow
+
+
+Per-Session Demo Setup
+
+This needs to be done each time you start a new demo session, as your IP address and tunnel URLs can change.
 
 Find Your Local IP Address:
-Open PowerShell and run ipconfig. Look for the "IPv4 Address" under your main network connection (it usually starts with 192.168.x.x).
+Open PowerShell and run ipconfig. Find the "IPv4 Address" under your main network connection (it usually starts with 192.168.x.x).
+
+Run Terminals (4 total):
+You will need to open four separate PowerShell terminals.
+
+Terminal 1: Start Firebase Emulators
+
+cd C:\code2\newsouthindex
+firebase emulators:start
+
+
+Terminal 2: Start the Vite Frontend Server
+
+cd C:\code2\newsouthindex
+npm run dev
+
+
+Terminal 3: Start Cloudflare Tunnel for Vite
+This exposes your web app to the internet.
+
+cd C:\codetools
+.\cloudflared.exe tunnel --url http://localhost:3000
+
+
+Note the .trycloudflare.com URL it gives you. This is your main app link.
+
+Terminal 4: Start Cloudflare Tunnel for Auth Emulator
+This gives the authentication service a public URL to solve the Google Sign-In issue. Use the IP address you found in step 1.
+
+cd C:\codetools
+.\cloudflared.exe tunnel --url http://192.168.4.58:9099
+
+
+Note the different .trycloudflare.com URL this terminal provides.
 
 Update the Firebase Config:
-Open the file src/firebaseConfig.ts. Find the emulatorHost variable and replace its value with the IP address you just found.
+Open src/firebaseConfig.ts. You need to use both the public Auth Tunnel URL and your local IP address.
+
+authHost should be the full URL from Terminal 4.
+
+emulatorHost should be your local IP address from Step 1 for the other services.
 
 // src/firebaseConfig.ts
 
 if (import.meta.env.DEV) {
-  // Replace this IP with the one from ipconfig
-  const emulatorHost = "192.168.1.123"; 
+  // From ipconfig (for Firestore and Functions)
+  const emulatorHost = "192.168.4.58"; 
 
-  connectAuthEmulator(auth, `http://${emulatorHost}:9099`);
-  connectFirestoreEmulator(db, emulatorHost, 8080);
-  connectFunctionsEmulator(functions, emulatorHost, 5003);
+  // From Terminal 4 (the Auth tunnel URL)
+  const authHost = "https://your-auth-tunnel-name.trycloudflare.com";
+
+  connectAuthEmulator(auth, authHost); // <-- Use public URL for Auth
+  connectFirestoreEmulator(db, emulatorHost, 8080); // <-- Use local IP for others
+  connectFunctionsEmulator(functions, emulatorHost, 5003); // <-- Use local IP for others
 }
 
 
-Running the Development Environment
-
-You will need to open three separate PowerShell terminals.
-
-Terminal 1: Start Firebase Emulators
-
-This terminal will run the local backend, including the database, authentication, and cloud functions.
-
-Navigate to the project root directory:
-
-cd C:\code2\newsouthindex
-
-
-Start the Firebase Emulators:
-
-firebase emulators:start
-
-
-Keep this terminal running.
-
-Terminal 2: Start the Vite Frontend Server
-
-This terminal will compile and serve the React application, which will automatically reload when you make code changes.
-
-Navigate to the project root directory:
-
-cd C:\code2\newsouthindex
-
-
-Start the Vite development server:
-
-npm run dev
-
-
-This will make the application available locally at http://localhost:3000. Keep this terminal running.
-
-Terminal 3: Start Cloudflare Tunnel for Live Demo
-
-This terminal creates a secure, public URL that tunnels to your local Vite server, allowing for a clean, warning-free demo.
-
-Navigate to the directory where you saved the Cloudflare executable:
-
-cd C:\codetools
-
-
-Start the tunnel:
-
-.\cloudflared.exe tunnel --url http://localhost:3000
-
-
-The output will provide a URL ending in .trycloudflare.com. This is your live, shareable demo link. Keep this terminal running for the duration of the demo.
+After completing these steps, restart your Vite and Emulator terminals, then try accessing the main app link (from Terminal 3) on your phone again. The Google Authentication should now complete successfully.

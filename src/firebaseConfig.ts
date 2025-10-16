@@ -23,10 +23,13 @@ export const functions = getFunctions(app);
 
 // ADD THIS SECTION TO CONNECT TO EMULATORS
 if (import.meta.env.DEV) {
-  // Replace with your actual local network IP
+  // From ipconfig (for Firestore and Functions)
   const emulatorHost = "192.168.4.58"; 
 
-  connectAuthEmulator(auth, `http://${emulatorHost}:9099`);
-  connectFirestoreEmulator(db, emulatorHost, 8080);
-  connectFunctionsEmulator(functions, emulatorHost, 5003);
+  // From Terminal 4 (the Auth tunnel URL)
+  const authHost = "https://periods-utilities-billion-gba.trycloudflare.com";
+
+  connectAuthEmulator(auth, authHost); // <-- Use public URL for Auth
+  connectFirestoreEmulator(db, emulatorHost, 8080); // <-- Use local IP for others
+  connectFunctionsEmulator(functions, emulatorHost, 5003); // <-- Use local IP for others
 }
