@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, Auth, connectAuthEmulator } from "firebase/auth"; // <-- Import Auth type
-import { initializeFirestore, Firestore } from "firebase/firestore"; // <-- Import Firestore type
-import { getFunctions, FirebaseFunctions } from "firebase/functions"; // <-- Import FirebaseFunctions type
+import { initializeFirestore, Firestore, connectFirestoreEmulator } from "firebase/firestore"; // <-- Import Firestore type and connectFirestoreEmulator
+import { getFunctions, FirebaseFunctions, connectFunctionsEmulator } from "firebase/functions"; // <-- Import FirebaseFunctions type and connectFunctionsEmulator
 
 // Your web app's Firebase configuration using environment variables
 const firebaseConfig = {
@@ -22,24 +22,21 @@ export let db: Firestore; // Declare db, initialize later
 
 // Connect to emulators using permanent Cloudflare Tunnels in development
 if (import.meta.env.DEV) {
-  // --- Permanent Tunnel URLs for projectgrid.tech ---
-  const authTunnelUrl = "https://auth.projectgrid.tech";
-  const functionsTunnelUrl = "https://functions.projectgrid.tech";
-  const firestoreTunnelHostname = "firestore.projectgrid.tech";
+  // We use local emulator ports for connections, and rely on Cloudflare to proxy the hostname traffic back to localhost.
 
-  // 1. Auth Emulator: Re-configures the existing 'auth' object
-  connectAuthEmulator(auth, authTunnelUrl, { disableWarnings: true });
+  // 1. Auth Emulator: Use standard local setup.
+  connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
 
-  // FIX 2: Re-initialize 'functions' for the DEV environment, passing the custom domain.
-  functions = getFunctions(app, { customDomain: functionsTunnelUrl }); 
+  // 2. Functions Emulator: Connect to local port (5003).
+  connectFunctionsEmulator(functions, "localhost", 5003); 
 
-  // 3. Firestore Emulator: Initialize 'db' for DEV (only runs here)
+  // 3. Firestore Emulator: Initialize first, then connect to the local port,
+  //    and force long-polling to prevent proxying issues with WebChannels.
   db = initializeFirestore(app, {
-    host: firestoreTunnelHostname,
-    port: 443,
-    ssl: true, 
+    experimentalForceLongPolling: true,
   });
-
+  connectFirestoreEmulator(db, "localhost", 8080);
+  
 } else {
   // For production, initialize db normally (only runs here)
   db = initializeFirestore(app, {});

@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Contact, Book } from '../types';
+import { Contact, Book, Transaction } from '../types';
 
 interface TransactionFormProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (transactionData: { contactId: string; booksWithQuantity: { book: Book; quantity: number }[] }) => void;
+    onSave: (data: { transactionToEdit?: Transaction | null; contactId: string; booksWithQuantity: { book: Book; quantity: number }[] }) => void;
     contacts: Contact[];
     books: Book[];
+    transactionToEdit?: Transaction | null; // NEW prop
 }
 
-const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSave, contacts, books }) => {
+const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSave, contacts, books, transactionToEdit }) => {
     const [contactId, setContactId] = useState('');
     const [selectedBooks, setSelectedBooks] = useState<Map<string, { book: Book; quantity: number }>>(new Map());
     const [bookSearch, setBookSearch] = useState('');
@@ -21,17 +22,35 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
             setSelectedBooks(new Map());
             setBookSearch('');
             setErrors({});
+        } else if (transactionToEdit) {
+            setContactId(transactionToEdit.contactId);
+            const initialMap = new Map<string, { book: Book; quantity: number }>();
+            transactionToEdit.books.forEach(tBook => {
+                const fullBook = books.find(b => b.id === tBook.id);
+                if (fullBook) {
+                    initialMap.set(tBook.id, { book: fullBook, quantity: tBook.quantity });
+                }
+            });
+            setSelectedBooks(initialMap);
         }
-    }, [isOpen]);
+    }, [isOpen, transactionToEdit, books]);
 
     const filteredBooks = useMemo(() => {
-        if (!bookSearch) return books.filter(b => b.stock > 0);
-        return books.filter(book =>
-            book.stock > 0 &&
-            ((book.title || '').toLowerCase().includes(bookSearch.toLowerCase()) ||
-            (book.author || '').toLowerCase().includes(bookSearch.toLowerCase()))
-        );
-    }, [books, bookSearch]);
+        // Include books that are currently selected, even if out of stock
+        const selectedBookIds = Array.from(selectedBooks.keys());
+        
+        return books.filter(book => {
+            const isSelected = selectedBookIds.includes(book.id);
+            const isAvailable = book.stock > 0;
+            const matchesSearch = !bookSearch || (
+                (book.title || '').toLowerCase().includes(bookSearch.toLowerCase()) ||
+                (book.author || '').toLowerCase().includes(bookSearch.toLowerCase())
+            );
+            
+            // Show if selected OR if available and matches search
+            return isSelected || (isAvailable && matchesSearch);
+        });
+    }, [books, bookSearch, selectedBooks]);
 
     const totalPrice = useMemo(() => {
         return Array.from(selectedBooks.values()).reduce((sum, { book, quantity }) => sum + (book.price * (quantity || 0)), 0);
@@ -46,6 +65,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
         if (newSelection.has(book.id)) {
             newSelection.delete(book.id);
         } else {
+            // For new selection, set quantity to 1
             newSelection.set(book.id, { book, quantity: 1 });
         }
         setSelectedBooks(newSelection);
@@ -54,10 +74,25 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
     const handleQuantityChange = (bookId: string, newQuantityValue: number) => {
         const newSelection = new Map(selectedBooks);
         const item = newSelection.get(bookId);
+        
         if (item) {
-            // FIX: Allow NaN for empty inputs, but ensure it's at least 0 and not more than stock.
-            const quantity = isNaN(newQuantityValue) ? NaN : Math.max(0, Math.min(newQuantityValue, item.book.stock));
-            newSelection.set(bookId, { ...item, quantity });
+            let quantity = isNaN(newQuantityValue) ? 0 : Math.floor(newQuantityValue);
+            
+            // When editing, we need to consider the current quantity already in the transaction
+            const originalQuantity = transactionToEdit?.books.find(b => b.id === bookId)?.quantity || 0;
+            
+            // Available stock is: (current stock) + (original quantity in this transaction)
+            const maxAllowed = item.book.stock + originalQuantity;
+            
+            // Clamp the new quantity between 1 and the max allowed (or 0 if deleting)
+            quantity = Math.max(0, Math.min(quantity, maxAllowed));
+
+            // Remove if quantity is set to 0, otherwise update
+            if (quantity === 0) {
+                 newSelection.delete(bookId);
+            } else {
+                newSelection.set(bookId, { ...item, quantity });
+            }
             setSelectedBooks(newSelection);
         }
     };
@@ -66,13 +101,20 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
         const newErrors: { [key: string]: string } = {};
         if (!contactId) newErrors.contactId = 'A customer must be selected.';
         if (selectedBooks.size === 0) newErrors.books = 'At least one book must be selected.';
-        // Also check if any selected book has a quantity of 0 or NaN
-        for (const { quantity } of selectedBooks.values()) {
-            if (isNaN(quantity) || quantity <= 0) {
-                newErrors.books = 'All selected books must have a quantity of at least 1.';
+        
+        for (const { book, quantity } of selectedBooks.values()) {
+            if (quantity === 0 || isNaN(quantity)) {
+                newErrors.books = `Quantity for "${book.title}" cannot be zero.`;
                 break;
             }
+            // Additional check for maximum stock constraint (handled by handler, but good to double check on submit)
+            const originalQuantity = transactionToEdit?.books.find(b => b.id === book.id)?.quantity || 0;
+            if (quantity > (book.stock + originalQuantity)) {
+                 newErrors.books = `Quantity for "${book.title}" exceeds available stock.`;
+                 break;
+            }
         }
+        
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -80,22 +122,26 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (validate()) {
+            // Pass the transactionToEdit object back so App.tsx knows whether to add or update
             onSave({
+                transactionToEdit,
                 contactId,
                 booksWithQuantity: Array.from(selectedBooks.values()).map(item => ({...item, quantity: item.quantity || 0}))
             });
+            onClose();
         }
     };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center">
             <div className="bg-white rounded-lg shadow-2xl p-8 m-4 max-w-2xl w-full max-h-[90vh] flex flex-col">
-                <h2 className="text-2xl font-bold text-gray-800 mb-6">New Transaction</h2>
+                <h2 className="text-2xl font-bold text-gray-800 mb-6">{transactionToEdit ? 'Edit Transaction' : 'New Transaction'}</h2>
                 <form onSubmit={handleSubmit} className="flex-grow flex flex-col overflow-hidden">
                     <div className="space-y-6 flex-grow overflow-y-auto pr-2">
                         <div>
-                            <label htmlFor="contactId" className="block text-sm font-medium text-gray-700">Customer</label>
-                            <select id="contactId" value={contactId} onChange={(e) => setContactId(e.target.value)} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.contactId ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm`}>
+                            <label htmlFor="contactId" className="block text-sm font-medium text-gray-700">Customer <span className="text-red-500">*</span></label>
+                            {/* Disable customer change if editing an existing transaction to maintain integrity */}
+                            <select id="contactId" value={contactId} onChange={(e) => setContactId(e.target.value)} disabled={!!transactionToEdit} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.contactId ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${transactionToEdit ? 'bg-gray-100 cursor-not-allowed' : ''}`}>
                                 <option value="">Select a customer...</option>
                                 {contacts.map(c => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
                             </select>
@@ -109,21 +155,36 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ isOpen, onClose, onSa
                         </div>
 
                         <div className="border border-gray-200 rounded-md h-64 overflow-y-auto">
-                            {filteredBooks.map(book => (
-                                <div key={book.id} className="flex items-center justify-between p-3 border-b last:border-b-0">
-                                    <div className="flex items-center">
-                                        <input type="checkbox" checked={selectedBooks.has(book.id)} onChange={() => handleBookToggle(book)} className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-                                        <div className="ml-3 text-sm">
-                                            <label className="font-medium text-gray-900">{book.title}</label>
-                                            <p className="text-gray-500">{book.author} - ${book.price.toFixed(2)} (In stock: {book.stock})</p>
+                            {filteredBooks.map(book => {
+                                const isSelected = selectedBooks.has(book.id);
+                                const currentItem = selectedBooks.get(book.id);
+                                const maxStock = book.stock + (transactionToEdit?.books.find(b => b.id === book.id)?.quantity || 0);
+
+                                return (
+                                    <div key={book.id} className="flex items-center justify-between p-3 border-b last:border-b-0 hover:bg-gray-50">
+                                        <div className="flex items-center">
+                                            <input type="checkbox" checked={isSelected} onChange={() => handleBookToggle(book)} className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
+                                            <div className="ml-3 text-sm">
+                                                <label className="font-medium text-gray-900">{book.title}</label>
+                                                <p className="text-gray-500">{book.author} - ${book.price.toFixed(2)} (In stock: {book.stock})</p>
+                                            </div>
                                         </div>
+                                        {isSelected && currentItem && (
+                                            <div className="flex items-center space-x-2">
+                                                <span className="text-xs text-gray-500">Max: {maxStock}</span>
+                                                <input 
+                                                    type="number" 
+                                                    min="0" 
+                                                    max={maxStock} 
+                                                    value={currentItem.quantity || ''} 
+                                                    onChange={(e) => handleQuantityChange(book.id, parseInt(e.target.value, 10))} 
+                                                    className="w-20 text-center border-gray-300 rounded-md shadow-sm" 
+                                                />
+                                            </div>
+                                        )}
                                     </div>
-                                    {selectedBooks.has(book.id) && (
-                                        // FIX: Allow empty string for NaN values and set min to 0
-                                        <input type="number" min="0" max={book.stock} value={isNaN(selectedBooks.get(book.id)?.quantity || 0) ? '' : selectedBooks.get(book.id)?.quantity} onChange={(e) => handleQuantityChange(book.id, parseInt(e.target.value, 10))} className="w-20 text-center border-gray-300 rounded-md shadow-sm" />
-                                    )}
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
 

@@ -12,7 +12,6 @@ import {
   query,
   orderBy,
   onSnapshot,
-  getDoc,
   writeBatch,
   increment,
   arrayUnion,
@@ -20,11 +19,19 @@ import {
 } from "firebase/firestore";
 import Dashboard from "./components/Dashboard";
 import { Auth } from "./components/Auth";
-import { AppUser, Contact, Category, UserRole, Book, Transaction, Event } from "./types";
+import { AppUser, Contact, UserRole, Book, Transaction, Event } from "./types";
 
 const seedDatabase = httpsCallable(functions, 'seedDatabase');
 
 type View = 'contacts' | 'books' | 'transactions' | 'reports' | 'events';
+
+// Utility function to remove undefined values from an object
+const removeUndefined = (obj: Record<string, any>) => {
+    return Object.fromEntries(
+        Object.entries(obj).filter(([, value]) => value !== undefined)
+    );
+};
+
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -37,6 +44,20 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
   const seeded = useRef(false);
+
+  // NEW: Separate useEffect to listen for all users (required for 'Become First Admin' check, even for applicants)
+  useEffect(() => {
+    let unsubscribeUsers = () => {};
+    if (user) {
+      const usersQuery = query(collection(db, "users"));
+      unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
+        setUsers(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as AppUser)));
+      });
+      return () => unsubscribeUsers();
+    } else {
+      setUsers([]);
+    }
+  }, [user]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -91,24 +112,14 @@ function App() {
         setEvents(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as Event)));
       });
 
-      let unsubscribeUsers = () => {};
-      if (user) {
-        const usersQuery = query(collection(db, "users"));
-        unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
-          setUsers(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as AppUser)));
-        });
-      }
-
       return () => {
         unsubscribeContacts();
         unsubscribeBooks();
         unsubscribeTransactions();
-        unsubscribeUsers();
         unsubscribeEvents();
       };
     } else {
       setContacts([]);
-      setUsers([]);
       setBooks([]);
       setTransactions([]);
       setEvents([]);
@@ -133,20 +144,20 @@ function App() {
     }
   };
 
-  const updateContact = async (contactId: string, updatedData: Partial<Contact>) => {
-    if (!isAdmin) {
-      return { success: false, message: "Sorry, only admins can update contacts." };
-    }
+  const updateContact = async (contact: Contact) => {
+    if (!isAdmin) return;
     try {
-      const contactDoc = doc(db, "contacts", contactId);
-      await updateDoc(contactDoc, {
-        ...updatedData,
-        lastModifiedDate: serverTimestamp(),
+      const contactDoc = doc(db, "contacts", contact.id);
+      
+      // FIX: Filter out 'undefined' values before sending to Firestore
+      const updateData = removeUndefined({
+          ...contact,
+          lastModifiedDate: serverTimestamp(),
       });
-      return { success: true, message: "Contact updated successfully." };
+      
+      await updateDoc(contactDoc, updateData);
     } catch (error) {
-      console.error("Error updating contact:", error);
-      return { success: false, message: "There was an error updating the contact." };
+        console.error("Error updating contact:", error);
     }
   };
 
@@ -208,6 +219,17 @@ function App() {
     });
 
     await batch.commit();
+  };
+  
+  // NEW: Handler for inline transaction field updates
+  const updateTransaction = async (transaction: Transaction, updatedData: Partial<Transaction>) => {
+      if (!isAdmin) return;
+      const transactionDoc = doc(db, "transactions", transaction.id);
+      
+      // Filter out undefined values (which could occur if updatedData contained one)
+      const sanitizedData = removeUndefined(updatedData);
+
+      await updateDoc(transactionDoc, sanitizedData);
   };
 
   const deleteTransaction = async (transactionId: string) => {
@@ -342,7 +364,8 @@ function App() {
 
         const contactToUpdate = foundContacts[0];
         
-        const result = await updateContact(contactToUpdate.id, updateData || {});
+        // This is a direct update of a single field from AI, wrap it to match the standard function signature
+        const result = await updateContact({ ...contactToUpdate, ...updateData });
         return { ...result, targetView: 'contacts' };
       }
 
@@ -697,24 +720,10 @@ function App() {
     <div className="flex flex-col min-h-screen">
       <main className="flex-grow">
         {user ? (
-         /* userRole === UserRole.APPLICANT ? (
-            <div className="flex items-center justify-center min-h-screen bg-gray-50">
-              <div className="text-center p-8 bg-white rounded-lg shadow-md">
-                <h2 className="text-2xl font-bold mb-4 text-gray-800">Waiting for Approval</h2>
-                <p className="text-gray-600">Your account is pending approval from an administrator.</p>
-                <button
-                  onClick={handleLogout}
-                  className="mt-6 px-4 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition-colors"
-                >
-                  Logout
-                </button>
-              </div>
-            </div>
-          ) : ( */
             <Dashboard
               contacts={contacts}
               onAddContact={addContact}
-              onUpdateContact={(contact) => updateContact(contact.id, contact)}
+              onUpdateContact={updateContact}
               onDeleteContact={deleteContact}
               books={books}
               onAddBook={addBook}
@@ -722,6 +731,7 @@ function App() {
               onDeleteBook={deleteBook}
               transactions={transactions}
               onAddTransaction={addTransaction}
+              onUpdateTransaction={updateTransaction} // NEW HANDLER
               onDeleteTransaction={deleteTransaction}
               events={events}
               onAddEvent={addEvent}
@@ -734,7 +744,6 @@ function App() {
               users={users}
               currentUser={user}
             />
-          //)
         ) : (
           <Auth />
         )}

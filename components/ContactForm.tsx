@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Contact, Category } from '../types';
+import { Contact, Category, isValidEmail, isValidPhone, isValidUrl, isValidZip, isValidState } from '../types';
 
 interface ContactFormProps {
     isOpen: boolean;
@@ -32,7 +32,12 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
 
     useEffect(() => {
         if (contactToEdit) {
-            setFormState(contactToEdit);
+            setFormState({
+                ...contactToEdit,
+                category: contactToEdit.category || initialFormState.category,
+                phone: contactToEdit.phone || '', // Ensure no nulls for phone field
+                url: contactToEdit.url || '', // Ensure no nulls for url field
+            });
         } else {
             setFormState(initialFormState);
         }
@@ -43,26 +48,40 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         
-        // List of fields to auto-capitalize
-        const fieldsToCapitalize = ['honorific', 'firstName', 'middleInitial', 'lastName', 'suffix', 'city', 'state'];
+        // List of fields to auto-capitalize (First letter of each word)
+        const fieldsToCapitalize = ['firstName', 'lastName', 'city'];
+        
+        let processedValue = value;
 
-        if (fieldsToCapitalize.includes(name) && value.length > 0) {
-            const capitalizedValue = value.charAt(0).toUpperCase() + value.slice(1);
-            setFormState(prev => ({ ...prev, [name]: capitalizedValue }));
-        } else {
-            setFormState(prev => ({ ...prev, [name]: value }));
+        if (fieldsToCapitalize.includes(name)) {
+            processedValue = value.toLowerCase().split(' ').map(word => 
+                word.charAt(0).toUpperCase() + word.slice(1)
+            ).join(' ');
         }
+        
+        if (name === 'state') {
+            processedValue = value.toUpperCase().substring(0, 2);
+        }
+
+
+        setFormState(prev => ({ ...prev, [name]: processedValue }));
     };
     
     const validate = () => {
         const newErrors: { [key: string]: string } = {};
-        if (!formState.firstName) newErrors.firstName = 'First name is required';
-        if (!formState.lastName) newErrors.lastName = 'Last name is required';
-        if (!formState.email) {
-            newErrors.email = 'Email is required';
-        } else if (!/\S+@\S+\.\S+/.test(formState.email)) {
-            newErrors.email = 'Email is invalid';
-        }
+        
+        // --- Required Fields ---
+        if (!formState.firstName) newErrors.firstName = 'First name is required.';
+        if (!formState.lastName) newErrors.lastName = 'Last name is required.';
+        if (!formState.email) newErrors.email = 'Email is required.';
+        
+        // --- Format Validations ---
+        if (formState.email && !isValidEmail(formState.email)) newErrors.email = 'Email is invalid.';
+        if (formState.phone && !isValidPhone(formState.phone)) newErrors.phone = 'Phone format is invalid (use only digits, at least 7).';
+        if (formState.url && !isValidUrl(formState.url)) newErrors.url = 'URL is invalid.';
+        if (formState.zip && !isValidZip(formState.zip)) newErrors.zip = 'Zip code must be 5 or 5-4 digits.';
+        if (formState.state && !isValidState(formState.state)) newErrors.state = 'State must be a 2-letter abbreviation.';
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     }
@@ -70,7 +89,12 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (validate()) {
-            onSave(contactToEdit ? { ...formState, id: contactToEdit.id } : formState);
+            // Filter out empty strings/nulls before saving (Firestore best practice)
+            const cleanedState = Object.fromEntries(
+                Object.entries(formState).filter(([, value]) => value !== '' && value !== null)
+            );
+            
+            onSave(contactToEdit ? { ...cleanedState, id: contactToEdit.id } as Contact : cleanedState as Omit<Contact, 'id'>);
             onClose();
         }
     };
@@ -87,16 +111,16 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                             <input type="text" id="honorific" name="honorific" value={formState.honorific || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" />
                         </div>
                         <div className="md:col-span-2">
-                            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name</label>
+                            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name <span className="text-red-500">*</span></label>
                             <input type="text" id="firstName" name="firstName" value={formState.firstName} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.firstName ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} />
                             {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
                         </div>
                         <div className="md:col-span-1">
                             <label htmlFor="middleInitial" className="block text-sm font-medium text-gray-700">MI</label>
-                            <input type="text" id="middleInitial" name="middleInitial" value={formState.middleInitial || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" />
+                            <input type="text" id="middleInitial" name="middleInitial" value={formState.middleInitial || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" maxLength={1} />
                         </div>
                         <div className="md:col-span-3">
-                            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">Last Name</label>
+                            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">Last Name <span className="text-red-500">*</span></label>
                             <input type="text" id="lastName" name="lastName" value={formState.lastName} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.lastName ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} />
                             {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName}</p>}
                         </div>
@@ -108,16 +132,18 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                         {/* Contact Fields */}
                         <div className="md:col-span-2">
                             <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Phone</label>
-                            <input type="tel" id="phone" name="phone" value={formState.phone} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" />
+                            <input type="tel" id="phone" name="phone" value={formState.phone || ''} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.phone ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} />
+                            {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
                         </div>
                         <div className="md:col-span-2">
-                            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
+                            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email <span className="text-red-500">*</span></label>
                             <input type="email" id="email" name="email" value={formState.email} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.email ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} />
                             {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
                         </div>
-                        <div className="md:col-span-2">
+                        <div className="md:col-span-4">
                             <label htmlFor="url" className="block text-sm font-medium text-gray-700">URL</label>
-                            <input type="text" id="url" name="url" value={formState.url || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" />
+                            <input type="text" id="url" name="url" value={formState.url || ''} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.url ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} />
+                            {errors.url && <p className="text-red-500 text-xs mt-1">{errors.url}</p>}
                         </div>
 
                         {/* Address Fields */}
@@ -135,11 +161,13 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                         </div>
                         <div className="md:col-span-1">
                             <label htmlFor="state" className="block text-sm font-medium text-gray-700">State</label>
-                            <input type="text" id="state" name="state" value={formState.state || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" />
+                            <input type="text" id="state" name="state" value={formState.state || ''} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.state ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} maxLength={2} />
+                            {errors.state && <p className="text-red-500 text-xs mt-1">{errors.state}</p>}
                         </div>
                         <div className="md:col-span-1">
                             <label htmlFor="zip" className="block text-sm font-medium text-gray-700">Zip</label>
-                            <input type="text" id="zip" name="zip" value={formState.zip || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" />
+                            <input type="text" id="zip" name="zip" value={formState.zip || ''} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.zip ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} maxLength={10} />
+                            {errors.zip && <p className="text-red-500 text-xs mt-1">{errors.zip}</p>}
                         </div>
 
                         {/* Other Fields */}

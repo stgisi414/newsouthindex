@@ -1,25 +1,25 @@
 import React, { useState, useMemo } from 'react';
 import { AppUser, Contact, Book, Transaction, Event } from '../types';
 import { User } from 'firebase/auth';
-import { httpsCallable } from 'firebase/functions';
-import { functions, auth } from '../src/firebaseConfig';
-import ContactTable from './ContactTable';
-import ContactForm from './ContactForm';
-import BookTable from './BookTable';
-import BookForm from './BookForm';
-import TransactionTable from './TransactionTable';
-import TransactionForm from './TransactionForm';
-import EventTable from './EventTable';
-import EventForm from './EventForm';
-import AIChat from './AIChat';
-import PlusIcon from './icons/PlusIcon';
-import AdminPanel from './AdminPanel';
-import Reports from './Reports';
-import AIAssistantTestSuite from './AIAssistantTestSuite';
+import { httpsCallable } from "firebase/functions";
+import { functions, auth } from "../src/firebaseConfig";
+import ContactTable from "./ContactTable";
+import ContactForm from "./ContactForm";
+import BookTable from "./BookTable";
+import BookForm from "./BookForm";
+import TransactionTable from "./TransactionTable";
+import TransactionForm from "./TransactionForm";
+import EventTable from "./EventTable";
+import EventForm from "./EventForm";
+import AIChat from "./AIChat";
+import PlusIcon from "./icons/PlusIcon";
+import AdminPanel from "./AdminPanel";
+import Reports from "./Reports";
+import AIAssistantTestSuite from "./AIAssistantTestSuite";
 
 interface DashboardProps {
     contacts: Contact[];
-    onAddContact: (contactData: Omit<Contact, 'id'>) => void;
+    onAddContact: (contactData: Omit<Contact, 'id'>) => Promise<{ success: boolean; message?: string }>;
     onUpdateContact: (contact: Contact) => void;
     onDeleteContact: (id: string) => void;
     books: Book[];
@@ -28,6 +28,7 @@ interface DashboardProps {
     onDeleteBook: (id: string) => void;
     transactions: Transaction[];
     onAddTransaction: (data: { contactId: string; booksWithQuantity: { book: Book, quantity: number }[] }) => void;
+    onUpdateTransaction: (transaction: Transaction, updatedData: Partial<Transaction>) => void; // NEW
     onDeleteTransaction: (id: string) => void;
     events: Event[];
     onAddEvent: (eventData: Omit<Event, 'id'>) => void;
@@ -45,7 +46,7 @@ const makeMeAdmin = httpsCallable(functions, 'makeMeAdmin');
 
 type View = 'contacts' | 'books' | 'transactions' | 'reports' | 'events';
 
-const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateContact, onDeleteContact, books, onAddBook, onUpdateBook, onDeleteBook, transactions, onAddTransaction, onDeleteTransaction, events, onAddEvent, onUpdateEvent, onDeleteEvent, onUpdateEventAttendees, onProcessAiCommand, onLogout, isAdmin, users, currentUser }) => {
+const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateContact, onDeleteContact, books, onAddBook, onUpdateBook, onDeleteBook, transactions, onAddTransaction, onUpdateTransaction, onDeleteTransaction, events, onAddEvent, onUpdateEvent, onDeleteEvent, onUpdateEventAttendees, onProcessAiCommand, onLogout, isAdmin, users, currentUser }) => {
     const [currentView, setCurrentView] = useState<View>('contacts');
     const [searchQuery, setSearchQuery] = useState('');
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -53,6 +54,7 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
     const [editingBook, setEditingBook] = useState<Book | null>(null);
     const [isBookFormOpen, setIsBookFormOpen] = useState(false);
     const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
+    const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null); // NEW STATE
     const [isEventFormOpen, setIsEventFormOpen] = useState(false);
     const [editingEvent, setEditingEvent] = useState<Event | null>(null);
     const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
@@ -79,6 +81,8 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
             setAiSearchResults(null);
         }
     };
+
+    // ... (filteredContacts, filteredBooks, filteredTransactions, filteredEvents useMemo blocks - unchanged)
 
     const filteredContacts = useMemo(() => {
         if (aiSearchResults && currentView === 'contacts') {
@@ -125,24 +129,48 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
 
         // 2. Handle the view switch based on the result
         if (result.targetView) {
-            // Determine if the action is a search/count that returns a filtered payload (list of items)
             const isSearchOrCount = ['FIND_CONTACT', 'FIND_BOOK', 'FIND_EVENT', 'FIND_TRANSACTION', 'COUNT_DATA'].includes(intent);
 
             if (isSearchOrCount && result.payload) {
-                // For search/count, switch view and apply filter results
                 setAiSearchResults(result.payload);
                 setCurrentView(result.targetView);
-                setSearchQuery(''); // Clear text search when AI is used for filtering
+                setSearchQuery('');
             } else {
-                // For ADD/UPDATE/DELETE/METRICS, just switch the view and clear any lingering search/filter states
                 setAiSearchResults(null);
                 setSearchQuery('');
                 setCurrentView(result.targetView);
             }
         }
-        // Return the original result for AIChat to display the message
         return result;
     };
+
+    const handleNewTransaction = () => {
+        setEditingTransaction(null);
+        setIsTransactionFormOpen(true);
+    };
+
+    const handleEditTransaction = (transaction: Transaction) => {
+        setEditingTransaction(transaction);
+        setIsTransactionFormOpen(true);
+    };
+    
+    // Updated handler to accept the transaction to edit/null
+    const handleSaveTransaction = (data: { transactionToEdit?: Transaction | null; contactId: string; booksWithQuantity: { book: Book, quantity: number }[] }) => {
+        const { transactionToEdit, ...rest } = data;
+        if (transactionToEdit) {
+            // Note: Since TransactionForm handles the diff logic for updating stock correctly,
+            // we will create a new transaction on edit in Firestore, and let App.tsx handle
+            // the compensation logic for stock/original transaction deletion.
+            onDeleteTransaction(transactionToEdit.id); // Delete the old one (which refunds stock)
+            onAddTransaction(rest); // Add the new one (which deducts new stock)
+            // This simplifies the UI logic but requires the atomic transaction logic in App.tsx
+        } else {
+            onAddTransaction(rest);
+        }
+        setIsTransactionFormOpen(false);
+        setEditingTransaction(null); // Clear editing state
+    };
+
 
     const handleNewBook = () => {
         setEditingBook(null);
@@ -163,11 +191,6 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
         setIsBookFormOpen(false);
     };
     
-    const handleSaveTransaction = (data: { contactId: string; booksWithQuantity: { book: Book, quantity: number }[] }) => {
-        onAddTransaction(data);
-        setIsTransactionFormOpen(false);
-    };
-
     const handleNewContact = () => {
         setEditingContact(null);
         setIsFormOpen(true);
@@ -293,7 +316,7 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                                             <button onClick={handleNewBook} className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700"><PlusIcon className="h-5 w-5 mr-2" />New Book</button>
                                         )}
                                         {currentView === 'transactions' && (
-                                            <button onClick={() => setIsTransactionFormOpen(true)} className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700"><PlusIcon className="h-5 w-5 mr-2" />New Transaction</button>
+                                            <button onClick={handleNewTransaction} className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700"><PlusIcon className="h-5 w-5 mr-2" />New Transaction</button>
                                         )}
                                         {currentView === 'events' && (
                                             <button onClick={handleNewEvent} className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700"><PlusIcon className="h-5 w-5 mr-2" />New Event</button>
@@ -325,7 +348,8 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
 
                         {currentView === 'contacts' && <ContactTable contacts={filteredContacts} onEdit={handleEditContact} onDelete={handleDeleteContact} isAdmin={isAdmin} onUpdateContact={onUpdateContact} />}
                         {currentView === 'books' && <BookTable books={filteredBooks} onEdit={handleEditBook} onDelete={onDeleteBook} isAdmin={isAdmin} onUpdateBook={onUpdateBook} />}
-                        {currentView === 'transactions' && <TransactionTable transactions={filteredTransactions} onDelete={onDeleteTransaction} isAdmin={isAdmin} />}
+                        {/* UPDATED PROPS */}
+                        {currentView === 'transactions' && <TransactionTable transactions={filteredTransactions} onEdit={handleEditTransaction} onDelete={onDeleteTransaction} isAdmin={isAdmin} onUpdateTransaction={onUpdateTransaction} />} 
                         {currentView === 'events' && <EventTable events={events} contacts={contacts} onEdit={handleEditEvent} onDelete={onDeleteEvent} onUpdateAttendees={onUpdateEventAttendees} isAdmin={isAdmin} onUpdateEvent={onUpdateEvent} />}
                         {currentView === 'reports' && <Reports contacts={contacts} transactions={transactions} books={books} />}
                     </div>
@@ -339,10 +363,10 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                         {isAiChatOpen && (
                             <div className="h-[calc(85vh-4rem)]">
                                 <AIChat 
-                                    onCommandProcessed={processAndHandleAiCommand} // <<< USE THE NEW WRAPPER
+                                    onCommandProcessed={processAndHandleAiCommand}
                                     isAdmin={isAdmin} 
                                     currentUser={currentUser} 
-                                    onAiSearch={handleAiSearch} // onAiSearch is now redundant but kept for safety
+                                    onAiSearch={handleAiSearch}
                                 />
                             </div>
                         )}
@@ -367,6 +391,7 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                 onSave={handleSaveTransaction}
                 contacts={contacts}
                 books={books}
+                transactionToEdit={editingTransaction} // NEW PROP
             />
             <EventForm 
                 isOpen={isEventFormOpen}

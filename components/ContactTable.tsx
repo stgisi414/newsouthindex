@@ -1,5 +1,5 @@
 import React, { useState, useMemo, Fragment } from 'react';
-import { Contact } from '../types';
+import { Contact, Category, isValidPhone, isValidUrl } from '../types';
 import EditIcon from './icons/EditIcon';
 import DeleteIcon from './icons/DeleteIcon';
 
@@ -12,7 +12,7 @@ interface ContactTableProps {
 }
 
 type SortKey = keyof Contact;
-type DisplayableContactKey = Exclude<SortKey, 'id'>;
+type DisplayableContactKey = Exclude<SortKey, 'id' | 'lastModifiedDate' | 'createdDate' | 'createdBy'>;
 
 const ALL_CONTACT_FIELDS: { key: DisplayableContactKey; label: string; hiddenInMobile?: boolean }[] = [
     { key: 'firstName', label: 'First Name' },
@@ -23,6 +23,8 @@ const ALL_CONTACT_FIELDS: { key: DisplayableContactKey; label: string; hiddenInM
     { key: 'city', label: 'City', hiddenInMobile: true },
     { key: 'state', label: 'State', hiddenInMobile: true },
 ];
+
+const CATEGORY_VALUES = Object.values(Category); // Get all valid category strings
 
 const ITEMS_PER_PAGE = 10;
 
@@ -71,10 +73,38 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
     };
 
     const handleFieldUpdate = (contact: Contact, field: keyof Contact, value: string) => {
-        if (isAdmin) {
-            const updatedContact = { ...contact, [field]: value };
-            onUpdateContact(updatedContact);
+        if (!isAdmin) return;
+        
+        // --- START VALIDATION AND CLEANUP ---
+        let updatedValue: string | Category | undefined = value.trim();
+        
+        if (field === 'email') {
+            updatedValue = updatedValue.toLowerCase();
         }
+        
+        // FIX: Treat empty string or "-" as undefined for optional fields (resolves hyphen and Firestore undefined error)
+        if (updatedValue === '' || updatedValue === '-') {
+            updatedValue = undefined; 
+        }
+
+        if (updatedValue !== undefined) {
+             // Check phone validation and block update if invalid
+             if (field === 'phone' && !isValidPhone(updatedValue as string)) {
+                 console.error(`Validation Error: Invalid phone format for input: ${value}`);
+                 // NOTE: Returning here prevents onUpdateContact from being called.
+                 return; 
+             }
+             // Check URL validation and block update if invalid
+             if (field === 'url' && !isValidUrl(updatedValue as string)) {
+                 console.error(`Validation Error: Invalid URL format for input: ${value}`);
+                 return; // Block update
+             }
+        }
+        // --- END VALIDATION AND CLEANUP ---
+        
+        // This is only reached if validation passed OR the value was intentionally set to undefined (empty)
+        const updatedContact = { ...contact, [field]: updatedValue };
+        onUpdateContact(updatedContact as Contact);
     };
 
     return (
@@ -107,20 +137,44 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                         {paginatedContacts.map((contact) => (
                             <Fragment key={contact.id}>
                                 <tr className="hover:bg-gray-50 transition-colors duration-150">
-                                    {ALL_CONTACT_FIELDS.map(({ key, hiddenInMobile }) => (
-                                        <td 
-                                            key={key} 
-                                            className={`px-6 py-4 whitespace-nowrap text-sm text-gray-500 
-                                                ${key === 'firstName' || key === 'lastName' ? 'font-medium text-gray-900' : ''}
-                                                ${hiddenInMobile ? 'hidden lg:table-cell' : ''}
-                                            `}
-                                            contentEditable={isAdmin}
-                                            onBlur={(e) => handleFieldUpdate(contact, key as keyof Contact, e.currentTarget.textContent || '')}
-                                            suppressContentEditableWarning={true}
-                                        >
-                                            {contact[key] || '-'}
-                                        </td>
-                                    ))}
+                                    {ALL_CONTACT_FIELDS.map(({ key, hiddenInMobile }) => {
+                                        const isCategory = key === 'category';
+                                        const isEditable = isAdmin && !isCategory;
+                                        
+                                        // Determine display value. Show '' if editable and value is missing.
+                                        const displayValue = contact[key] || (isEditable ? '' : '-');
+
+                                        return (
+                                            <td 
+                                                key={key} 
+                                                className={`px-6 py-4 whitespace-nowrap text-sm text-gray-500 
+                                                    ${key === 'firstName' || key === 'lastName' ? 'font-medium text-gray-900' : ''}
+                                                    ${hiddenInMobile ? 'hidden lg:table-cell' : ''}
+                                                `}
+                                            >
+                                                {isCategory && isAdmin ? (
+                                                    <select
+                                                        value={contact.category}
+                                                        onChange={(e) => handleFieldUpdate(contact, 'category', e.target.value)}
+                                                        className="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                                    >
+                                                        {CATEGORY_VALUES.map((category) => (
+                                                            <option key={category} value={category}>{category}</option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    <span
+                                                        contentEditable={isEditable}
+                                                        onBlur={(e) => isEditable && handleFieldUpdate(contact, key as keyof Contact, e.currentTarget.textContent || '')}
+                                                        suppressContentEditableWarning={true}
+                                                        className={isEditable ? 'inline-block w-full cursor-text' : 'inline-block'}
+                                                    >
+                                                        {displayValue}
+                                                    </span>
+                                                )}
+                                            </td>
+                                        );
+                                    })}
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <div className="flex items-center justify-end space-x-4">
                                             <button 
@@ -142,17 +196,23 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                     <tr className="lg:hidden bg-gray-50">
                                         <td colSpan={ALL_CONTACT_FIELDS.length + 1} className="px-6 py-4">
                                             <div className="space-y-3 text-sm text-gray-600">
-                                                <p><strong className="font-medium text-gray-800">Full Name:</strong> 
-                                                    <span className="mr-2" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'honorific', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.honorific}</span> 
-                                                    <span className="mr-2" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'firstName', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.firstName}</span> 
-                                                    <span className="mr-2" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'middleInitial', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.middleInitial}</span> 
-                                                    <span className="mr-2" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'lastName', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.lastName}</span> 
-                                                    <span className="mr-2" contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'suffix', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.suffix}</span>
-                                                </p>
-                                                <p><strong className="font-medium text-gray-800">Phone:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'phone', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.phone || '-'}</span></p>
-                                                <p><strong className="font-medium text-gray-800">URL:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'url', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.url || '-'}</span></p>
-                                                <p><strong className="font-medium text-gray-800">Address:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'address1', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.address1 || ''}</span> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'address2', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.address2 || ''}</span> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'city', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.city || ''}</span> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'state', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.state || ''}</span> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'zip', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.zip || ''}</span></p>
-                                                <p><strong className="font-medium text-gray-800">Notes:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'notes', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.notes || '-'}</span></p>
+                                                {/* Apply consistent display logic and validation to mobile view */}
+                                                <p><strong className="font-medium text-gray-800">Phone:</strong> <span 
+                                                    contentEditable={isAdmin} 
+                                                    onBlur={(e) => handleFieldUpdate(contact, 'phone', e.currentTarget.textContent || '')} 
+                                                    suppressContentEditableWarning={true}
+                                                >
+                                                    {contact.phone || (isAdmin ? '' : '-')}
+                                                </span></p>
+                                                <p><strong className="font-medium text-gray-800">URL:</strong> <span 
+                                                    contentEditable={isAdmin} 
+                                                    onBlur={(e) => handleFieldUpdate(contact, 'url', e.currentTarget.textContent || '')} 
+                                                    suppressContentEditableWarning={true}
+                                                >
+                                                    {contact.url || (isAdmin ? '' : '-')}
+                                                </span></p>
+                                                <p><strong className="font-medium text-gray-800">Address:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'address1', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.address1 || (isAdmin ? '' : '-')}</span> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'address2', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.address2 || (isAdmin ? '' : '-')}</span> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'city', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.city || (isAdmin ? '' : '-')}</span> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'state', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.state || (isAdmin ? '' : '-')}</span> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'zip', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.zip || (isAdmin ? '' : '-')}</span></p>
+                                                <p><strong className="font-medium text-gray-800">Notes:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(contact, 'notes', e.currentTarget.textContent || '')} suppressContentEditableWarning={true}>{contact.notes || (isAdmin ? '' : '-')}</span></p>
                                             </div>
                                         </td>
                                     </tr>

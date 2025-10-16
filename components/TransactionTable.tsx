@@ -1,21 +1,25 @@
 import React, { useState, useMemo, Fragment } from 'react';
 import { Transaction } from '../types';
 import DeleteIcon from './icons/DeleteIcon';
+import EditIcon from './icons/EditIcon'; // Added EditIcon
 
 interface TransactionTableProps {
     transactions: Transaction[];
+    onEdit: (transaction: Transaction) => void; // Added onEdit prop
     onDelete: (id: string) => void;
     isAdmin: boolean;
+    onUpdateTransaction: (transaction: Transaction, updatedData: Partial<Transaction>) => void; // Added onUpdateTransaction
 }
 
 const ITEMS_PER_PAGE = 10;
 
-const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDelete, isAdmin }) => {
+const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onEdit, onDelete, isAdmin, onUpdateTransaction }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [expandedTransactionId, setExpandedTransactionId] = useState<string | null>(null);
 
     const sortedTransactions = useMemo(() => {
-        return [...transactions].sort((a, b) => b.transactionDate.seconds - a.transactionDate.seconds);
+        // NOTE: Sorting by transactionDate.seconds is correct for Firestore Timestamps
+        return [...transactions].sort((a, b) => b.transactionDate?.seconds - a.transactionDate?.seconds);
     }, [transactions]);
 
     const totalPages = Math.ceil(sortedTransactions.length / ITEMS_PER_PAGE);
@@ -27,6 +31,25 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
 
     const handleToggleExpand = (transactionId: string) => {
         setExpandedTransactionId(prevId => (prevId === transactionId ? null : transactionId));
+    };
+    
+    // NEW: Handle inline field updates
+    const handleFieldUpdate = (transaction: Transaction, field: keyof Transaction, value: string) => {
+        if (!isAdmin) return;
+        
+        let updatedValue: string | number = value;
+
+        if (field === 'totalPrice') {
+            const price = parseFloat(value);
+            if (isNaN(price) || price < 0) {
+                console.error("Invalid price update:", value);
+                // Optionally visually revert or show error here
+                return; 
+            }
+            updatedValue = price;
+        }
+
+        onUpdateTransaction(transaction, { [field]: updatedValue });
     };
 
     return (
@@ -45,9 +68,27 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
                         {paginatedTransactions.map((transaction) => (
                             <Fragment key={transaction.id}>
                                 <tr className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{transaction.contactName}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{transaction.transactionDate?.toDate().toLocaleDateString()}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${transaction.totalPrice.toFixed(2)}</td>
+                                    {/* Inline Editable Contact Name */}
+                                    <td 
+                                        className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" 
+                                        contentEditable={isAdmin}
+                                        onBlur={(e) => handleFieldUpdate(transaction, 'contactName', e.currentTarget.textContent || '')}
+                                        suppressContentEditableWarning={true}
+                                    >
+                                        {transaction.contactName}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {transaction.transactionDate?.toDate().toLocaleDateString()}
+                                    </td>
+                                    {/* Inline Editable Total Price */}
+                                    <td 
+                                        className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"
+                                        contentEditable={isAdmin}
+                                        onBlur={(e) => handleFieldUpdate(transaction, 'totalPrice', e.currentTarget.textContent || '')}
+                                        suppressContentEditableWarning={true}
+                                    >
+                                        ${transaction.totalPrice.toFixed(2)}
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <div className="flex items-center justify-end space-x-4">
                                             <button 
@@ -57,9 +98,14 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ transactions, onDel
                                                 {expandedTransactionId === transaction.id ? 'Hide' : 'View'}
                                             </button>
                                             {isAdmin && (
-                                                <button onClick={() => onDelete(transaction.id)} className="text-red-600 hover:text-red-900">
-                                                    <DeleteIcon className="h-5 w-5" />
-                                                </button>
+                                                <>
+                                                    <button onClick={() => onEdit(transaction)} className="text-indigo-600 hover:text-indigo-900">
+                                                        <EditIcon className="h-5 w-5"/>
+                                                    </button>
+                                                    <button onClick={() => onDelete(transaction.id)} className="text-red-600 hover:text-red-900">
+                                                        <DeleteIcon className="h-5 w-5" />
+                                                    </button>
+                                                </>
                                             )}
                                         </div>
                                     </td>
