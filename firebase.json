@@ -20,21 +20,10 @@
     "rules": "firestore.rules"
   },
   "emulators": {
-    "auth": {
-      "port": 9099
-    },
-    "functions": {
-      "port": 5003
-    },
-    "firestore": {
-      "port": 8080
-    },
-    "hosting": {
-      "port": 5000
-    },
-    "ui": {
-      "enabled": true,
-      "port": 4000
-    }
+    "auth": { "host": "0.0.0.0", "port": 9099 },
+    "functions": { "host": "0.0.0.0", "port": 5003 },
+    "firestore": { "host": "0.0.0.0", "port": 8080 },
+    "hosting": { "host": "0.0.0.0", "port": 5000 },
+    "ui": { "enabled": true, "port": 4000 }
   }
 }

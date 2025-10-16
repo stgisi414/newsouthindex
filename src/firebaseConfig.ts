@@ -1,7 +1,8 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, connectAuthEmulator } from "firebase/auth"; // Import connectAuthEmulator
-import { getFirestore, connectFirestoreEmulator } from "firebase/firestore"; // Import connectFirestoreEmulator
-import { getFunctions, connectFunctionsEmulator } from "firebase/functions"; // Import connectFunctionsEmulator
+import { getAuth, connectAuthEmulator } from "firebase/auth";
+// UPDATE: Import initializeFirestore instead of getFirestore directly for this block
+import { initializeFirestore, connectFirestoreEmulator } from "firebase/firestore"; 
+import { getFunctions } from "firebase/functions";
 
 // Your web app's Firebase configuration using environment variables
 const firebaseConfig = {
@@ -13,23 +14,36 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_APP_ID,
 };
 
-// Initialize Firebase ONCE
 const app = initializeApp(firebaseConfig);
 
-// Export the instances of the services for the rest of your app to use
+// Export the instances of the services
 export const auth = getAuth(app);
-export const db = getFirestore(app);
 export const functions = getFunctions(app);
 
-// ADD THIS SECTION TO CONNECT TO EMULATORS
+// Initialize db here but it will be reassigned in the DEV block
+export let db = initializeFirestore(app, {});
+
+// Connect to emulators using permanent Cloudflare Tunnels in development
 if (import.meta.env.DEV) {
-  // From ipconfig (for Firestore and Functions)
-  const emulatorHost = "192.168.4.58"; 
+  // --- Permanent Tunnel URLs for projectgrid.tech ---
+  const authTunnelUrl = "https://auth.projectgrid.tech";
+  const functionsTunnelUrl = "https://functions.projectgrid.tech";
+  const firestoreTunnelHostname = "firestore.projectgrid.tech";
 
-  // From Terminal 4 (the Auth tunnel URL)
-  const authHost = "https://periods-utilities-billion-gba.trycloudflare.com";
+  // 1. Auth Emulator (uses a full URL)
+  connectAuthEmulator(auth, authTunnelUrl, { disableWarnings: true });
 
-  connectAuthEmulator(auth, authHost); // <-- Use public URL for Auth
-  connectFirestoreEmulator(db, emulatorHost, 8080); // <-- Use local IP for others
-  connectFunctionsEmulator(functions, emulatorHost, 5003); // <-- Use local IP for others
+  // 2. Functions Emulator (set customDomain to the full URL)
+  functions.customDomain = functionsTunnelUrl;
+
+  // 3. Firestore Emulator (Explicitly set SSL to true)
+  db = initializeFirestore(app, {
+    host: firestoreTunnelHostname,
+    port: 443,
+    ssl: true, // This is the critical line that forces HTTPS
+  });
+
+} else {
+  // For production, initialize Firestore normally
+  db = initializeFirestore(app, {});
 }

@@ -14,3 +14,10 @@ root.render(
     <App />
   </React.StrictMode>
 );
+
+if (import.meta.env.DEV) {
+  const eruda = (window as any).eruda;
+  if (eruda) {
+    eruda.init();
+  }
+}

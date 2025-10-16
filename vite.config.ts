@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: '0.0.0.0',
-      allowedHosts: ['.trycloudflare.com'],
+      allowedHosts: ['app.projectgrid.tech'],
     },
     plugins: [
       react(),
