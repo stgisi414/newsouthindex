@@ -2,8 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Contact, Category, isValidEmail, isValidPhone, isValidUrl, isValidZip, isValidState } from '../types';
 import ClipboardIcon from './icons/ClipboardIcon';
 
-// Extend the JSX IntrinsicElements interface to include the Google Maps custom element
-// Add the onGmpPlaceChange property for React-style event handling
+// Define the structure for the fetched Place object
+interface FetchedPlace {
+    addressComponents?: google.maps.places.PlaceAddressComponent[];
+    formattedAddress?: string;
+}
+
+// Extend JSX to recognize the Google web component
 declare global {
   namespace JSX {
     interface IntrinsicElements {
@@ -11,39 +16,34 @@ declare global {
         value: string;
         "country-codes": string;
         "place-fields": string;
-        onGmpPlaceChange?: (event: CustomEvent) => void; // Add this line
+        place?: google.maps.places.Place | null;
       }, HTMLElement>;
     }
   }
 }
 
-// --- API Loader Function ---
+// API Loader Function (no changes)
 const loadGoogleMapsScript = () => {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
   const scriptId = 'google-maps-script';
-  
   return new Promise<void>((resolve, reject) => {
     if (document.getElementById(scriptId) || window.google?.maps?.places) {
       resolve();
       return;
     }
-    
     const script = document.createElement('script');
     script.id = scriptId;
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=beta&loading=async`;
     script.async = true;
     script.defer = true;
-    
     script.onload = () => resolve();
     script.onerror = (error) => {
         console.error('Google Maps script failed to load.', error);
         reject(new Error('Google Maps script failed to load.'));
     };
-    
     document.head.appendChild(script);
   });
 };
-
 
 interface ContactFormProps {
     isOpen: boolean;
@@ -53,61 +53,107 @@ interface ContactFormProps {
 }
 
 const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, contactToEdit }) => {
+    // --- State Hooks ---
     const initialFormState = {
         honorific: '', firstName: '', middleInitial: '', lastName: '', suffix: '',
         category: Category.OTHER, phone: '', email: '', url: '',
         address1: '', address2: '', city: '', state: '', zip: '', notes: '',
     };
-
     const [formState, setFormState] = useState<Omit<Contact, 'id'>>(initialFormState);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
-    const autocompleteRef = useRef<HTMLElement & { value: string, place: any } | null>(null);
+    const autocompleteRef = useRef<HTMLElement & { value: string, place?: google.maps.places.Place | null } | null>(null);
     const [mapsApiLoaded, setMapsApiLoaded] = useState(false);
-    const [placeDetails, setPlaceDetails] = useState<any>(null);
+    const [placeDetails, setPlaceDetails] = useState<FetchedPlace | null>(null);
 
+
+    // --- Effects ---
     useEffect(() => {
         if (isOpen) {
-            loadGoogleMapsScript()
-                .then(() => setMapsApiLoaded(true))
-                .catch(console.error);
+            loadGoogleMapsScript().then(() => setMapsApiLoaded(true)).catch(console.error);
+        } else {
+             setMapsApiLoaded(false);
+             setPlaceDetails(null);
         }
     }, [isOpen]);
 
-    useEffect(() => {
-        if (!isOpen) {
-            return;
-        }
-
+     useEffect(() => {
+        if (!isOpen) return;
         setErrors({});
         const initialState = contactToEdit ? { ...initialFormState, ...contactToEdit } : initialFormState;
         setFormState(initialState);
-        setPlaceDetails(null); // Reset on open
-        
-        if (autocompleteRef.current) {
-            autocompleteRef.current.value = '';
-        }
+        setPlaceDetails(null); // Reset details on open
 
+        if (autocompleteRef.current) {
+             autocompleteRef.current.value = '';
+        }
     }, [isOpen, contactToEdit]);
 
-    // This useEffect is no longer needed for attaching the event listener
-    // useEffect(() => { ... }, [isOpen, mapsApiLoaded]);
 
-    const handlePlaceChange = (event: CustomEvent) => {
-        const place = event.detail?.place;
-        console.log('Place changed:', place); // For debugging
-        setPlaceDetails(place);
-    };
+    // FIX: useEffect adjusted to destructure the event object directly
+    useEffect(() => {
+        if (!isOpen || !mapsApiLoaded || !autocompleteRef.current) {
+            return;
+        }
 
+        const autocompleteElement = autocompleteRef.current;
+        console.log('Attaching gmp-select listener...');
+
+        const handlePlaceSelect = async (event: any) => {
+            console.log('>>> gmp-select event FIRED! <<<');
+
+            // The key change: Destructure placePrediction directly from the event object
+            const { placePrediction } = event;
+            console.log('Destructured placePrediction:', placePrediction);
+
+             if (!placePrediction) {
+                 console.warn('placePrediction not found on the event object.');
+                 setPlaceDetails(null);
+                 return;
+             }
+
+             try {
+                const place = placePrediction.toPlace();
+                console.log('Fetching place fields...');
+                await place.fetchFields({ fields: ['addressComponents', 'formattedAddress'] });
+                console.log('Place fields fetched:', place);
+
+                 if (place.addressComponents) {
+                     setPlaceDetails(place as FetchedPlace);
+                     console.log('placeDetails state UPDATED successfully.');
+                 } else {
+                     console.warn('Fetched place data is missing addressComponents.');
+                     setPlaceDetails(null);
+                 }
+             } catch (error) {
+                 console.error("Error fetching place details:", error);
+                 setPlaceDetails(null);
+             }
+        };
+
+        autocompleteElement.addEventListener('gmp-select', handlePlaceSelect);
+
+        return () => {
+             if (autocompleteElement) {
+                autocompleteElement.removeEventListener('gmp-select', handlePlaceSelect);
+                console.log('gmp-select listener REMOVED.');
+            }
+        };
+    }, [isOpen, mapsApiLoaded]);
+
+    console.log('Component rendered. placeDetails is:', placeDetails);
+
+    // --- Event Handlers ---
     const handleFillAddress = () => {
-        if (placeDetails && placeDetails.addressComponents) {
-            const getAddressComponent = (type: string, useShortName = false) => {
-                const component = placeDetails.addressComponents.find((c: any) => c.types.includes(type));
-                return component ? (useShortName ? component.shortText : component.longText) : '';
+        console.log("Fill Address button clicked. Current placeDetails:", placeDetails);
+        if (placeDetails?.addressComponents) {
+            const getAddressComponent = (type: string, useShortName = false): string => {
+                const component = placeDetails.addressComponents?.find((c) => c.types.includes(type));
+                return component ? (useShortName ? component.shortText : component.longText) : "";
             };
-    
+
             const street_number = getAddressComponent('street_number');
             const route = getAddressComponent('route');
-    
+
             setFormState(prev => ({
                 ...prev,
                 address1: `${street_number} ${route}`.trim(),
@@ -115,31 +161,15 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                 state: getAddressComponent('administrative_area_level_1', true),
                 zip: getAddressComponent('postal_code'),
             }));
+            console.log("Form state updated.");
         } else {
-             console.warn('Fill address failed: `placeDetails` is missing or does not have `addressComponents`.');
+             console.warn('Fill address failed: `placeDetails` is missing addressComponents.');
         }
     };
 
-    if (!isOpen) return null;
-
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        
-        const fieldsToCapitalize = ['firstName', 'lastName', 'city'];
-        
-        let processedValue = value;
-
-        if (fieldsToCapitalize.includes(name)) {
-            processedValue = value.toLowerCase().split(' ').map(word => 
-                word.charAt(0).toUpperCase() + word.slice(1)
-            ).join(' ');
-        }
-        
-        if (name === 'state') {
-            processedValue = value.toUpperCase().substring(0, 2);
-        }
-
-        setFormState(prev => ({ ...prev, [name]: processedValue }));
+        setFormState(prev => ({ ...prev, [name]: value }));
     };
     
     const validate = () => {
@@ -170,12 +200,15 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
             onClose();
         }
     };
+
+    // --- Render Logic ---
+    if (!isOpen) return null;
     
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center">
-            <div className="bg-white rounded-lg shadow-2xl p-8 m-4 max-w-3xl w-full max-h-full overflow-y-auto">
-                <h2 className="text-2xl font-bold text-gray-800 mb-6">{contactToEdit ? 'Edit Contact' : 'New Contact'}</h2>
-                <form onSubmit={handleSubmit}>
+            <div className="bg-white rounded-lg shadow-2xl p-8 m-4 max-w-3xl w-full max-h-[90vh] flex flex-col"> {/* Added flex flex-col */}
+                <h2 className="text-2xl font-bold text-gray-800 mb-6 flex-shrink-0">{contactToEdit ? 'Edit Contact' : 'New Contact'}</h2>
+                <form onSubmit={handleSubmit} className="flex-grow overflow-y-auto pr-2"> {/* Added overflow */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                         {/* Name Fields */}
                         <div className="md:col-span-1">
@@ -212,26 +245,38 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                             <input type="email" id="email" name="email" value={formState.email} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.email ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} />
                             {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
                         </div>
-                        {/* Address Fields */}
+                        {/* Address Search Section */}
                         <div className="md:col-span-4">
                             <label className="block text-sm font-medium text-gray-700">Address Search</label>
-                            <div className="flex items-center gap-2">
-                                {mapsApiLoaded && (
+                            <div className="flex items-center gap-2 mt-1">
+                                {mapsApiLoaded ? (
                                     <gmp-place-autocomplete
                                         ref={autocompleteRef}
-                                        placeholder="Start typing an address to autofill..."
+                                        placeholder="Start typing an address..."
                                         country-codes='["us"]'
-                                        place-fields="addressComponents"
-                                        className="flex-grow"
-                                        onGmpPlaceChange={handlePlaceChange}
+                                        place-fields="addressComponents,formattedAddress"
+                                        className="flex-grow border border-gray-300 rounded-md shadow-sm p-2 text-sm"
                                     ></gmp-place-autocomplete>
-                                )}
-                                <button type="button" onClick={handleFillAddress} className="p-2 text-gray-600 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed" disabled={!placeDetails}>
+                                 ) : (
+                                    <div className="flex-grow p-2 text-sm text-gray-500 italic">Loading maps...</div>
+                                 )}
+                                <button
+                                    type="button"
+                                    onClick={handleFillAddress}
+                                    disabled={!placeDetails}
+                                    className={`p-2 rounded-md transition-opacity ${
+                                        placeDetails
+                                            ? 'text-indigo-600 hover:bg-indigo-100'
+                                            : 'text-gray-400 cursor-not-allowed opacity-50'
+                                    }`}
+                                >
                                     <ClipboardIcon className="h-6 w-6" />
+                                    <span className="sr-only">Fill Address</span>
                                 </button>
                             </div>
                         </div>
 
+                        {/* Individual Address fields */}
                         <div className="md:col-span-4">
                             <label htmlFor="address1" className="block text-sm font-medium text-gray-700">Address 1</label>
                             <input type="text" id="address1" name="address1" value={formState.address1 || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" />
@@ -246,7 +291,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                         </div>
                         <div className="md:col-span-1">
                             <label htmlFor="state" className="block text-sm font-medium text-gray-700">State</label>
-                            <input type="text" id="state" name="state" value={formState.state || ''} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.state ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} maxLength={2} />
+                            <input type="text" id="state" name="state" value={formState.state || ''} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.state ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm uppercase`} maxLength={2} />
                             {errors.state && <p className="text-red-500 text-xs mt-1">{errors.state}</p>}
                         </div>
                         <div className="md:col-span-1">
@@ -254,14 +299,14 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                             <input type="text" id="zip" name="zip" value={formState.zip || ''} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.zip ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} maxLength={10} />
                             {errors.zip && <p className="text-red-500 text-xs mt-1">{errors.zip}</p>}
                         </div>
-                        {/* Other Fields */}
-                        <div className="md:col-span-4">
+
+                        {/* ... (Category, Notes fields) ... */}
+                         <div className="md:col-span-4">
                              <label htmlFor="category" className="block text-sm font-medium text-gray-700">Category</label>
                              <select id="category" name="category" value={formState.category} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                                 {Object.values(Category).map(cat => <option key={cat} value={cat}>{cat}</option>)}
                             </select>
                         </div>
-                        
                         <div className="md:col-span-4">
                             <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Notes</label>
                             <textarea
@@ -275,7 +320,8 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                         </div>
                     </div>
 
-                    <div className="mt-8 flex justify-end space-x-4">
+                    {/* Form Buttons */}
+                    <div className="mt-8 flex justify-end space-x-4 flex-shrink-0"> {/* Added flex-shrink-0 */}
                         <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
                             Cancel
                         </button>
