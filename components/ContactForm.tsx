@@ -5,7 +5,7 @@ import { Contact, Category, isValidEmail, isValidPhone, isValidUrl, isValidZip, 
 declare global {
   namespace JSX {
     interface IntrinsicElements {
-      'gmp-place-autocomplete': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+      'gmp-place-autocomplete': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement> & { value: string }, HTMLElement>;
     }
   }
 }
@@ -23,7 +23,8 @@ const loadGoogleMapsScript = () => {
     
     const script = document.createElement('script');
     script.id = scriptId;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=beta`;
+    // FIX: Add '&loading=async' to the script URL to resolve the performance warning.
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=beta&loading=async`;
     script.async = true;
     script.defer = true;
     
@@ -52,52 +53,60 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
     const [formState, setFormState] = useState<Omit<Contact, 'id'>>(initialFormState);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
     const autocompleteRef = useRef<HTMLElement & { value: string } | null>(null);
+    const [mapsApiLoaded, setMapsApiLoaded] = useState(false);
 
     useEffect(() => {
-        if (!isOpen) return;
+        loadGoogleMapsScript()
+            .then(() => setMapsApiLoaded(true))
+            .catch(console.error);
+    }, []);
 
-        // Reset form state and errors when modal opens
+    useEffect(() => {
+        if (!isOpen || !mapsApiLoaded) {
+            return;
+        }
+
         setErrors({});
         const initialState = contactToEdit ? { ...initialFormState, ...contactToEdit } : initialFormState;
         setFormState(initialState);
         
-        loadGoogleMapsScript().then(() => {
-            const autocompleteElement = autocompleteRef.current;
-            if (!autocompleteElement) return;
+        const autocompleteElement = autocompleteRef.current;
+        if (!autocompleteElement) {
+            return;
+        }
 
-            // Clear the search input when the form opens
-            autocompleteElement.value = '';
+        autocompleteElement.value = '';
 
-            const handlePlaceChange = (event: Event) => {
-                const customEvent = event as CustomEvent;
-                const place = customEvent.detail.place;
-        
-                if (place && place.addressComponents) {
-                    const getAddressComponent = (type: string) => {
-                        return place.addressComponents.find((c: any) => c.types.includes(type))?.longText || '';
-                    };
-        
-                    const street_number = getAddressComponent('street_number');
-                    const route = getAddressComponent('route');
-        
-                    setFormState(prev => ({
-                        ...prev,
-                        address1: `${street_number} ${route}`.trim(),
-                        city: getAddressComponent('locality'),
-                        state: getAddressComponent('administrative_area_level_1'),
-                        zip: getAddressComponent('postal_code'),
-                    }));
-                }
-            };
+        const handlePlaceChange = (event: Event) => {
+            const customEvent = event as CustomEvent;
+            const place = customEvent.detail.place;
+    
+            if (place && place.addressComponents) {
+                const getAddressComponent = (type: string, useShortName = false) => {
+                    const component = place.addressComponents.find((c: any) => c.types.includes(type));
+                    return component ? (useShortName ? component.shortText : component.longText) : '';
+                };
+    
+                const street_number = getAddressComponent('street_number');
+                const route = getAddressComponent('route');
+    
+                setFormState(prev => ({
+                    ...prev,
+                    address1: `${street_number} ${route}`.trim(),
+                    city: getAddressComponent('locality'),
+                    state: getAddressComponent('administrative_area_level_1', true),
+                    zip: getAddressComponent('postal_code'),
+                }));
+            }
+        };
 
-            autocompleteElement.addEventListener('gmp-placechange', handlePlaceChange);
+        autocompleteElement.addEventListener('gmp-placechange', handlePlaceChange);
 
-            return () => {
-                autocompleteElement.removeEventListener('gmp-placechange', handlePlaceChange);
-            };
-        }).catch(console.error);
+        return () => {
+            autocompleteElement.removeEventListener('gmp-placechange', handlePlaceChange);
+        };
 
-    }, [isOpen, contactToEdit]);
+    }, [isOpen, contactToEdit, mapsApiLoaded]);
 
     if (!isOpen) return null;
 
@@ -194,9 +203,9 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                         {/* Address Fields */}
                         <div className="md:col-span-4">
                             <label className="block text-sm font-medium text-gray-700">Address Search</label>
+                            {/* FIX: Removed conflicting className to allow default component styling and behavior. */}
                             <gmp-place-autocomplete
                                 ref={autocompleteRef}
-                                class="mt-1 block w-full"
                                 placeholder="Start typing an address to autofill..."
                             ></gmp-place-autocomplete>
                         </div>
