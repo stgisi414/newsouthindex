@@ -1,5 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Contact, Category, isValidEmail, isValidPhone, isValidUrl, isValidZip, isValidState } from '../types';
+
+// Extend the JSX IntrinsicElements interface to include the Google Maps custom element
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      'gmp-place-autocomplete': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
+    }
+  }
+}
+
+// --- API Loader Function ---
+const loadGoogleMapsScript = () => {
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  const scriptId = 'google-maps-script';
+  
+  return new Promise<void>((resolve, reject) => {
+    if (document.getElementById(scriptId) || window.google?.maps?.places) {
+      resolve();
+      return;
+    }
+    
+    const script = document.createElement('script');
+    script.id = scriptId;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=beta`;
+    script.async = true;
+    script.defer = true;
+    
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Google Maps script failed to load.'));
+    
+    document.head.appendChild(script);
+  });
+};
+
 
 interface ContactFormProps {
     isOpen: boolean;
@@ -10,45 +44,66 @@ interface ContactFormProps {
 
 const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, contactToEdit }) => {
     const initialFormState = {
-        honorific: '',
-        firstName: '',
-        middleInitial: '',
-        lastName: '',
-        suffix: '',
-        category: Category.OTHER,
-        phone: '',
-        email: '',
-        url: '',
-        address1: '',
-        address2: '',
-        city: '',
-        state: '',
-        zip: '',
-        notes: '',
+        honorific: '', firstName: '', middleInitial: '', lastName: '', suffix: '',
+        category: Category.OTHER, phone: '', email: '', url: '',
+        address1: '', address2: '', city: '', state: '', zip: '', notes: '',
     };
 
     const [formState, setFormState] = useState<Omit<Contact, 'id'>>(initialFormState);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
+    const autocompleteRef = useRef<HTMLElement & { value: string } | null>(null);
 
     useEffect(() => {
-        if (contactToEdit) {
-            setFormState({
-                ...contactToEdit,
-                category: contactToEdit.category || initialFormState.category,
-                phone: contactToEdit.phone || '', // Ensure no nulls for phone field
-                url: contactToEdit.url || '', // Ensure no nulls for url field
-            });
-        } else {
-            setFormState(initialFormState);
-        }
-    }, [contactToEdit, isOpen]);
+        if (!isOpen) return;
+
+        // Reset form state and errors when modal opens
+        setErrors({});
+        const initialState = contactToEdit ? { ...initialFormState, ...contactToEdit } : initialFormState;
+        setFormState(initialState);
+        
+        loadGoogleMapsScript().then(() => {
+            const autocompleteElement = autocompleteRef.current;
+            if (!autocompleteElement) return;
+
+            // Clear the search input when the form opens
+            autocompleteElement.value = '';
+
+            const handlePlaceChange = (event: Event) => {
+                const customEvent = event as CustomEvent;
+                const place = customEvent.detail.place;
+        
+                if (place && place.addressComponents) {
+                    const getAddressComponent = (type: string) => {
+                        return place.addressComponents.find((c: any) => c.types.includes(type))?.longText || '';
+                    };
+        
+                    const street_number = getAddressComponent('street_number');
+                    const route = getAddressComponent('route');
+        
+                    setFormState(prev => ({
+                        ...prev,
+                        address1: `${street_number} ${route}`.trim(),
+                        city: getAddressComponent('locality'),
+                        state: getAddressComponent('administrative_area_level_1'),
+                        zip: getAddressComponent('postal_code'),
+                    }));
+                }
+            };
+
+            autocompleteElement.addEventListener('gmp-placechange', handlePlaceChange);
+
+            return () => {
+                autocompleteElement.removeEventListener('gmp-placechange', handlePlaceChange);
+            };
+        }).catch(console.error);
+
+    }, [isOpen, contactToEdit]);
 
     if (!isOpen) return null;
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         
-        // List of fields to auto-capitalize (First letter of each word)
         const fieldsToCapitalize = ['firstName', 'lastName', 'city'];
         
         let processedValue = value;
@@ -63,19 +118,16 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
             processedValue = value.toUpperCase().substring(0, 2);
         }
 
-
         setFormState(prev => ({ ...prev, [name]: processedValue }));
     };
     
     const validate = () => {
         const newErrors: { [key: string]: string } = {};
         
-        // --- Required Fields ---
         if (!formState.firstName) newErrors.firstName = 'First name is required.';
         if (!formState.lastName) newErrors.lastName = 'Last name is required.';
         if (!formState.email) newErrors.email = 'Email is required.';
         
-        // --- Format Validations ---
         if (formState.email && !isValidEmail(formState.email)) newErrors.email = 'Email is invalid.';
         if (formState.phone && !isValidPhone(formState.phone)) newErrors.phone = 'Phone format is invalid (use only digits, at least 7).';
         if (formState.url && !isValidUrl(formState.url)) newErrors.url = 'URL is invalid.';
@@ -89,7 +141,6 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (validate()) {
-            // Filter out empty strings/nulls before saving (Firestore best practice)
             const cleanedState = Object.fromEntries(
                 Object.entries(formState).filter(([, value]) => value !== '' && value !== null)
             );
@@ -140,13 +191,16 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                             <input type="email" id="email" name="email" value={formState.email} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.email ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} />
                             {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
                         </div>
+                        {/* Address Fields */}
                         <div className="md:col-span-4">
-                            <label htmlFor="url" className="block text-sm font-medium text-gray-700">URL</label>
-                            <input type="text" id="url" name="url" value={formState.url || ''} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.url ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} />
-                            {errors.url && <p className="text-red-500 text-xs mt-1">{errors.url}</p>}
+                            <label className="block text-sm font-medium text-gray-700">Address Search</label>
+                            <gmp-place-autocomplete
+                                ref={autocompleteRef}
+                                class="mt-1 block w-full"
+                                placeholder="Start typing an address to autofill..."
+                            ></gmp-place-autocomplete>
                         </div>
 
-                        {/* Address Fields */}
                         <div className="md:col-span-4">
                             <label htmlFor="address1" className="block text-sm font-medium text-gray-700">Address 1</label>
                             <input type="text" id="address1" name="address1" value={formState.address1 || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" />
@@ -169,7 +223,6 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                             <input type="text" id="zip" name="zip" value={formState.zip || ''} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.zip ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} maxLength={10} />
                             {errors.zip && <p className="text-red-500 text-xs mt-1">{errors.zip}</p>}
                         </div>
-
                         {/* Other Fields */}
                         <div className="md:col-span-4">
                              <label htmlFor="category" className="block text-sm font-medium text-gray-700">Category</label>
