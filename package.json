@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@google/genai": "^1.23.0",
+    "@types/cors": "^2.8.19",
+    "cors": "^2.8.5",
     "firebase": "^12.4.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
@@ -18,14 +20,14 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.14",
     "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
     "@types/recharts": "^1.8.29",
+    "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
+    "recharts": "^2.12.7",
     "tailwindcss": "^4.1.14",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
-    "vite-plugin-pwa": "^1.0.3",
-    "recharts": "^2.12.7"
+    "vite-plugin-pwa": "^1.0.3"
   }
 }

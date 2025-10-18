@@ -238,17 +238,17 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
     const handleMakeAdmin = async () => {
         setAdminStatus("Attempting to sync admin permissions...");
         try {
+          // Use httpsCallable again
           const result: any = await makeMeAdmin();
           setAdminStatus("Success! Forcing a permissions refresh...");
-    
+
           if (auth.currentUser) {
-            await auth.currentUser.getIdToken(true);
+            await auth.currentUser.getIdToken(true); // Force refresh token
           }
-          
-          window.location.reload();
-    
+          window.location.reload(); // Reload page
+
         } catch (error: any) {
-          console.error("Make admin error:", error);
+          console.error("Make admin error (callable):", error);
           setAdminStatus(`Error: ${error.message}`);
         }
     };

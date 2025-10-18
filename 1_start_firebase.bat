@@ -1,5 +1,7 @@
 @echo off
-title Firebase Emulators
-echo Starting Firebase Emulators...
-cd /d C:\code2\newsouthindex
-firebase emulators:start
+echo --- BUILDING FIREBASE FUNCTIONS (TypeScript -> JavaScript) ---
+cd functions
+call npm run build
+cd ..
+echo --- STARTING FIREBASE EMULATORS ---
+firebase emulators:start --import=./.firebase/data --export-on-exit

@@ -16,6 +16,7 @@ import {
   increment,
   arrayUnion,
   arrayRemove,
+  getDoc,
 } from "firebase/firestore";
 import Dashboard from "./components/Dashboard";
 import { Auth } from "./components/Auth";
@@ -92,6 +93,46 @@ function App() {
 
   useEffect(() => {
     if (user && userRole !== UserRole.APPLICANT) {
+      // --- START CONNECTIVITY CHECKS ---
+      console.log("Running initial connectivity checks...");
+
+      // Check Firestore connectivity (simple read)
+      const checkFirestore = async () => {
+          if (!user) return; // Should not happen here, but good practice
+          try {
+              const userDocRef = doc(db, "users", user.uid);
+              await getDoc(userDocRef); // Attempt to get the user document
+              console.log("%cFirestore connectivity check: SUCCESS", "color: green");
+          } catch (error: any) {
+              console.error("%cFirestore connectivity check: FAILED", "color: red", error);
+              // Log specific details if available
+              if (error.code) console.error("Firestore Error Code:", error.code);
+              if (error.message) console.error("Firestore Error Message:", error.message);
+          }
+      };
+
+      // Check Functions connectivity (simple callable function)
+      // We'll use a dummy function or just call makeMeAdmin and expect a specific error if it fails early
+      const checkFunctions = async () => {
+           // Use processCommand as a test target as makeMeAdmin requires auth context that might not be ready
+           const testCommand = httpsCallable(functions, 'processCommand');
+           try {
+               // Send a harmless command
+               await testCommand({ command: "hello" });
+               // We don't care about the Gemini result, just that the call didn't fail due to network/CORS
+               console.log("%cFunctions connectivity check: SUCCESS (Able to call)", "color: green");
+           } catch (error: any) {
+               console.error("%cFunctions connectivity check: FAILED", "color: red", error);
+               if (error.code) console.error("Functions Error Code:", error.code);
+               if (error.message) console.error("Functions Error Message:", error.message);
+           }
+      };
+
+      // Run the checks
+      checkFirestore();
+      checkFunctions();
+      // --- END CONNECTIVITY CHECKS ---
+
       const contactsQuery = query(collection(db, "contacts"), orderBy("lastName", "asc"));
       const unsubscribeContacts = onSnapshot(contactsQuery, (snapshot) => {
         setContacts(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as Contact)));

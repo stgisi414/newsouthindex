@@ -1,10 +1,27 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, Auth, connectAuthEmulator } from "firebase/auth"; // <-- Import Auth type
-import { initializeFirestore, Firestore, connectFirestoreEmulator } from "firebase/firestore"; // <-- Import Firestore type and connectFirestoreEmulator
-import { getFunctions, FirebaseFunctions, connectFunctionsEmulator } from "firebase/functions"; // <-- Import FirebaseFunctions type and connectFunctionsEmulator
+import { 
+  getAuth, 
+  Auth, 
+  connectAuthEmulator 
+} from "firebase/auth";
+import { 
+  initializeFirestore, 
+  Firestore, 
+  connectFirestoreEmulator 
+} from "firebase/firestore";
+import { 
+  getFunctions, 
+  FirebaseFunctions, 
+  connectFunctionsEmulator 
+} from "firebase/functions";
+
+// Determine if running through the tunnel by checking the hostname *before* config
+const isTunnel = window.location.hostname === 'app.projectgrid.tech';
+const currentHost = window.location.hostname;
+const currentPort = window.location.port;
 
 // Your web app's Firebase configuration using environment variables
-const firebaseConfig = {
+const baseFirebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_PROJECT_ID,
@@ -13,32 +30,72 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_APP_ID,
 };
 
-const app = initializeApp(firebaseConfig);
+// Create a mutable config object
+let effectiveFirebaseConfig = { ...baseFirebaseConfig };
 
-// FIX 1: Declare exported services using 'let' so they can be re-assigned.
-export let auth: Auth = getAuth(app);
-export let functions: FirebaseFunctions = getFunctions(app); 
-export let db: Firestore; // Declare db, initialize later
-
-// Connect to emulators using permanent Cloudflare Tunnels in development
+// If in development mode, override authDomain to match the *current* host the app is served from
+// This is critical for the Auth popup to work correctly.
 if (import.meta.env.DEV) {
-  // We use local emulator ports for connections, and rely on Cloudflare to proxy the hostname traffic back to localhost.
+  const devAuthDomain = currentPort ? `${currentHost}:${currentPort}` : currentHost;
+  effectiveFirebaseConfig.authDomain = devAuthDomain;
+  console.log(`[firebaseConfig] DEV MODE: Overriding authDomain to: ${devAuthDomain}`);
+}
 
-  // 1. Auth Emulator: Use standard local setup.
-  connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
+const app = initializeApp(effectiveFirebaseConfig);
 
-  // 2. Functions Emulator: Connect to local port (5003).
-  connectFunctionsEmulator(functions, "localhost", 5003); 
+// --- DECLARE EXPORTED SERVICES ---
+// We initialize them inside the conditional blocks
+export let auth: Auth;
+export let functions: FirebaseFunctions;
+export let db: Firestore;
 
-  // 3. Firestore Emulator: Initialize first, then connect to the local port,
-  //    and force long-polling to prevent proxying issues with WebChannels.
+if (import.meta.env.DEV) {
+  console.log(`[firebaseConfig] Development mode detected. isTunnel: ${isTunnel}`);
+
+  // --- Use tunnel domains OR localhost for Auth/Firestore ---
+  // --- Use Vite Proxy for Functions ---
+
+  // 1. Auth: Connect to tunnel URL or localhost:9099
+  auth = getAuth(app);
+  const devAuthDomain = currentPort ? `${currentHost}:${currentPort}` : currentHost;
+  effectiveFirebaseConfig.authDomain = devAuthDomain;
+  console.log(`[firebaseConfig] Overriding authDomain for popups: ${devAuthDomain}`);
+  const authHost = isTunnel ? 'auth.projectgrid.tech' : 'localhost';
+  const authProtocol = isTunnel ? 'https' : 'http';
+  const authPort = isTunnel ? '' : ':9099';
+  const authUrl = `${authProtocol}://${authHost}${authPort}`;
+  console.log(`[firebaseConfig] Auth Emulator: ${authUrl}`);
+  connectAuthEmulator(auth, authUrl, { disableWarnings: true });
+
+  // 2. Functions: Connect via the NEW Vite Proxy path
+  functions = getFunctions(app); // Get default instance
+  // Connect to the host/port where Vite is running.
+  // The function calls made by the SDK will be intercepted by the '/__/firebase_functions_proxy' rule in vite.config.ts
+  const viteHost = isTunnel ? 'app.projectgrid.tech' : 'localhost';
+  const vitePort = isTunnel ? 443 : 3000;
+  console.log(`[firebaseConfig] Functions Emulator: Connecting via Vite proxy (Targeting Vite at ${viteHost}:${vitePort}, expecting calls to be proxied from /__/firebase_functions_proxy)`);
+  // NOTE: We connect to Vite itself. The SDK needs to make calls relative to this origin
+  // e.g., calling processCommand should result in a request to
+  // https://app.projectgrid.tech/__/firebase_functions_proxy/yourProjectId/us-central1/processCommand
+  // OR http://localhost:3000/__/firebase_functions_proxy/yourProjectId/us-central1/processCommand
+  connectFunctionsEmulator(functions, viteHost, vitePort);
+  // It's crucial that the Firebase SDK correctly formats the URL path
+  // to include the region/function name relative to the viteHost:vitePort base.
+
+
+  // 3. Firestore: Connect to tunnel URL or localhost:8080 (using IP in tunnel config)
   db = initializeFirestore(app, {
-    experimentalForceLongPolling: true,
+      experimentalForceLongPolling: true,
   });
-  connectFirestoreEmulator(db, "localhost", 8080);
-  
+  const firestoreHost = isTunnel ? 'firestore.projectgrid.tech' : 'localhost';
+  const firestorePort = isTunnel ? 443 : 8080;
+  console.log(`[firebaseConfig] Firestore Emulator: ${firestoreHost}:${firestorePort}`);
+  connectFirestoreEmulator(db, firestoreHost, firestorePort);
+
 } else {
-  // For production, initialize db normally (only runs here)
+  // --- PRODUCTION CONFIGURATION ---
+  console.log("[firebaseConfig] Production mode detected.");
+  auth = getAuth(app);
+  functions = getFunctions(app);
   db = initializeFirestore(app, {});
-  // functions and auth remain as their default initializations.
 }
