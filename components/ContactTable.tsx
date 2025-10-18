@@ -120,7 +120,8 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                 <th
                                     key={key}
                                     scope="col"
-                                    className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer 
+                                    // FIX: Change 'px-6' to 'px-3' to reduce horizontal padding inside the header cells
+                                    className={`px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer 
                                         ${hiddenInMobile ? 'hidden lg:table-cell' : ''}
                                     `}
                                     onClick={() => handleSort(key as SortKey)}
@@ -131,7 +132,7 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                     </div>
                                 </th>
                             ))}
-                            <th scope="col" className="relative px-6 py-3">
+                            <th scope="col" className="relative px-3 py-3">
                                 <span className="sr-only">Actions</span>
                             </th>
                         </tr>
@@ -149,7 +150,8 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                         return (
                                             <td 
                                                 key={key} 
-                                                className={`px-6 py-4 whitespace-nowrap text-sm text-gray-500 
+                                                // FIX: Change 'px-6' to 'px-3' to reduce horizontal padding inside the data cells
+                                                className={`px-3 py-4 whitespace-nowrap text-sm text-gray-500 
                                                     ${key === 'firstName' || key === 'lastName' ? 'font-medium text-gray-900' : ''}
                                                     ${hiddenInMobile ? 'hidden lg:table-cell' : ''}
                                                 `}
@@ -177,7 +179,8 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                             </td>
                                         );
                                     })}
-                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                    {/* FIX: Change 'px-6' to 'px-3' for the actions column */}
+                                    <td className="px-3 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <div className="flex items-center justify-end space-x-4">
                                             <button 
                                                 onClick={() => handleToggleExpand(contact.id)}

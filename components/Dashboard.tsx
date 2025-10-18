@@ -291,7 +291,7 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                     </div>
                 </div>
             </header>
-            <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-0">
                 <div className="mb-6 border-b border-gray-200">
                     <nav className="-mb-px flex space-x-4 overflow-x-auto scrollbar-hidden" aria-label="Tabs">
                         <button onClick={() => handleViewChange('contacts')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'contacts' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Contacts</button>

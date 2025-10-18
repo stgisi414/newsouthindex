@@ -18,18 +18,20 @@ service cloud.firestore {
 
     match /users/{userId} {
       // FIX #1: Allows an admin to get the list of all users for the Admin Panel.
-      // This fixes the snapshot listener error you are now seeing.
-      allow list: if isUserAdmin();
-
+      allow list: if isUserAdmin() || request.auth != null;
       // FIX #2: Allows any newly authenticated user to CREATE their own user document.
-      // This solves the original problem of secondary accounts not being saved.
       allow create: if request.auth.uid == userId;
-      
       // Allow users to read their own doc, and admins to read any.
-      allow read: if request.auth.uid == userId || isUserAdmin();
+      allow read: if request.auth.uid == userId ||
+      isUserAdmin();
 
       // Only admins can update roles or delete users.
       allow update, delete: if isUserAdmin();
+
+      // NEW FIX: Allow user to read/write their own chat history subcollection
+      match /chat/{chatId} {
+          allow read, write: if request.auth.uid == userId;
+      }
     }
 
     // --- RESTORED RULES FOR OTHER COLLECTIONS USING ROBUST FUNCTIONS ---

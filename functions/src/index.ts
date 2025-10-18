@@ -346,6 +346,8 @@ const fewShotExamples: GenerativeContent[] = [
     { role: "model", parts: [fCall("countBooks", { author: "harper lee" })] },
     { role: "user", parts: [{ text: "how many books are out of stock?" }] },
     { role: "model", parts: [fCall("countBooks", { stock: 0 })] },
+    { role: "user", parts: [{ text: "how many books do I have in stock?" }] },
+    { role: "model", parts: [fCall("countBooks", {})] },
     // Events
     { role: "user", parts: [{ text: "how many events with Jane Doe?" }] },
     { role: "model", parts: [fCall("countEvents", { author: "jane doe" })] },

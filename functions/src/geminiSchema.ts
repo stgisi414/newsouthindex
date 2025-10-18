@@ -237,7 +237,7 @@ export const responseSchema = {
         metric: {
           type: Type.STRING,
           description: "The specific metric type (e.g., 'top-spending', 'lowest-stock', 'total-revenue').",
-          enum: ["top-spending", "top-selling"],
+          enum: ["top-spending", "top-selling", "total-stock"],
         },
         limit: {
           type: Type.NUMBER,

@@ -639,6 +639,16 @@ function App() {
             const bestSellingBooks = Object.values(bookSales).sort((a, b) => b.quantity - a.quantity).slice(0, limit);
             return { success: true, payload: bestSellingBooks, message: `Here are the top ${limit} best-selling books.`, targetView: 'reports' };
         }
+        if (target === 'books' && metric === 'total-stock') {
+            // Calculate total stock by summing the stock of all books
+            const totalStock = books.reduce((sum, book) => sum + book.stock, 0);
+            return { 
+                success: true, 
+                payload: { total: totalStock },
+                message: `The total stock across all books is ${totalStock}.`, 
+                targetView: 'reports' 
+            };
+        }
         return { success: false, message: "I'm sorry, I can't calculate those metrics." };
       }
 
