@@ -1,4 +1,3 @@
-import * as functions from "firebase-functions";
 // Import onRequest for processCommand
 import { onRequest } from "firebase-functions/v2/https";
 // Import onCall and HttpsError for other functions
@@ -444,22 +443,18 @@ export const processCommand = onRequest(async (request, response) => {
     }
 
     // --- Handle actual POST request ---
-    // Add Allow-Origin header to actual response too (important!)
     response.set('Access-Control-Allow-Origin', 'https://app.projectgrid.tech');
-    // Add Allow-Private-Network header to actual response as well
     response.set('Access-Control-Allow-Private-Network', 'true');
 
     logger.info("Starting up process command (onRequest with PNA)");
     logger.info("Credential Path Check:", process.env.GOOGLE_APPLICATION_CREDENTIALS || "Not Set");
 
-    // Data is in request.body.data when called via httpsCallable or our fetch helper
     const command = request.body.data?.command;
     if (!command) {
         response.status(400).send({ error: { message: "No command provided." } });
         return;
     }
 
-    // CRITICAL FIX: The most authoritative system prompt to prevent refusal
     const systemInstruction = `You are a function-calling AI assistant for a CRM application. Your ONLY job is to convert the user's request into a JSON function call. You must NOT engage in conversation, apologize, or decline a request.
 
     CRITICAL INSTRUCTION:
@@ -485,13 +480,13 @@ export const processCommand = onRequest(async (request, response) => {
         const calls = result.functionCalls;
         const call = calls ? calls[0] : null;
         const responseText = result.text;
-        let responsePayload: any = { intent: "GENERAL_QUERY", responseText }; // Renamed variable
+        // This 'responsePayload' is your custom object, distinct from the Express 'response'
+        let responsePayload: any = { intent: "GENERAL_QUERY", responseText };
 
         if (call) {
             const { name, args } = call;
             const anyArgs = args as any;
 
-            // CRITICAL FIX: Casing and Filter Normalization Logic
             switch (name) {
                 case "findTransaction":
                     responsePayload = { intent: 'FIND_TRANSACTION', data: { transactionIdentifier: args }, responseText: result.text || `Finding transaction.` };
@@ -558,62 +553,63 @@ export const processCommand = onRequest(async (request, response) => {
                     };
                     break;
 
-                // --- Other cases (Ensuring correct argument passing) ---
-                    case "addContact": 
-                        response = { intent: 'ADD_CONTACT', data: { contactData: args }, responseText: result.text || `Adding contact.` };
-                        break;
-                    case "findContact": 
-                        response = { intent: 'FIND_CONTACT', data: { contactIdentifier: anyArgs.identifier }, responseText: result.text || `Finding contact.` };
-                        break;
-                    case "updateContact": 
-                        response = { intent: 'UPDATE_CONTACT', data: { contactIdentifier: anyArgs.identifier, updateData: anyArgs.updateData }, responseText: result.text || `Updating contact.` };
-                        break;
-                    case "deleteContact": 
-                        response = { intent: 'DELETE_CONTACT', data: { contactIdentifier: anyArgs.identifier }, responseText: result.text || `Deleting contact.` };
-                        break;
-                    case "addBook": 
-                        response = { intent: 'ADD_BOOK', data: { bookData: args }, responseText: result.text || `Adding book.` };
-                        break;
-                    case "findBook": 
-                        response = { intent: 'FIND_BOOK', data: { bookIdentifier: anyArgs.identifier }, responseText: result.text || `Finding book.` };
-                        break;
-                    case "updateBook": 
-                        response = { intent: 'UPDATE_BOOK', data: { bookIdentifier: anyArgs.bookIdentifier, updateData: anyArgs.updateData }, responseText: result.text || `Updating book.` };
-                        break;
-                    case "deleteBook": 
-                        response = { intent: 'DELETE_BOOK', data: { bookIdentifier: anyArgs.bookIdentifier }, responseText: result.text || `Deleting book.` };
-                        break;
-                    case "addEvent": 
-                        response = { intent: 'ADD_EVENT', data: { eventData: args }, responseText: result.text || `Adding event.` };
-                        break;
-                    case "findEvent": 
-                        response = { intent: 'FIND_EVENT', data: { eventIdentifier: anyArgs.identifier }, responseText: result.text || `Finding event.` };
-                        break;
-                    case "updateEvent": 
-                        response = { intent: 'UPDATE_EVENT', data: { eventIdentifier: anyArgs.eventIdentifier, updateData: anyArgs.updateData }, responseText: result.text || `Updating event.` };
-                        break;
-                    case "deleteEvent": 
-                        response = { intent: 'DELETE_EVENT', data: { eventIdentifier: anyArgs.eventIdentifier }, responseText: result.text || `Deleting event.` };
-                        break;
-                    case "addAttendee": 
-                        response = { intent: 'ADD_ATTENDEE', data: { eventIdentifier: anyArgs.eventIdentifier, contactIdentifier: anyArgs.contactIdentifier }, responseText: result.text || `Adding attendee.` };
-                        break;
-                    case "removeAttendee": 
-                        response = { intent: 'REMOVE_ATTENDEE', data: { eventIdentifier: anyArgs.eventIdentifier, contactIdentifier: anyArgs.contactIdentifier }, responseText: result.text || `Removing attendee.` };
-                        break;
-                    case "getMetrics": 
-                        response = { intent: 'METRICS_DATA', data: { metricsRequest: args }, responseText: result.text || `Getting metrics.` };
-                        break;
-                    default: 
-                        const conversationalText = result.text || "I'm sorry, I could not determine a specific action to take.";
-                        response = { intent: "GENERAL_QUERY", responseText: conversationalText };
+                case "addContact":
+                    responsePayload = { intent: 'ADD_CONTACT', data: { contactData: args }, responseText: result.text || `Adding contact.` };
+                    break;
+                case "findContact":
+                    responsePayload = { intent: 'FIND_CONTACT', data: { contactIdentifier: anyArgs.identifier }, responseText: result.text || `Finding contact.` };
+                    break;
+                case "updateContact":
+                    responsePayload = { intent: 'UPDATE_CONTACT', data: { contactIdentifier: anyArgs.identifier, updateData: anyArgs.updateData }, responseText: result.text || `Updating contact.` };
+                    break;
+                case "deleteContact":
+                    responsePayload = { intent: 'DELETE_CONTACT', data: { contactIdentifier: anyArgs.identifier }, responseText: result.text || `Deleting contact.` };
+                    break;
+                case "addBook":
+                    responsePayload = { intent: 'ADD_BOOK', data: { bookData: args }, responseText: result.text || `Adding book.` };
+                    break;
+                case "findBook":
+                    responsePayload = { intent: 'FIND_BOOK', data: { bookIdentifier: anyArgs.identifier }, responseText: result.text || `Finding book.` };
+                    break;
+                case "updateBook":
+                    responsePayload = { intent: 'UPDATE_BOOK', data: { bookIdentifier: anyArgs.bookIdentifier, updateData: anyArgs.updateData }, responseText: result.text || `Updating book.` };
+                    break;
+                case "deleteBook":
+                    responsePayload = { intent: 'DELETE_BOOK', data: { bookIdentifier: anyArgs.bookIdentifier }, responseText: result.text || `Deleting book.` };
+                    break;
+                case "addEvent":
+                    responsePayload = { intent: 'ADD_EVENT', data: { eventData: args }, responseText: result.text || `Adding event.` };
+                    break;
+                case "findEvent":
+                    responsePayload = { intent: 'FIND_EVENT', data: { eventIdentifier: anyArgs.identifier }, responseText: result.text || `Finding event.` };
+                    break;
+                case "updateEvent":
+                    responsePayload = { intent: 'UPDATE_EVENT', data: { eventIdentifier: anyArgs.eventIdentifier, updateData: anyArgs.updateData }, responseText: result.text || `Updating event.` };
+                    break;
+                case "deleteEvent":
+                    responsePayload = { intent: 'DELETE_EVENT', data: { eventIdentifier: anyArgs.eventIdentifier }, responseText: result.text || `Deleting event.` };
+                    break;
+                case "addAttendee":
+                    responsePayload = { intent: 'ADD_ATTENDEE', data: { eventIdentifier: anyArgs.eventIdentifier, contactIdentifier: anyArgs.contactIdentifier }, responseText: result.text || `Adding attendee.` };
+                    break;
+                case "removeAttendee":
+                    responsePayload = { intent: 'REMOVE_ATTENDEE', data: { eventIdentifier: anyArgs.eventIdentifier, contactIdentifier: anyArgs.contactIdentifier }, responseText: result.text || `Removing attendee.` };
+                    break;
+                case "getMetrics":
+                    responsePayload = { intent: 'METRICS_DATA', data: { metricsRequest: args }, responseText: result.text || `Getting metrics.` };
+                    break;
+                default:
+                    const conversationalText = result.text || "I'm sorry, I could not determine a specific action to take.";
+                    // FIX: Assign to 'responsePayload'
+                    responsePayload = { intent: "GENERAL_QUERY", responseText: conversationalText };
             }
         } else {
+            // No function call, use responseText or a default
             responsePayload = { intent: 'GENERAL_QUERY', responseText: result.text || "I'm sorry, I couldn't understand that request." };
         }
 
         logger.info("[GEMINI] Parsed JSON response (onRequest):", JSON.stringify(responsePayload, null, 2));
-        // Send success response - v2 requires { data: ... } wrapper for callable responses
+        // Send success response - using the Express 'response' object
         response.status(200).send({ data: responsePayload }); // Wrap the payload
 
     } catch (error) {

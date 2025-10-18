@@ -4,13 +4,9 @@ import react from '@vitejs/plugin-react'; // Assuming you might have meant @vite
 import { VitePWA } from 'vite-plugin-pwa';
 import tailwindcss from '@tailwindcss/vite';
 
-// !!! IMPORTANT: Replace this placeholder with your computer's actual local IPv4 address !!!
-const localIp = "YOUR_COMPUTER_IPV4_ADDRESS";
-// Example: const localIp = "192.168.1.100";
-
-if (!localIp || localIp === "YOUR_COMPUTER_IPV4_ADDRESS") {
-    console.error("\n\nCRITICAL ERROR in vite.config.ts: You MUST set the 'localIp' variable to your computer's local IP address for the Functions emulator proxy to work.\n\n");
-}
+const localIp = '192.168.4.58';
+const projectId = 'newsouthindex'; // <== Make sure this is your Firebase project ID
+const functionsEmulatorPort = 5003; // <== Make sure this is the port your Functions emulator runs on (check firebase.json or startup logs)
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -24,19 +20,24 @@ export default defineConfig(({ mode }) => {
 
       // --- ADD THE PROXY CONFIGURATION INSIDE server: {} ---
       proxy: {
-        // Proxy requests intended for the *local Firebase Functions emulator*
-        // Use a unique path prefix not used by your app.
-        '/__/firebase_functions_proxy': {
-          // Target the emulator using your computer's local IP address
-          target: `http://${localIp}:5003`,
-          changeOrigin: true, // Important for CORS and host header manipulation
-          // Rewrite the path: Remove the proxy prefix before forwarding
-          rewrite: (path) => path.replace(/^\/__\/firebase_functions_proxy/, ''),
-          configure: (proxy, _options) => { // Optional: Add logging for debugging
-             proxy.on('error', (err, _req, _res) => { console.log('>>> Vite Firebase Functions Proxy Error:', err); });
-             proxy.on('proxyReq', (proxyReq, req, _res) => { console.log('>>> Vite Firebase Functions Proxy: Forwarding:', req.method, req.url, '->', `http://${localIp}:5003${proxyReq.path}`); });
-             proxy.on('proxyRes', (proxyRes, req, _res) => { console.log('>>> Vite Firebase Functions Proxy: Response:', proxyRes.statusCode, req.url); });
-          },
+        // Match specific function names at the root path
+        '^/(processCommand|seedDatabase|setUserRole|deleteUser|makeMeAdmin)': { // <== CHANGED: Match function names directly
+          target: `http://${localIp}:${functionsEmulatorPort}`, // Target the LOCAL emulator
+          changeOrigin: true, // Important for Cloudflare tunnel/virtual hosts
+
+          // *** ADD THIS REWRITE RULE ***
+          // Prepend the path expected by the emulator
+          rewrite: (path) => `/${projectId}/us-central1${path}`,
+
+          configure: (proxy, options) => {
+            proxy.on('proxyReq', (proxyReq, req, res) => {
+              // Updated log to show rewritten path
+              console.log(`[Vite Proxy] Functions: REWRITTEN ${req.method} ${req.url} to ${options.target}${proxyReq.path}`);
+            });
+            proxy.on('error', (err, req, res) => {
+              console.error('[Vite Proxy] Functions Error:', err);
+            });
+          }
         },
         // You could add proxies for Auth/Firestore here too if needed, but let's focus on Functions first
         // '/__/firebase_auth_proxy': { target: `http://${localIp}:9099`, ... },

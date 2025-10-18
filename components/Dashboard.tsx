@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AppUser, Contact, Book, Transaction, Event } from '../types';
 import { User } from 'firebase/auth';
 import { httpsCallable } from "firebase/functions";
-import { functions, auth } from "../src/firebaseConfig";
+import { functions, auth, db } from "../src/firebaseConfig";
 import ContactTable from "./ContactTable";
 import ContactForm from "./ContactForm";
 import BookTable from "./BookTable";
@@ -12,10 +12,15 @@ import TransactionForm from "./TransactionForm";
 import EventTable from "./EventTable";
 import EventForm from "./EventForm";
 import AIChat from "./AIChat";
+import LogoutIcon from "./icons/LogoutIcon";
 import PlusIcon from "./icons/PlusIcon";
+import UserCircleIcon from "./icons/UserCircleIcon";
+import BeakerIcon from "./icons/BeakerIcon";
+import UserPlusIcon from "./icons/UserPlusIcon";
 import AdminPanel from "./AdminPanel";
 import Reports from "./Reports";
 import AIAssistantTestSuite from "./AIAssistantTestSuite";
+import { collection, query, where, getDocs, limit } from 'firebase/firestore';
 
 interface DashboardProps {
     contacts: Contact[];
@@ -63,6 +68,7 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
     const hasAdmins = useMemo(() => users.some(user => user.isAdmin), [users]);
     const [aiSearchResults, setAiSearchResults] = useState<any[] | null>(null);
     const [isTestSuiteOpen, setIsTestSuiteOpen] = useState(false);
+    const [shouldShowBecomeAdmin, setShouldShowBecomeAdmin] = useState(false);
 
     const handleAiSearch = (results: any[], view: View) => {
       setAiSearchResults(results);
@@ -81,8 +87,6 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
             setAiSearchResults(null);
         }
     };
-
-    // ... (filteredContacts, filteredBooks, filteredTransactions, filteredEvents useMemo blocks - unchanged)
 
     const filteredContacts = useMemo(() => {
         if (aiSearchResults && currentView === 'contacts') {
@@ -235,6 +239,21 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
         setIsEventFormOpen(false);
     };
 
+    useEffect(() => {
+        const checkAdminExists = async () => {
+            // This query is very efficient and checks if at least one admin document exists in the entire collection.
+            const q = query(collection(db, "users"), where("role", "==", "admin"), limit(1));
+            const querySnapshot = await getDocs(q);
+            // If the query result is empty, no admins exist, so we should show the button.
+            setShouldShowBecomeAdmin(querySnapshot.empty);
+        };
+
+        // Only run this check if the current user is NOT an admin.
+        if (!isAdmin) {
+            checkAdminExists();
+        }
+    }, [isAdmin]);
+
     const handleMakeAdmin = async () => {
         setAdminStatus("Attempting to sync admin permissions...");
         try {
@@ -266,7 +285,8 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                             onClick={onLogout}
                             className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors text-sm"
                         >
-                            Logout
+                            <LogoutIcon className="h-5 w-5 sm:mr-2 md:hidden" />
+                            <span className="hidden sm:inline">Logout</span>
                         </button>
                     </div>
                 </div>
@@ -292,39 +312,54 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                             <div className="flex-1">
                                 {isAdmin ? (
-                                    <div className="flex items-center gap-4 flex-wrap">
+                                      <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
                                         <button
-                                            onClick={() => setIsAdminPanelOpen(prev => !prev)}
-                                            className="px-4 py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition-colors"
+                                          onClick={() => setIsAdminPanelOpen(prev => !prev)}
+                                          className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition-colors"
                                         >
-                                            {isAdminPanelOpen ? 'Hide Admin' : 'Show Admin'}
+                                          <UserCircleIcon className="h-5 w-5 sm:mr-2" />
+                                          <span className="hidden sm:inline">{isAdminPanelOpen ? 'Hide Admin' : 'Show Admin'}</span>
                                         </button>
 
                                         {import.meta.env.DEV && (
-                                            <button
-                                                onClick={() => setIsTestSuiteOpen(prev => !prev)}
-                                                className="px-4 py-2 bg-yellow-400 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-yellow-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-300 transition-colors"
-                                            >
-                                                {isTestSuiteOpen ? 'Hide Test Suite' : 'Show Test Suite'}
-                                            </button>
+                                          <button
+                                            onClick={() => setIsTestSuiteOpen(prev => !prev)}
+                                            className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-yellow-400 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-yellow-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-300 transition-colors"
+                                          >
+                                            <BeakerIcon className="h-5 w-5 sm:mr-2 md:hidden" />
+                                            <span className="hidden sm:inline">{isTestSuiteOpen ? 'Hide Test Suite' : 'Show Test Suite'}</span>
+                                          </button>
                                         )}
                                         
                                         {currentView === 'contacts' && (
-                                            <button onClick={handleNewContact} className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700"><PlusIcon className="h-5 w-5 mr-2" />New Contact</button>
+                                          <button onClick={handleNewContact} className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700">
+                                            <PlusIcon className="h-5 w-5 sm:mr-2 md:hidden" />
+                                            <span className="hidden sm:inline">New Contact</span>
+                                          </button>
                                         )}
                                         {currentView === 'books' && (
-                                            <button onClick={handleNewBook} className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700"><PlusIcon className="h-5 w-5 mr-2" />New Book</button>
+                                          <button onClick={handleNewBook} className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700">
+                                            <PlusIcon className="h-5 w-5 sm:mr-2 md:hidden" />
+                                            <span className="hidden sm:inline">New Book</span>
+                                          </button>
                                         )}
                                         {currentView === 'transactions' && (
-                                            <button onClick={handleNewTransaction} className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700"><PlusIcon className="h-5 w-5 mr-2" />New Transaction</button>
+                                          <button onClick={handleNewTransaction} className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700">
+                                            <PlusIcon className="h-5 w-5 sm:mr-2 md:hidden" />
+                                            <span className="hidden sm:inline">New Transaction</span>
+                                          </button>
                                         )}
                                         {currentView === 'events' && (
-                                            <button onClick={handleNewEvent} className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700"><PlusIcon className="h-5 w-5 mr-2" />New Event</button>
+                                          <button onClick={handleNewEvent} className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700">
+                                            <PlusIcon className="h-5 w-5 sm:mr-2 md:hidden" />
+                                            <span className="hidden sm:inline">New Event</span>
+                                          </button>
                                         )}
-                                    </div>
+                                      </div>
                                 ) : (
-                                    !hasAdmins && (
+                                    shouldShowBecomeAdmin && (
                                         <div className="flex items-center gap-4">
+                                            <p className="text-gray-600">No admin account detected.</p>
                                             <button
                                                 onClick={handleMakeAdmin}
                                                 className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 transition-colors"

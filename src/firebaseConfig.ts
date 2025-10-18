@@ -67,35 +67,38 @@ if (import.meta.env.DEV) {
   console.log(`[firebaseConfig] Auth Emulator: ${authUrl}`);
   connectAuthEmulator(auth, authUrl, { disableWarnings: true });
 
-  // 2. Functions: Connect via the NEW Vite Proxy path
-  functions = getFunctions(app); // Get default instance
-  // Connect to the host/port where Vite is running.
-  // The function calls made by the SDK will be intercepted by the '/__/firebase_functions_proxy' rule in vite.config.ts
-  const viteHost = isTunnel ? 'app.projectgrid.tech' : 'localhost';
-  const vitePort = isTunnel ? 443 : 3000;
-  console.log(`[firebaseConfig] Functions Emulator: Connecting via Vite proxy (Targeting Vite at ${viteHost}:${vitePort}, expecting calls to be proxied from /__/firebase_functions_proxy)`);
-  // NOTE: We connect to Vite itself. The SDK needs to make calls relative to this origin
-  // e.g., calling processCommand should result in a request to
-  // https://app.projectgrid.tech/__/firebase_functions_proxy/yourProjectId/us-central1/processCommand
-  // OR http://localhost:3000/__/firebase_functions_proxy/yourProjectId/us-central1/processCommand
-  connectFunctionsEmulator(functions, viteHost, vitePort);
-  // It's crucial that the Firebase SDK correctly formats the URL path
-  // to include the region/function name relative to the viteHost:vitePort base.
+  // 2. Functions
+  functions = getFunctions(app, 'us-central1'); // Specify region
 
+  if (isTunnel) {
+     console.log('[firebaseConfig] Functions: Using customDomain for HTTPS tunnel (app.projectgrid.tech)');
+     // SDK will append /projectId/region/functionName to this:
+     functions.customDomain = "https://app.projectgrid.tech";
+  } else {
+     // Localhost: Connect directly to the emulator port
+     console.log('[firebaseConfig] Functions Emulator: Connecting via localhost:5003');
+     connectFunctionsEmulator(functions, 'localhost', 5003); // Use correct emulator port
+  }
 
-  // 3. Firestore: Connect to tunnel URL or localhost:8080 (using IP in tunnel config)
-  db = initializeFirestore(app, {
-      experimentalForceLongPolling: true,
-  });
+  // 3. Firestore: Connect to tunnel URL or localhost:8080
   const firestoreHost = isTunnel ? 'firestore.projectgrid.tech' : 'localhost';
   const firestorePort = isTunnel ? 443 : 8080;
-  console.log(`[firebaseConfig] Firestore Emulator: ${firestoreHost}:${firestorePort}`);
-  connectFirestoreEmulator(db, firestoreHost, firestorePort);
+  const useSsl = isTunnel;
+
+  console.log(`[firebaseConfig] Initializing Firestore DIRECTLY: host=${firestoreHost}, port=${firestorePort}, ssl=${useSsl}`);
+
+  db = initializeFirestore(app, {
+    host: `${firestoreHost}:${firestorePort}`,
+    ssl: useSsl,
+    // experimentalForceLongPolling: true, // Ensure this is removed or commented out
+  });
+  console.log('[firebaseConfig] Firestore initialized directly. connectFirestoreEmulator NOT called.');
+  // [END] FIRESTORE - DIRECT INITIALIZATION, NO LONG POLLING
 
 } else {
   // --- PRODUCTION CONFIGURATION ---
   console.log("[firebaseConfig] Production mode detected.");
   auth = getAuth(app);
-  functions = getFunctions(app);
+  functions = getFunctions(app); // Consider specifying region
   db = initializeFirestore(app, {});
 }
