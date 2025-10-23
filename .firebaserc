@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "newsouthindex"
-  }
+    "default": "nsindxonline"
+  },
+  "targets": {},
+  "etags": {}
 }
