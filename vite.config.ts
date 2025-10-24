@@ -5,7 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import tailwindcss from '@tailwindcss/vite';
 
 const localIp = '192.168.4.58';
-const projectId = 'newsouthindex'; // <== Make sure this is your Firebase project ID
+const projectId = 'nsindxonline'; // <== Make sure this is your Firebase project ID
 const functionsEmulatorPort = 5003; // <== Make sure this is the port your Functions emulator runs on (check firebase.json or startup logs)
 
 export default defineConfig(({ mode }) => {
@@ -70,6 +70,7 @@ export default defineConfig(({ mode }) => {
       'process.env.VITE_STORAGE_BUCKET': JSON.stringify(env.VITE_STORAGE_BUCKET),
       'process.env.VITE_MESSAGING_SENDER_ID': JSON.stringify(env.VITE_MESSAGING_SENDER_ID),
       'process.env.VITE_APP_ID': JSON.stringify(env.VITE_APP_ID),
+      'process.env.VITE_MEASUREMENT_ID': JSON.stringify(env.VITE_MEASUREMENT_ID),
       'process.env.VITE_GOOGLE_MAPS_API_KEY': JSON.stringify(env.VITE_GOOGLE_MAPS_API_KEY),
       // Add other defines from your previous config if needed
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
