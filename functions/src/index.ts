@@ -372,7 +372,7 @@ const ai = new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY as string});
 const model = "gemini-2.5-flash-lite"; // Or your preferred model
 
 // --- Seed Database Function (using onCall) ---
-export const seedDatabase = onCall({cors: ['https://app.projectgrid.tech']}, async (request) => { // Use specific CORS origin
+export const seedDatabase = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online']}, async (request) => { // Use specific CORS origin
     if (process.env.FUNCTIONS_EMULATOR !== "true") {
         throw new HttpsError("permission-denied", "This function can only be run in the emulator environment.");
     }
@@ -430,29 +430,54 @@ export const seedDatabase = onCall({cors: ['https://app.projectgrid.tech']}, asy
 
 // --- processCommand Function (using onRequest with manual PNA/CORS) ---
 export const processCommand = onRequest(async (request, response) => {
-    // --- MANUAL OPTIONS PREFLIGHT HANDLING ---
+    // --- Define your allowed origins ---
+    const allowedOrigins = ['https://nsindxonline.web.app', 'https://newsouthindex.online'];
+    const origin = request.headers.origin as string; // Get the origin from the request
+
+    // --- Dynamically set the Allow-Origin header ---
+    // Check if the request's origin is in your allowed list
+    if (origin && allowedOrigins.includes(origin)) {
+        response.set('Access-Control-Allow-Origin', origin); // Reflect the allowed origin
+    } else {
+        // Optionally handle requests from disallowed origins
+        // You might just let the browser block it, or log it, etc.
+        // For OPTIONS requests, it's crucial to still respond correctly below if needed
+    }
+
+    // --- Handle OPTIONS preflight request ---
     if (request.method === 'OPTIONS') {
-        // Set headers required for CORS and Private Network Access
-        response.set('Access-Control-Allow-Origin', 'https://app.projectgrid.tech');
-        response.set('Access-Control-Allow-Methods', 'POST, OPTIONS'); // Allow methods used by fetch/httpsCallable
-        response.set('Access-Control-Allow-Headers', 'Content-Type, Authorization'); // Headers used by fetch/httpsCallable
+        // 'Access-Control-Allow-Origin' is already set above (if origin was allowed)
+        response.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        response.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
         response.set('Access-Control-Max-Age', '3600');
-        // !!! ADD THIS CRITICAL HEADER !!!
         response.set('Access-Control-Allow-Private-Network', 'true');
-        // Send 204 No Content status
-        response.status(204).send('');
-        return; // Stop processing
+        
+        // Send 204 No Content for successful preflight
+        response.status(204).send(''); 
+        return; // Important: Stop processing after sending OPTIONS response
     }
 
     // --- Handle actual POST request ---
-    response.set('Access-Control-Allow-Origin', 'https://app.projectgrid.tech');
-    response.set('Access-Control-Allow-Private-Network', 'true');
+    // 'Access-Control-Allow-Origin' is already set above (if origin was allowed)
+    response.set('Access-Control-Allow-Private-Network', 'true'); // Still needed for the actual request
+
+    // Check if origin was allowed before proceeding (optional but good practice)
+    if (!(origin && allowedOrigins.includes(origin))) {
+         logger.warn(`Disallowed origin attempted POST: ${origin}`);
+         response.status(403).send({ error: { message: "Origin not allowed." } });
+         return;
+    }
+
 
     logger.info("Starting up process command (onRequest with PNA)");
     logger.info("Credential Path Check:", process.env.GOOGLE_APPLICATION_CREDENTIALS || "Not Set");
 
     const command = request.body.data?.command;
     if (!command) {
+        // Make sure CORS headers are set even for errors if origin was allowed
+        if (origin && allowedOrigins.includes(origin)) {
+           response.set('Access-Control-Allow-Origin', origin);
+        }
         response.status(400).send({ error: { message: "No command provided." } });
         return;
     }
@@ -482,15 +507,16 @@ export const processCommand = onRequest(async (request, response) => {
         const calls = result.functionCalls;
         const call = calls ? calls[0] : null;
         const responseText = result.text;
-        // This 'responsePayload' is your custom object, distinct from the Express 'response'
         let responsePayload: any = { intent: "GENERAL_QUERY", responseText };
 
         if (call) {
             const { name, args } = call;
             const anyArgs = args as any;
 
+            // --- Your existing switch statement ---
             switch (name) {
-                case "findTransaction":
+                // ... (keep all your cases: findTransaction, deleteTransaction, countContacts, etc.) ...
+                 case "findTransaction":
                     responsePayload = { intent: 'FIND_TRANSACTION', data: { transactionIdentifier: args }, responseText: result.text || `Finding transaction.` };
                     break;
                 case "deleteTransaction":
@@ -600,31 +626,32 @@ export const processCommand = onRequest(async (request, response) => {
                 case "getMetrics":
                     responsePayload = { intent: 'METRICS_DATA', data: { metricsRequest: args }, responseText: result.text || `Getting metrics.` };
                     break;
-                default:
+                 default:
                     const conversationalText = result.text || "I'm sorry, I could not determine a specific action to take.";
-                    // FIX: Assign to 'responsePayload'
                     responsePayload = { intent: "GENERAL_QUERY", responseText: conversationalText };
             }
+            // --- End of switch statement ---
         } else {
-            // No function call, use responseText or a default
             responsePayload = { intent: 'GENERAL_QUERY', responseText: result.text || "I'm sorry, I couldn't understand that request." };
         }
 
         logger.info("[GEMINI] Parsed JSON response (onRequest):", JSON.stringify(responsePayload, null, 2));
-        // Send success response - using the Express 'response' object
-        response.status(200).send({ data: responsePayload }); // Wrap the payload
+        // 'Access-Control-Allow-Origin' is already set at the top
+        response.status(200).send({ data: responsePayload });
 
     } catch (error) {
         logger.error("Error processing command with Gemini (onRequest):", error);
-        // Ensure CORS headers are set for errors too
+        // Ensure CORS headers are set for errors too, if origin was allowed
+        if (origin && allowedOrigins.includes(origin)) {
+           response.set('Access-Control-Allow-Origin', origin);
+        }
         response.status(500).send({ error: { message: "Gemini processing failed." } });
     }
 });
 // --- END processCommand ---
 
-
 // --- User Management Functions (using onCall) ---
-export const setUserRole = onCall({cors: ['https://app.projectgrid.tech']}, async (request) => { // Use specific CORS origin
+export const setUserRole = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online']}, async (request) => { // Use specific CORS origin
     if (request.auth?.token.role !== 'admin') {
         throw new HttpsError("permission-denied", "Only admins can set user roles.");
     }
@@ -648,7 +675,7 @@ export const setUserRole = onCall({cors: ['https://app.projectgrid.tech']}, asyn
     }
 });
 
-export const deleteUser = onCall({cors: ['https://app.projectgrid.tech']}, async (request) => { // Use specific CORS origin
+export const deleteUser = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online']}, async (request) => { // Use specific CORS origin
     if (request.auth?.token.role !== 'admin') {
         throw new HttpsError("permission-denied", "Only admins can delete users.");
     }
@@ -672,7 +699,7 @@ export const deleteUser = onCall({cors: ['https://app.projectgrid.tech']}, async
     }
 });
 
-export const makeMeAdmin = onCall({cors: ['https://app.projectgrid.tech']}, async (request) => { // Use specific CORS origin
+export const makeMeAdmin = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online']}, async (request) => { // Use specific CORS origin
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "You must be logged in to perform this action.");
     }

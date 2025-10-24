@@ -356,7 +356,7 @@ function App() {
         const newContact = {
             firstName: firstName,
             lastName: lastName,
-            category: contactData?.category || Category.OTHER,
+            category: contactData?.category || category.OTHER,
             phone: contactData?.phone || 'N/A',
             email: contactData?.email || `${firstName.toLowerCase()}.${lastName.toLowerCase()}@default.com`,
             notes: contactData?.notes || `Added via AI.`,
@@ -519,7 +519,7 @@ function App() {
                     // Category Filter (Handles 'not Client' and exact match)
                     if (filters.category) {
                         if (filters.category === 'not Client') {
-                            if (c.category === Category.CLIENT) passes = false;
+                            if (c.category === category.CLIENT) passes = false;
                         } else {
                             if (c.category !== filters.category) passes = false;
                         }
