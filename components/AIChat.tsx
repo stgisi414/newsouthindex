@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChatMessage, Contact, Book, Event } from '../types'; // Added Book, Event
+import { AppUser, Contact, UserRole, Book, Transaction, Event, Category } from "./types";
 import { processNaturalLanguageCommand } from '../services/geminiService';
 import PaperAirplaneIcon from './icons/PaperAirplaneIcon';
 import { User } from 'firebase/auth'; // NEW IMPORT

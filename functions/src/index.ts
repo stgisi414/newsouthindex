@@ -652,49 +652,155 @@ export const processCommand = onRequest(async (request, response) => {
 
 // --- User Management Functions (using onCall) ---
 export const setUserRole = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online']}, async (request) => { // Use specific CORS origin
-    if (request.auth?.token.role !== 'admin') {
-        throw new HttpsError("permission-denied", "Only admins can set user roles.");
+    const requestingUid = request.auth?.uid;
+
+    // Check for authentication
+    if (!requestingUid) {
+        throw new HttpsError("unauthenticated", "You must be authenticated to perform this action.");
     }
-    const { userId, role } = request.data;
-    if (!userId || !['admin', 'viewer', 'applicant'].includes(role)) {
-        throw new HttpsError("invalid-argument", "The function must be called with a `userId` and a valid `role`.");
+
+    const { userId, role: newRole } = request.data;
+
+    // Check for valid arguments
+    if (!userId || !['admin', 'viewer', 'applicant'].includes(newRole)) {
+        throw new HttpsError("invalid-argument", "The function must be called with a `userId` and a valid `role` (admin, viewer, or applicant).");
     }
+
     try {
-        const userDocRef = admin.firestore().collection("users").doc(userId);
-        const userDoc = await userDocRef.get();
-        if (userDoc.exists && userDoc.data()?.isMasterAdmin === true) {
-            throw new HttpsError("permission-denied", "The master admin account cannot be modified.");
+        // --- Start New Permission Checks ---
+        const db = admin.firestore();
+
+        // 1. Get the requesting user's full doc to check for isMasterAdmin
+        const requestingUserRef = db.collection("users").doc(requestingUid);
+        const requestingUserDoc = await requestingUserRef.get();
+
+        if (!requestingUserDoc.exists || requestingUserDoc.data()?.role !== 'admin') {
+            throw new HttpsError("permission-denied", "You must be an admin to change user roles.");
         }
-        await admin.auth().setCustomUserClaims(userId, { role });
-        await userDocRef.update({ role, isAdmin: role === 'admin' });
+
+        const isMasterAdmin = requestingUserDoc.data()?.isMasterAdmin === true;
+
+        // 2. Get the target user's full doc
+        const targetUserRef = db.collection("users").doc(userId);
+        const targetUserDoc = await targetUserRef.get();
+
+        if (!targetUserDoc.exists) {
+            throw new HttpsError("not-found", "The specified user does not exist.");
+        }
+
+        const targetUser = targetUserDoc.data();
+        if (!targetUser) {
+            throw new HttpsError("internal", "Could not retrieve target user data.");
+        }
+
+        const isTargetMasterAdmin = targetUser.isMasterAdmin === true;
+        const currentRole = targetUser.role;
+
+        // 3. Enforce Master Admin rules
+        if (isMasterAdmin) {
+            // Master Admins can do anything, EXCEPT modify other Master Admins
+            if (isTargetMasterAdmin) {
+                throw new HttpsError("permission-denied", "Master Admins cannot be modified.");
+            }
+            // Proceed to change role (at the end)
+        }
+        // 4. Enforce Regular Admin rules
+        else {
+            // Regular Admins CANNOT modify Master Admins
+            if (isTargetMasterAdmin) {
+                throw new HttpsError("permission-denied", "Only Master Admins can modify this user.");
+            }
+
+            // Regular Admins CANNOT promote to Admin or demote from Admin
+            if (newRole === 'admin' || currentRole === 'admin') {
+                throw new HttpsError("permission-denied", "Only Master Admins can promote to or demote other Admins.");
+            }
+
+            // Regular Admins can ONLY promote Applicant -> Viewer or demote Viewer -> Applicant
+            const isPromotingApplicant = currentRole === 'applicant' && newRole === 'viewer';
+            const isDemotingViewer = currentRole === 'viewer' && newRole === 'applicant';
+
+            if (!isPromotingApplicant && !isDemotingViewer) {
+                throw new HttpsError("permission-denied", `Regular admins can only change roles between 'applicant' and 'viewer'.`);
+            }
+            // Proceed to change role (at the end)
+        }
+        // --- End New Permission Checks ---
+
+        // If all checks passed, perform the update:
+        await admin.auth().setCustomUserClaims(userId, { role: newRole });
+        await targetUserRef.update({ role: newRole, isAdmin: newRole === 'admin' });
         return { success: true, message: `Successfully updated role for user ${userId}.` };
+
     } catch (error) {
         logger.error("Error setting user role:", error);
-        if (error instanceof HttpsError) { throw error; }
+        if (error instanceof HttpsError) { throw error; } // Re-throw HttpsErrors
         throw new HttpsError("internal", "Failed to set user role.");
     }
 });
 
 export const deleteUser = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online']}, async (request) => { // Use specific CORS origin
-    if (request.auth?.token.role !== 'admin') {
-        throw new HttpsError("permission-denied", "Only admins can delete users.");
+    const requestingUid = request.auth?.uid;
+
+    // Check for authentication
+    if (!requestingUid) {
+        throw new HttpsError("unauthenticated", "You must be authenticated to perform this action.");
     }
+
     const { userId } = request.data;
     if (!userId) {
         throw new HttpsError("invalid-argument", "The function must be called with a `userId`.");
     }
+
     try {
-        const userDocRef = admin.firestore().collection("users").doc(userId);
-        const userDoc = await userDocRef.get();
-        if (userDoc.exists && userDoc.data()?.isMasterAdmin === true) {
-            throw new HttpsError("permission-denied", "The master admin account cannot be deleted.");
+        // --- Start New Permission Checks ---
+        const db = admin.firestore();
+
+        // 1. Get the requesting user's full doc to check for isMasterAdmin
+        const requestingUserRef = db.collection("users").doc(requestingUid);
+        const requestingUserDoc = await requestingUserRef.get();
+
+        if (!requestingUserDoc.exists || requestingUserDoc.data()?.role !== 'admin') {
+            throw new HttpsError("permission-denied", "You must be an admin to delete users.");
         }
+
+        const isMasterAdmin = requestingUserDoc.data()?.isMasterAdmin === true;
+
+        // 2. Get the target user's full doc
+        const targetUserRef = db.collection("users").doc(userId);
+        const targetUserDoc = await targetUserRef.get();
+
+        if (!targetUserDoc.exists) {
+            throw new HttpsError("not-found", "The specified user does not exist.");
+        }
+
+        const isTargetMasterAdmin = targetUserDoc.data()?.isMasterAdmin === true;
+
+        // 3. Enforce rules
+        // Regular Admins CANNOT delete anyone
+        if (!isMasterAdmin) {
+            throw new HttpsError("permission-denied", "Only Master Admins can delete users.");
+        }
+
+        // Master Admins CANNOT delete other Master Admins
+        if (isTargetMasterAdmin) {
+            throw new HttpsError("permission-denied", "Master Admins cannot be deleted.");
+        }
+        // --- End New Permission Checks ---
+
+        // If all checks passed, perform the deletion:
         await admin.auth().deleteUser(userId);
-        await userDocRef.delete();
+        await targetUserRef.delete();
+        
+        // (Optional) Delete chat history subcollection
+        // If you have chat history, you might want to uncomment this
+        // const chatHistoryRef = db.collection("users").doc(userId).collection("chat").doc("history");
+        // await chatHistoryRef.delete().catch(err => logger.warn("Could not delete chat history:", err));
+
         return { success: true, message: `Successfully deleted user ${userId}.` };
     } catch (error) {
         logger.error("Error deleting user:", error);
-        if (error instanceof HttpsError) { throw error; }
+        if (error instanceof HttpsError) { throw error; } // Re-throw HttpsErrors
         throw new HttpsError("internal", "Failed to delete user.");
     }
 });
@@ -712,10 +818,13 @@ export const makeMeAdmin = onCall({cors: ['https://nsindxonline.web.app', 'https
     const email = request.auth.token.email || "Unknown";
     try {
         await admin.auth().setCustomUserClaims(uid, { role: 'admin' });
+        // --- This is the key change ---
         await admin.firestore().collection("users").doc(uid).set({
             role: 'admin',
             isAdmin: true,
+            isMasterAdmin: true, // Set the first admin as Master Admin
         }, { merge: true });
+        // --- End of key change ---
         logger.info(`Successfully set 'admin' role for ${email} (${uid}) via onCall.`);
         return { message: `Success! Admin permissions have been synced for ${email}. Please refresh the page.` };
     } catch (error) {

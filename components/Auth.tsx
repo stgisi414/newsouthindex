@@ -25,44 +25,51 @@ const ensureUserDocument = async (user: User) => {
 };
 
 export const Auth = () => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  /* --- These are for email/password, safe to comment --- */
+  // const [email, setEmail] = useState("");
+  // const [password, setPassword] = useState("");
+  /* --- End email/password state --- */
 
+  // --- These are needed for Google Sign-In, so UNCOMMENT them ---
+  const [error, setError] = useState<string | null>(null);
   const auth = getAuth();
   const googleProvider = new GoogleAuthProvider();
+  // --- End required variables ---
 
-   const handleSignUp = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      await ensureUserDocument(result.user);
-    } catch (err: any) {
-      setError("Invalid email or password. Please check your credentials.");
-      console.error("Sign up error:", err);
-    }
-  };
+  /* --- Email/password functions, safe to comment --- */
+  //  const handleSignUp = async (e: FormEvent) => {
+  //   e.preventDefault();
+  //   setError(null);
+  //   try {
+  //     const result = await createUserWithEmailAndPassword(auth, email, password);
+  //     await ensureUserDocument(result.user);
+  //   } catch (err: any) {
+  //     setError("Invalid email or password. Please check your credentials.");
+  //     console.error("Sign up error:", err);
+  //   }
+  // };
 
-  const handleLogin = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (err: any) {
-      setError("Invalid email or password. Please check your credentials.");
-      console.error("Login error:", err);
-    }
-  };
+  // const handleLogin = async (e: FormEvent) => {
+  //   e.preventDefault();
+  //   setError(null);
+  //   try {
+  //     await signInWithEmailAndPassword(auth, email, password);
+  //   } catch (err: any) {
+  //     setError("Invalid email or password. Please check your credentials.");
+  //     console.error("Login error:", err);
+  //   }
+  // };
+  /* --- End email/password functions --- */
 
+  // This function is for Google Sign-In and needs the variables above
   const handleGoogleSignIn = async (e: FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setError(null); // Needs setError
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider); // Needs auth and googleProvider
       await ensureUserDocument(result.user);
     } catch (err: any) {
-      setError(err.message || "An error occurred during Google sign-in.");
+      setError(err.message || "An error occurred during Google sign-in."); // Needs setError
       console.error("Google Sign-In error:", err);
     }
   };
@@ -91,7 +98,10 @@ export const Auth = () => {
             </p>
           </div>
         </div>
+        
+        {/* --- Email/Password Form Commented Out --- */}
         <form className="space-y-6">
+          {/*
           <div>
             <label
               htmlFor="email"
@@ -128,8 +138,12 @@ export const Auth = () => {
               className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
             />
           </div>
+          */}
+
           {error && <p className="text-sm text-center text-red-600">{error}</p>}
+          
           <div className="pt-2 space-y-4">
+            {/*
             <div className="flex items-center justify-between gap-4">
               <button
                 type="button"
@@ -146,6 +160,9 @@ export const Auth = () => {
                 Sign Up
               </button>
             </div>
+            */}
+
+            {/* --- This is the Google Sign-In button, which should remain --- */}
             <button
               type="button"
               onClick={handleGoogleSignIn}

@@ -1,135 +1,191 @@
-import React, { useState, useMemo } from 'react';
-import { AppUser, UserRole } from '../types';
-import { User } from 'firebase/auth';
-import { httpsCallable } from 'firebase/functions';
-import { functions } from '../src/firebaseConfig';
+import React, { useState } from "react";
+import { httpsCallable } from "firebase/functions";
+import { functions, db } from "../src/firebaseConfig";
+import { AppUser, UserRole } from "../types";
+import { doc, getDoc } from "firebase/firestore";
+import { User } from "firebase/auth"; // Import User type
+
+// Define the function types
+const setUserRole = httpsCallable<
+  { userId: string; role: UserRole },
+  { message: string }
+>(functions, "setUserRole");
+const deleteUser = httpsCallable<{ userId: string }, { message: string }>(
+  functions,
+  "deleteUser",
+);
 
 interface AdminPanelProps {
-    users: AppUser[];
-    currentUser: User;
+  users: AppUser[];
+  currentUser: User; // Use the more specific auth User type
 }
 
-const setUserRole = httpsCallable(functions, 'setUserRole');
-const deleteUser = httpsCallable(functions, 'deleteUser');
-const MASTER_ADMIN_EMAIL = "olive.raccoon.392@example.com";
-const ITEMS_PER_PAGE = 10;
-
 const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser }) => {
-    const [currentPage, setCurrentPage] = useState(1);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-    const handleSetRole = async (userId: string, role: UserRole) => {
-        if (window.confirm(`Are you sure you want to set this user's role to ${role}?`)) {
-            try {
-                await setUserRole({ userId, role });
-                alert('User role updated successfully.');
-            } catch (error: any) {
-                console.error("Error updating user role:", error);
-                alert(`Failed to update user role: ${error.message}`);
-            }
-        }
-    };
+  // --- NEW PERMISSIONS LOGIC ---
+  // 1. Find the full AppUser object for the person VIEWING the panel
+  const currentUserAppUser = users.find((u) => u.id === currentUser.uid);
+  const isMasterAdmin = currentUserAppUser?.isMasterAdmin === true;
+  // --- END NEW PERMISSIONS LOGIC ---
 
-    const handleDeleteUser = async (userId: string) => {
-        if (window.confirm('Are you sure you want to permanently delete this user? This cannot be undone.')) {
-            try {
-                await deleteUser({ userId });
-                alert('User deleted successfully.');
-            } catch (error: any) {
-                console.error("Error deleting user:", error);
-                alert(`Failed to delete user: ${error.message}`);
-            }
-        }
-    };
-    
-    const applicants = users.filter(u => u.role === UserRole.APPLICANT);
-    const viewersAndAdmins = users.filter(u => u.role !== UserRole.APPLICANT);
+  const handleRoleChange = async (uid: string, newRole: UserRole) => {
+    setError(null);
+    setSuccess(null);
+    try {
+      // Check if the user document has the isMasterAdmin flag.
+      // This is a failsafe; the backend function is the real source of truth.
+      const userDoc = await getDoc(doc(db, "users", uid));
+      if (userDoc.data()?.isMasterAdmin && !isMasterAdmin) {
+        setError("Only a Master Admin can change this user's role.");
+        return;
+      }
+      if (userDoc.data()?.isMasterAdmin && isMasterAdmin) {
+        setError("Master Admins cannot be modified.");
+        return;
+      }
+      const result = await setUserRole({ userId: uid, role: newRole });
+      setSuccess(result.data.message);
+    } catch (err: any) {
+      console.error("Error setting role:", err);
+      setError(err.message || "An error occurred.");
+    }
+  };
 
-    const totalPages = Math.ceil(viewersAndAdmins.length / ITEMS_PER_PAGE);
-    const paginatedUsers = useMemo(() => {
-        const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-        return viewersAndAdmins.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-    }, [currentPage, viewersAndAdmins]);
+  const handleDeleteUser = async (uid: string, email?: string) => {
+    if (
+      !window.confirm(
+        `Are you sure you want to permanently delete this user: ${
+          email || uid
+        }? This action cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setSuccess(null);
+    try {
+      // Check if the user is a Master Admin before even trying
+      const userDoc = await getDoc(doc(db, "users", uid));
+      if (userDoc.data()?.isMasterAdmin) {
+        setError("Master Admins cannot be deleted.");
+        return;
+      }
+      const result = await deleteUser({ userId: uid });   
+      setSuccess(result.data.message);
+    } catch (err: any) {
+      console.error("Error deleting user:", err);
+      setError(err.message || "An error occurred.");
+    }
+  };
 
-    return (
-        <div className="bg-white shadow-lg rounded-xl p-6 mt-2 mb-10">
-            <h3 className="text-lg font-semibold text-gray-800 border-b pb-2 mb-4">Admin Panel</h3>
+  return (
+    <div className="p-6 bg-white rounded-lg shadow-lg">
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">Admin Panel</h2>
+      {error && <p className="text-red-500 mb-4">{error}</p>}
+      {success && <p className="text-green-500 mb-4">{success}</p>}
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                User
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Role
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {users.map((user) => {
+              // --- NEW PERMISSIONS LOGIC ---
+              const isTargetMaster = user.isMasterAdmin === true;
+              const isTargetAdmin = user.role === UserRole.ADMIN;
 
-            {applicants.length > 0 && (
-                <div>
-                    <h4 className="text-md font-semibold text-gray-700 mb-2">New Applicants</h4>
-                    <div className="space-y-2 mb-6">
-                        {applicants.map(user => (
-                            <div key={user.id} className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
-                                <span className="text-sm text-gray-700">{user.email}</span>
-                                <button
-                                    onClick={() => handleSetRole(user.id, UserRole.VIEWER)}
-                                    className="px-3 py-1 text-xs font-semibold text-green-800 bg-green-200 rounded hover:bg-green-300"
-                                >
-                                    Approve as Viewer
-                                </button>
-                            </div>
-                        ))}
+              // A regular admin cannot modify a Master Admin OR another Regular Admin
+              const canRegularAdminModify =
+                !isMasterAdmin && (isTargetMaster || isTargetAdmin);
+              // --- END NEW PERMISSIONS LOGIC ---
+
+              return (
+                <tr key={user.id}>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">
+                      {user.email || "No Email"}
+                      {user.id === currentUser.uid && " (You)"}
                     </div>
-                </div>
-            )}
-
-            <h4 className="text-md font-semibold text-gray-700 mb-2">Manage Users</h4>
-            <div className="space-y-4">
-                {paginatedUsers.map(user => (
-                    <div key={user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <span className="text-sm text-gray-700">{user.email} ({user.role})</span>
-                        <div className="flex items-center space-x-3">
-                            {user.id !== currentUser.uid && !user.isMasterAdmin && (
-                                <>
-                                    {user.role === UserRole.VIEWER && (
-                                        <button
-                                            onClick={() => handleSetRole(user.id, UserRole.ADMIN)}
-                                            className="px-3 py-1 text-xs font-semibold rounded bg-blue-100 text-blue-800 hover:bg-blue-200"
-                                        >
-                                            Promote to Admin
-                                        </button>
-                                    )}
-                                    {user.role === UserRole.ADMIN && (
-                                        <button
-                                            onClick={() => handleSetRole(user.id, UserRole.VIEWER)}
-                                            className="px-3 py-1 text-xs font-semibold rounded bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
-                                        >
-                                            Demote to Viewer
-                                        </button>
-                                    )}
-                                    <button
-                                        onClick={() => handleDeleteUser(user.id)}
-                                        className="px-3 py-1 text-xs font-semibold text-red-800 bg-red-100 rounded hover:bg-red-200"
-                                    >
-                                        Delete
-                                    </button>
-                                </>
-                            )}
-                            {user.isMasterAdmin && (
-                                <span className="text-xs font-semibold text-gray-500">Master Admin</span>
-                            )}
-                        </div>
+                    <div className="text-sm text-gray-500">
+                      {isTargetMaster ? "Master Admin" : user.role}
                     </div>
-                ))}
-            </div>
-            {/* ADDED: Pagination Controls for Admin Panel */}
-            <div className="mt-4 flex items-center justify-between">
-                <div>
-                    <p className="text-sm text-gray-700">
-                        Page <span className="font-medium">{currentPage}</span> of <span className="font-medium">{totalPages}</span>
-                    </p>
-                </div>
-                <div className="flex justify-end">
-                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">
-                        Previous
-                    </button>
-                    <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">
-                        Next
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <select
+                      value={user.role}
+                      onChange={(e) =>
+                        handleRoleChange(user.id, e.target.value as UserRole)
+                      }
+                      // Disable the dropdown if:
+                      // 1. The target is a Master Admin
+                      // 2. The current user is a Regular Admin and the target is another Admin
+                      disabled={isTargetMaster || canRegularAdminModify}
+                      className={`block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md ${
+                        isTargetMaster || canRegularAdminModify
+                          ? "bg-gray-200 cursor-not-allowed"
+                          : ""
+                      }`}
+                      title={
+                        isTargetMaster
+                          ? "Master Admins cannot be modified"
+                          : canRegularAdminModify
+                            ? "Only Master Admins can change this user's role"
+                            : "Change user role"
+                      }
+                    >
+                      <option value={UserRole.APPLICANT}>Applicant</option>
+                      <option value={UserRole.VIEWER}>Viewer</option>
+                      {/* Only show "Admin" option if the current user is a Master Admin */}
+                      <option
+                        value={UserRole.ADMIN}
+                        disabled={!isMasterAdmin}
+                        title={
+                          !isMasterAdmin
+                            ? "Only Master Admins can promote to Admin"
+                            : ""
+                        }
+                      >
+                        Admin
+                      </option>
+                    </select>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    {/* Only show Delete button if:
+                        1. The current user is a Master Admin
+                        2. The target user is NOT a Master Admin
+                        3. The target is NOT the current user
+                    */}
+                    {isMasterAdmin &&
+                      !isTargetMaster &&
+                      user.id !== currentUser.uid && (
+                        <button
+                          onClick={() => handleDeleteUser(user.id, user.email)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          Delete User
+                        </button>
+                      )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 };
 
 export default AdminPanel;

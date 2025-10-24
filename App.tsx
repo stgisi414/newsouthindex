@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react"; // Added React
 import { auth, db, functions } from "./src/firebaseConfig";
 import { onAuthStateChanged, User, signOut } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
@@ -20,7 +20,7 @@ import {
 } from "firebase/firestore";
 import Dashboard from "./components/Dashboard";
 import { Auth } from "./components/Auth";
-import { AppUser, Contact, UserRole, Book, Transaction, Event } from "./types";
+import { AppUser, Contact, UserRole, Book, Transaction, Event, Category } from "./types"; // Import Category
 
 const seedDatabase = httpsCallable(functions, 'seedDatabase');
 
@@ -32,6 +32,48 @@ const removeUndefined = (obj: Record<string, any>) => {
         Object.entries(obj).filter(([, value]) => value !== undefined)
     );
 };
+
+// Utility function to capitalize the first letter of each word
+const capitalize = (s: string) => {
+    if (!s) return s;
+    return s.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+};
+
+// --- NEW APPLICANT MODAL COMPONENT ---
+// This component will be shown instead of the Dashboard for applicants
+const ApplicantModal: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-100">
+      <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg text-center">
+        <img
+          src="/newsouthbookslogo.jpg"
+          alt="New South Books Logo"
+          className="w-auto h-16 mx-auto"
+        />
+        <h2 className="text-2xl font-bold text-gray-900">
+          Access Pending
+        </h2>
+        <p className="text-gray-600">
+          Your account has been created successfully, but is currently awaiting
+          approval.
+        </p>
+        <p className="text-sm text-gray-500">
+          An administrator must promote your role to 'Viewer' before you
+          can access the dashboard.
+        </p>
+        <div className="pt-4">
+          <button
+            onClick={onLogout}
+            className="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            Logout
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+// --- END OF NEW COMPONENT ---
 
 
 function App() {
@@ -218,7 +260,9 @@ function App() {
   
   const addBook = async (bookData: Omit<Book, "id">) => {
     if (!isAdmin) return;
-    await addDoc(collection(db, "books"), bookData);
+    // Clean the object to remove any 'undefined' fields before saving
+    const cleanBookData = removeUndefined(bookData);
+    await addDoc(collection(db, "books"), cleanBookData);
   };
   const updateBook = async (book: Book) => {
     if (!isAdmin) return;
@@ -350,19 +394,24 @@ function App() {
         const { contactIdentifier } = (data || {}) as { contactIdentifier?: string };
         
         const nameParts = (contactIdentifier || '').split(' ').filter(p => p.length > 0);
-        const firstName = contactData?.firstName || nameParts[0] || 'Unknown';
-        const lastName = contactData?.lastName || (nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Contact');
         
+        // Get the raw names, which might be lowercase
+        const rawFirstName = contactData?.firstName || nameParts[0] || 'Unknown';
+        const rawLastName = contactData?.lastName || (nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Contact');
+        
+        // Create the new contact with capitalized names
         const newContact = {
-            firstName: firstName,
-            lastName: lastName,
-            category: contactData?.category || category.OTHER,
+            firstName: capitalize(rawFirstName), // Capitalize first name
+            lastName: capitalize(rawLastName),   // Capitalize last name
+            category: contactData?.category || Category.OTHER,
             phone: contactData?.phone || 'N/A',
-            email: contactData?.email || `${firstName.toLowerCase()}.${lastName.toLowerCase()}@default.com`,
+            // Use the raw lowercase names for the email
+            email: contactData?.email || `${rawFirstName.toLowerCase()}.${rawLastName.toLowerCase()}@default.com`,
             notes: contactData?.notes || `Added via AI.`,
         } as Omit<Contact, "id">;
 
         const result = await addContact(newContact);
+        // The result.message will now use the capitalized names from newContact
         return { ...result, targetView: 'contacts' };
       }
         
@@ -408,8 +457,8 @@ function App() {
         const contactToUpdate = foundContacts[0];
         
         // This is a direct update of a single field from AI, wrap it to match the standard function signature
-        const result = await updateContact({ ...contactToUpdate, ...updateData });
-        return { ...result, targetView: 'contacts' };
+        await updateContact({ ...contactToUpdate, ...updateData }); // Removed 'result' as updateContact returns void
+        return { success: true, message: `Updated ${contactToUpdate.firstName}`, targetView: 'contacts' };
       }
 
       case 'DELETE_CONTACT': {
@@ -446,8 +495,8 @@ function App() {
         const { bookData } = (data || {}) as { bookData?: Partial<Book> };
         
         const newBook = {
-          title: bookData?.title || "Untitled",
-          author: bookData?.author || "Unknown Author",
+          title: capitalize(bookData?.title || "Untitled"),
+          author: capitalize(bookData?.author || "Unknown Author"),
           isbn: bookData?.isbn || "",
           publisher: bookData?.publisher || "",
           price: bookData?.price || 0,
@@ -519,7 +568,7 @@ function App() {
                     // Category Filter (Handles 'not Client' and exact match)
                     if (filters.category) {
                         if (filters.category === 'not Client') {
-                            if (c.category === category.CLIENT) passes = false;
+                            if (c.category === Category.CLIENT) passes = false;
                         } else {
                             if (c.category !== filters.category) passes = false;
                         }
@@ -669,9 +718,9 @@ function App() {
         if (!isAdmin) return { success: false, message: "Sorry, only admins can add events." };
         const { eventData } = (data || {}) as { eventData?: Partial<Event> }; // FIXED: Safely destructure
         const newEvent = {
-          name: eventData?.name || "Untitled Event",
+          name: capitalize(eventData?.name || "Untitled Event"),
           date: eventData?.date ? new Date(eventData.date) : new Date(),
-          author: eventData?.author || "",
+          author: capitalize(eventData?.author || ""),
           description: eventData?.description || "",
         } as Omit<Event, "id">;
         await addEvent(newEvent);
@@ -769,37 +818,49 @@ function App() {
     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
 
+  const renderContent = () => {
+    // 1. If user is not logged in, show Auth page
+    if (!user) {
+      return <Auth />;
+    }
+    // 2. If user is logged in BUT is an applicant, show the pending modal
+    if (userRole === UserRole.APPLICANT) {
+      return <ApplicantModal onLogout={handleLogout} />;
+    }
+    // 3. If user is logged in AND is a Viewer or Admin, show the Dashboard
+    return (
+      <Dashboard
+        contacts={contacts}
+        onAddContact={addContact}
+        onUpdateContact={updateContact}
+        onDeleteContact={deleteContact}
+        books={books}
+        onAddBook={addBook}
+        onUpdateBook={updateBook}
+        onDeleteBook={deleteBook}
+        transactions={transactions}
+        onAddTransaction={addTransaction}
+        onUpdateTransaction={updateTransaction}
+        onDeleteTransaction={deleteTransaction}
+        events={events}
+        onAddEvent={addEvent}
+        onUpdateEvent={updateEvent}
+        onDeleteEvent={deleteEvent}
+        onUpdateEventAttendees={updateEventAttendees}
+        onProcessAiCommand={onProcessAiCommand}
+        onLogout={handleLogout}
+        isAdmin={isAdmin}
+        users={users}
+        currentUser={user}
+      />
+    );
+  };
+
   return (
     <div className="flex flex-col min-h-screen">
       <main className="flex-grow">
-        {user ? (
-            <Dashboard
-              contacts={contacts}
-              onAddContact={addContact}
-              onUpdateContact={updateContact}
-              onDeleteContact={deleteContact}
-              books={books}
-              onAddBook={addBook}
-              onUpdateBook={updateBook}
-              onDeleteBook={deleteBook}
-              transactions={transactions}
-              onAddTransaction={addTransaction}
-              onUpdateTransaction={updateTransaction} // NEW HANDLER
-              onDeleteTransaction={deleteTransaction}
-              events={events}
-              onAddEvent={addEvent}
-              onUpdateEvent={updateEvent}
-              onDeleteEvent={deleteEvent}
-              onUpdateEventAttendees={updateEventAttendees}
-              onProcessAiCommand={onProcessAiCommand}
-              onLogout={handleLogout}
-              isAdmin={isAdmin}
-              users={users}
-              currentUser={user}
-            />
-        ) : (
-          <Auth />
-        )}
+        {/* This single function call now handles all logic */}
+        {renderContent()}
       </main>
       <footer className="w-full bg-white shadow-inner mt-auto py-4 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto text-center text-sm text-gray-500">
