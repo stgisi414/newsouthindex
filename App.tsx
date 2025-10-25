@@ -1026,6 +1026,34 @@
                    return { success: true, message: `Found customers who purchased the items, but none matched the additional filters${filterDescription}.`, targetView: 'contacts' };
               }
           }
+          if (target === 'customers' && metric === 'lifetime-value') {
+              const identifier = (metricsRequest.contactIdentifier || '').toLowerCase();
+              if (!identifier) {
+                  return { success: false, message: "Please specify a customer to calculate their lifetime value." };
+              }
+              
+              const foundContacts = contacts.filter(c => 
+                  `${c.firstName} ${c.lastName}`.toLowerCase().includes(identifier)
+              );
+
+              if (foundContacts.length === 0) {
+                  return { success: false, message: `I couldn't find a contact matching "${identifier}".` };
+              }
+              if (foundContacts.length > 1) {
+                  return { success: false, message: `Found multiple contacts matching "${identifier}". Please be more specific.` };
+              }
+
+              const contact = foundContacts[0];
+              const lifetimeValue = transactions
+                  .filter(t => t.contactId === contact.id)
+                  .reduce((sum, t) => sum + t.totalPrice, 0);
+
+              return {
+                  success: true,
+                  message: `The lifetime value of ${contact.firstName} ${contact.lastName} is $${lifetimeValue.toFixed(2)}.`,
+                  targetView: 'reports'
+              };
+          }
           return { success: false, message: "I'm sorry, I can't calculate those metrics." };
         }
 

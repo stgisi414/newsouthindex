@@ -237,11 +237,15 @@ export const responseSchema = {
         metric: {
           type: Type.STRING,
           description: "The specific metric type (e.g., 'top-spending', 'lowest-stock', 'total-revenue').",
-          enum: ["top-spending", "top-selling", "total-stock"],
+          enum: ["top-spending", "top-selling", "total-stock", "lifetime-value"],
         },
         limit: {
           type: Type.NUMBER,
           description: "The number of results to return for top-N queries. Defaults to 10.",
+        },
+        contactIdentifier: {
+            type: Type.STRING,
+            description: "The name or email of a specific contact for a metric (e.g., 'Sally Brown')."
         },
       },
     },

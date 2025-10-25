@@ -75,7 +75,14 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
     const handleFieldUpdate = (e: React.FocusEvent<HTMLSpanElement | HTMLSelectElement>, contact: Contact, field: keyof Contact) => {
         if (!isAdmin) return;
         
-        const value = e.currentTarget.textContent || (e.currentTarget as HTMLSelectElement).value;
+        let value: string | null;
+
+        if (field === 'category') {
+            value = (e.currentTarget as HTMLSelectElement).value;
+        } else {
+            value = e.currentTarget.textContent;
+        }
+
         const originalValue = contact[field] || '';
 
         let updatedValue: string | Category | undefined = value.trim();
@@ -108,6 +115,15 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
         
         const updatedContact = { ...contact, [field]: updatedValue };
         onUpdateContact(updatedContact as Contact);
+    };
+
+    const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>, contact: Contact) => {
+        if (!isAdmin) return;
+        
+        const value = e.currentTarget.value as Category;
+        const updatedContact = { ...contact, category: value };
+        
+        onUpdateContact(updatedContact);
     };
 
     return (
@@ -159,7 +175,7 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                                 {isCategory && isAdmin ? (
                                                     <select
                                                         value={contact.category}
-                                                        onChange={(e) => handleFieldUpdate(e as any, contact, 'category')}
+                                                        onChange={(e) => handleCategoryChange(e, contact)}
                                                         className="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                                                     >
                                                         {CATEGORY_VALUES.map((category) => (

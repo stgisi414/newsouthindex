@@ -92,6 +92,7 @@ const getMetricsDeclaration: FunctionDeclaration = {
             target: { type: Type.STRING, description: "The data collection to query (e.g., 'customers', 'sales', 'inventory')." },
             metric: { type: Type.STRING, description: "The specific metric type (e.g., 'top-spending', 'lowest-stock', 'total-revenue')." },
             limit: { type: Type.NUMBER, description: "The maximum number of results to return for 'top N' requests." },
+            contactIdentifier: { type: Type.STRING, description: "The name of the contact for a specific metric." }
         },
         required: ["target", "metric"],
     },
@@ -188,13 +189,17 @@ const fewShotExamples: GenerativeContent[] = [
     { role: "model", parts: [fCall("findContact", { identifier: "hermione granger" })] },
     // Existing category filter (using findContact with filters)
     { role: "user", parts: [{ text: "Show me all our suppliers." }] },
-    { role: "model", parts: [fCall("findContact", { filters: { category: "vendor" } })] }, // Assuming Vendor maps to Supplier
+    { role: "model", parts: [fCall("countContacts", { category: "vendor" })] },
+    { role: "user", parts: [{ text: "list all vendor contacts" }] },
+    { role: "model", parts: [fCall("countContacts", { category: "vendor" })] },
     // NEW: VIP members (using getMetrics)
     { role: "user", parts: [{ text: "List the contacts who are 'VIP' members." }] },
     { role: "model", parts: [fCall("getMetrics", { target: "contacts", metric: "vip-members" })] },
     // Example for a different category
-    { role: "user", parts: [{ text: "Who are the local authors in our database?" }] },
-    { role: "model", parts: [fCall("findContact", { filters: { category: "author" } })] },
+    //{ role: "user", parts: [{ text: "Who are the local authors in our database?" }] },
+    //{ role: "model", parts: [fCall("findContact", { category: "author" } )] },
+    { role: "user", parts: [{ text: "What is the lifetime value of sally brown" }] },
+    { role: "model", parts: [fCall("getMetrics", { target: "customers", metric: "lifetime-value", contactIdentifier: "sally brown" })] },
 
     // --- CONTACT MANAGEMENT EXAMPLES (UPDATE) ---
     { role: "user", parts: [{ text: "Update Emily Brown's category to Client." }] },
@@ -263,6 +268,13 @@ const fewShotExamples: GenerativeContent[] = [
         filters: {
            genre: "mystery",
            publicationYearRange: { start: 1990, end: 1999 }
+        }
+    })] },
+    { role: "user", parts: [{ text: "Show me fiction books published between 2020 and 2025." }] },
+    { role: "model", parts: [fCall("findBook", {
+        filters: {
+           genre: "fiction",
+           publicationYearRange: { start: 2020, end: 2025 }
         }
     })] },
 
@@ -653,12 +665,18 @@ export const processCommand = onCall({
                     break;
 
                 case "addContact":
+                    if (anyArgs.category && typeof anyArgs.category === 'string') {
+                        anyArgs.category = anyArgs.category.charAt(0).toUpperCase() + anyArgs.category.slice(1).toLowerCase();
+                    }
                     responsePayload = { intent: 'ADD_CONTACT', data: { contactData: args }, responseText: result.text || `Adding contact.` };
                     break;
                 case "findContact":
                     responsePayload = { intent: 'FIND_CONTACT', data: { contactIdentifier: anyArgs.identifier }, responseText: result.text || `Finding contact.` };
                     break;
                 case "updateContact":
+                    if (anyArgs.updateData.category && typeof anyArgs.updateData.category === 'string') {
+                        anyArgs.updateData.category = anyArgs.updateData.category.charAt(0).toUpperCase() + anyArgs.updateData.category.slice(1).toLowerCase();
+                    }
                     responsePayload = { intent: 'UPDATE_CONTACT', data: { contactIdentifier: anyArgs.identifier, updateData: anyArgs.updateData }, responseText: result.text || `Updating contact.` };
                     break;
                 case "deleteContact":
