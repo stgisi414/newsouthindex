@@ -155,7 +155,16 @@ const fewShotExamples: GenerativeContent[] = [
     { role: "model", parts: [fCall("addContact", { firstName: "hermione", lastName: "granger", category: "client", email: "hg@hogwarts.edu" })] },
     { role: "user", parts: [{ text: "Add Media contact: Gale Hawthorne, city Panem" }] },
     { role: "model", parts: [fCall("addContact", { firstName: "gale", lastName: "hawthorne", category: "media", city: "panem" })] },
-    
+    { role: "user", parts: [{ text: "Please add a contact named Clark Kent with address 344 Clinton St, Smallville, KS 66002." }] },
+    { role: "model", parts: [fCall("addContact", {
+        firstName: "clark",
+        lastName: "kent",
+        address1: "344 clinton st", // Extract address1
+        city: "smallville",
+        state: "ks",
+        zip: "66002" // Extract zip
+    })] },
+
     // --- CONTACT MANAGEMENT EXAMPLES (FIND) ---
     { role: "user", parts: [{ text: "What's the phone number for John Smith?" }] },
     { role: "model", parts: [fCall("findContact", { identifier: "john smith" })] },
@@ -177,6 +186,15 @@ const fewShotExamples: GenerativeContent[] = [
     { role: "model", parts: [fCall("findContact", { identifier: "bruce banner" })] },
     { role: "user", parts: [{ text: "Contact details for Hermione Granger." }] },
     { role: "model", parts: [fCall("findContact", { identifier: "hermione granger" })] },
+    // Existing category filter (using findContact with filters)
+    { role: "user", parts: [{ text: "Show me all our suppliers." }] },
+    { role: "model", parts: [fCall("findContact", { filters: { category: "vendor" } })] }, // Assuming Vendor maps to Supplier
+    // NEW: VIP members (using getMetrics)
+    { role: "user", parts: [{ text: "List the contacts who are 'VIP' members." }] },
+    { role: "model", parts: [fCall("getMetrics", { target: "contacts", metric: "vip-members" })] },
+    // Example for a different category
+    { role: "user", parts: [{ text: "Who are the local authors in our database?" }] },
+    { role: "model", parts: [fCall("findContact", { filters: { category: "author" } })] },
 
     // --- CONTACT MANAGEMENT EXAMPLES (UPDATE) ---
     { role: "user", parts: [{ text: "Update Emily Brown's category to Client." }] },
@@ -233,6 +251,20 @@ const fewShotExamples: GenerativeContent[] = [
     { role: "model", parts: [fCall("findBook", { identifier: "1984" })] },
     { role: "user", parts: [{ text: "Look up details for Sapiens." }] },
     { role: "model", parts: [fCall("findBook", { identifier: "sapiens" })] },
+    { role: "user", parts: [{ text: "Show me science fiction books published between 2010 and 2015." }] },
+    { role: "model", parts: [fCall("findBook", { // Using findBook for consistency
+        filters: {
+           genre: "science fiction", // Lowercase filters
+           publicationYearRange: { start: 2010, end: 2015 }
+        }
+    })] },
+    { role: "user", parts: [{ text: "List all mystery novels from the 90s." }] },
+    { role: "model", parts: [fCall("findBook", {
+        filters: {
+           genre: "mystery",
+           publicationYearRange: { start: 1990, end: 1999 }
+        }
+    })] },
 
     // --- BOOK MANAGEMENT EXAMPLES (ADD) ---
     { role: "user", parts: [{ text: "Add 'Where the Crawdads Sing' by Delia Owens. Price: 10.50, stock: 25." }] },
@@ -339,6 +371,16 @@ const fewShotExamples: GenerativeContent[] = [
     { role: "model", parts: [fCall("countContacts", { category: "client" })] },
     { role: "user", parts: [{ text: "number of non-vendor contacts" }] },
     { role: "model", parts: [fCall("countContacts", { category: "not vendor" })] },
+    { role: "user", parts: [{ text: "List all contacts in the vendor category" }] },
+    { role: "model", parts: [fCall("countContacts", { category: "vendor" })] },
+    { role: "user", parts: [{ text: "List contacts in Alabama" }] },
+    { role: "model", parts: [fCall("countContacts", { state: "al" })] },
+    { role: "user", parts: [{ text: "Show me all contacts in Alabama." }] },
+    { role: "model", parts: [fCall("countContacts", { state: "al" })] },
+    { role: "user", parts: [{ text: "List all Vendors." }] }, // More direct phrase
+    { role: "model", parts: [fCall("countContacts", { category: "vendor" })] },
+    { role: "user", parts: [{ text: "List all contacts who are vendors" }] }, // Slightly different phrasing
+    { role: "model", parts: [fCall("countContacts", { category: "vendor" })] },
     // Books
     { role: "user", parts: [{ text: "count the books by Harper Lee" }] },
     { role: "model", parts: [fCall("countBooks", { author: "harper lee" })] },
@@ -365,6 +407,78 @@ const fewShotExamples: GenerativeContent[] = [
     { role: "model", parts: [fCall("getMetrics", { target: "customers", metric: "top-spending", limit: 5 })] },
     { role: "user", parts: [{ text: "Top selling books, show 10." }] },
     { role: "model", parts: [fCall("getMetrics", { target: "books", metric: "top-selling", limit: 10 })] },
+    { role: "user", parts: [{ text: "What is the total retail value of our current inventory?" }] },
+    { role: "model", parts: [fCall("getMetrics", {
+        target: "books", // Consistent with existing metrics
+        metric: "total-inventory-value", // Use kebab-case like other metrics
+        // calculation_basis: "retail_price" // Optional, frontend can assume retail
+    })] },
+
+    { role: "user", parts: [{ text: "How much is all our stock worth?" }] },
+    { role: "model", parts: [fCall("getMetrics", {
+        target: "books",
+        metric: "total-inventory-value"
+    })] },
+    { role: "user", parts: [{ text: "What is the average price of a mystery novel?" }] },
+    { role: "model", parts: [fCall("getMetrics", {
+        target: "books",
+        metric: "average-price",
+        filters: { genre: "mystery" } // Use genre as the filter key
+    })] },
+
+    { role: "user", parts: [{ text: "How much does the average hardcover cost?" }] },
+    { role: "model", parts: [fCall("getMetrics", {
+        target: "books",
+        metric: "average-price",
+        filters: { format: "hardcover" } // Assuming you might add a 'format' field later
+    })] },
+    { role: "user", parts: [{ text: "Which customers haven't made a purchase in the last 6 months?" }] },
+    { role: "model", parts: [fCall("getMetrics", {
+        target: "contacts",
+        metric: "lapsed-customers",
+        timeframe: "6 months" // Let backend send timeframe string
+    })] },
+
+    { role: "user", parts: [{ text: "Show me lapsed customers from the past year." }] },
+    { role: "model", parts: [fCall("getMetrics", {
+        target: "contacts",
+        metric: "lapsed-customers",
+        timeframe: "1 year"
+    })] },
+    { role: "user", parts: [{ text: "What was the total revenue yesterday?" }] },
+    { role: "model", parts: [fCall("getMetrics", {
+        target: "transactions",
+        metric: "total-revenue",
+        timeframe: "yesterday"
+    })] },
+
+    { role: "user", parts: [{ text: "How much money did we make last month?" }] },
+    { role: "model", parts: [fCall("getMetrics", {
+        target: "transactions",
+        metric: "total-revenue",
+        timeframe: "last month"
+    })] },
+
+    { role: "user", parts: [{ text: "Calculate the year-to-date sales total." }] },
+    { role: "model", parts: [fCall("getMetrics", {
+        target: "transactions",
+        metric: "total-revenue",
+        timeframe: "year-to-date"
+    })] },
+    { role: "user", parts: [{ text: "Which loyalty members have purchased books by Harper Lee?" }] },
+    { role: "model", parts: [fCall("getMetrics", {
+        target: "contacts",
+        metric: "purchased-by-criteria",
+        criteria: { book_author: "harper lee" },
+        filters: { contact_category: "loyalty member" } // Assuming 'Loyalty Member' is a category or needs mapping
+    })] },
+
+    { role: "user", parts: [{ text: "Generate a list of customers who previously bought science fiction books." }] },
+    { role: "model", parts: [fCall("getMetrics", {
+        target: "contacts",
+        metric: "purchased-by-criteria",
+        criteria: { book_genre: "science fiction" }
+    })] },
 ];
 
 // --- Initialize GoogleGenAI client ---

@@ -363,6 +363,51 @@
         });
     };
 
+    const getDateRangeFromTimeframe = (timeframe: string): { start: Date, end: Date } => {
+        let end = new Date(); // Use 'let' instead of 'const'
+        end.setHours(23, 59, 59, 999);
+        let start = new Date();
+
+        timeframe = timeframe.toLowerCase();
+
+        if (timeframe === "today") {
+            start.setHours(0, 0, 0, 0); // Start of today
+        } else if (timeframe === "yesterday") {
+            start.setDate(start.getDate() - 1);
+            start.setHours(0, 0, 0, 0);
+            end.setDate(end.getDate() - 1); // End of yesterday
+            end.setHours(23, 59, 59, 999);
+        } else if (timeframe === "this week") {
+            const dayOfWeek = start.getDay(); // 0 (Sun) - 6 (Sat)
+            start.setDate(start.getDate() - dayOfWeek); // Go back to Sunday
+            start.setHours(0, 0, 0, 0);
+            // End remains end of today
+        } else if (timeframe === "last week") {
+            start.setDate(start.getDate() - start.getDay() - 7); // Go back to previous Sunday
+            start.setHours(0, 0, 0, 0);
+            end.setDate(start.getDate() + 6); // End of the previous Saturday
+            end.setHours(23, 59, 59, 999);
+        } else if (timeframe === "this month") {
+            start.setDate(1); // First day of the current month
+            start.setHours(0, 0, 0, 0);
+            // End remains end of today
+        } else if (timeframe === "last month") {
+            start = new Date(end.getFullYear(), end.getMonth() - 1, 1); // First day of last month
+            start.setHours(0, 0, 0, 0);
+            end = new Date(end.getFullYear(), end.getMonth(), 0); // Last day of last month
+            end.setHours(23, 59, 59, 999);
+        } else if (timeframe === "year-to-date" || timeframe === "this year") {
+            start = new Date(end.getFullYear(), 0, 1); // January 1st of current year
+            start.setHours(0, 0, 0, 0);
+            // End remains end of today
+        } else {
+            // Default: If timeframe is unrecognized, maybe default to "today" or handle error
+            start.setHours(0, 0, 0, 0);
+        }
+
+        return { start, end };
+    };
+
     // --- REWRITTEN AI Command Processor ---
     const onProcessAiCommand = async (intent: string, data: any): Promise<{ success: boolean; payload?: any; message?: string; targetView?: View }> => {
       // Log exactly what was received
@@ -405,13 +450,18 @@
           
           // Create the new contact with capitalized names
           const newContact = {
-              firstName: capitalize(rawFirstName), // Capitalize first name
-              lastName: capitalize(rawLastName),   // Capitalize last name
-              category: contactData?.category || Category.OTHER,
-              phone: contactData?.phone || 'N/A',
-              // Use the raw lowercase names for the email
-              email: contactData?.email || `${rawFirstName.toLowerCase()}.${rawLastName.toLowerCase()}@default.com`,
-              notes: contactData?.notes || `Added via AI.`,
+             firstName: capitalize(rawFirstName),
+             lastName: capitalize(rawLastName),
+             category: contactData?.category || Category.OTHER,
+             phone: contactData?.phone || 'N/A',
+             email: contactData?.email || `${rawFirstName.toLowerCase()}.${rawLastName.toLowerCase()}@default.com`,
+             notes: contactData?.notes || `Added via AI.`,
+             // Add address fields from contactData, providing defaults if necessary
+             address1: contactData?.address1 || '', // Use empty string if not provided
+             address2: contactData?.address2 || '', // Assuming address2 might exist
+             city: capitalize(contactData?.city || ''), // Capitalize city if present
+             state: contactData?.state?.toUpperCase() || '', // Uppercase state if present
+             zip: contactData?.zip || '',
           } as Omit<Contact, "id">;
 
           const result = await addContact(newContact);
@@ -420,20 +470,52 @@
         }
           
         case 'FIND_CONTACT': {
-          if (userRole === UserRole.APPLICANT) {
-            return { success: false, message: "You do not have permission to view contacts." };
-          }
-          const { contactIdentifier } = (data || {}) as { contactIdentifier?: string };
-          const identifier = (contactIdentifier || '').toLowerCase();
-          if (!identifier) {
-            return { success: false, message: "Please tell me who you're looking for." };
-          }
-          const foundContacts = contacts.filter(c => 
-              `${c.firstName} ${c.lastName}`.toLowerCase().includes(identifier) ||
-              c.email?.toLowerCase().includes(identifier)
-          );
-          return { success: true, payload: foundContacts, targetView: 'contacts' };
-        }
+           if (userRole === UserRole.APPLICANT) {
+              return { success: false, message: "You do not have permission to view contacts." };
+           }
+           // Destructure both identifier and potential filters
+           const { contactIdentifier, filters } = (data || {}) as { contactIdentifier?: string, filters?: { category?: string } };
+           const identifier = (contactIdentifier || '').toLowerCase();
+           let foundContacts = contacts;
+           let message = ""; // Initialize message
+
+           let onlyCategoryFilter = false; // Flag for category-only search
+
+           if (filters && filters.category) {
+             const categoryFilter = filters.category.toLowerCase();
+             const targetCategory = categoryFilter === 'supplier' ? Category.VENDOR : categoryFilter; // Adjust mapping
+             foundContacts = foundContacts.filter(c => c.category?.toLowerCase() === targetCategory);
+             if (!identifier) { // Check if ONLY category filter was given
+                 onlyCategoryFilter = true; // Set the flag
+                 message = `Found ${foundContacts.length} contacts with category '${filters.category}'. Displaying them now.`;
+             }
+           }
+
+           // If an identifier was provided (either alone or with category filter)
+           if (identifier) {
+             foundContacts = foundContacts.filter(c =>
+               `${c.firstName} ${c.lastName}`.toLowerCase().includes(identifier) ||
+               c.email?.toLowerCase().includes(identifier)
+             );
+             message = `Found ${foundContacts.length} contacts matching "${contactIdentifier}".`;
+           }
+           // If NEITHER identifier NOR filters were provided OR if it defaulted to FIND_CONTACT without a useful identifier/filter
+           else if (!filters && !identifier) {
+               return { success: false, message: "Please tell me who you're looking for or specify a category." };
+           }
+           // Special case: If only category filter was set, but no identifier was intended
+           else if (onlyCategoryFilter) {
+               // Proceed to return the list filtered by category
+           }
+            // Add a fallback check: If identifier is technically present but effectively empty/null, and we didn't have a category filter
+           else if (!identifier && !filters?.category) {
+                return { success: false, message: "Please specify who or what category you are looking for." };
+           }
+
+
+           // Return results (uses the message set above)
+           return { success: true, payload: foundContacts, targetView: 'contacts', message: message };
+         }
 
         case 'UPDATE_CONTACT': {
           if (!isAdmin) {
@@ -512,16 +594,37 @@
           return { success: true, message: `Successfully added the book "${newBook.title}".`, targetView: 'books' };
         }
 
-        case 'FIND_BOOK': {
-          const { bookIdentifier } = (data || {}) as { bookIdentifier?: string };
-          const identifier = (bookIdentifier || '').toLowerCase();
-          if (!identifier) return { success: false, message: "Please specify a book title or ISBN." };
-          const foundBooks = books.filter(b => 
-            b.title.toLowerCase().includes(identifier) ||
-            b.author.toLowerCase().includes(identifier) ||
-            b.isbn?.toLowerCase().includes(identifier)
-          );
-          return { success: true, payload: foundBooks, targetView: 'books' };
+        case 'FIND_BOOK': { // Or 'FIND_BOOKS' if you created a new intent
+            const { bookIdentifier, filters } = (data || {}) as { bookIdentifier?: string, filters?: { genre?: string; publicationYearRange?: { start?: number; end?: number } } };
+            const identifier = (bookIdentifier || '').toLowerCase();
+            let foundBooks = books; // Start with all books
+
+            // Apply filters if they exist
+            if (filters) {
+                if (filters.genre) {
+                    const genreLower = filters.genre.toLowerCase();
+                    foundBooks = foundBooks.filter(b => b.genre?.toLowerCase().includes(genreLower));
+                }
+                if (filters.publicationYearRange && filters.publicationYearRange.start && filters.publicationYearRange.end) {
+                    const startYear = filters.publicationYearRange.start;
+                    const endYear = filters.publicationYearRange.end;
+                    foundBooks = foundBooks.filter(b => b.publicationYear && b.publicationYear >= startYear && b.publicationYear <= endYear);
+                }
+            }
+            // Apply identifier search *after* filtering (or combine logic)
+            else if (identifier) {
+                foundBooks = foundBooks.filter(b =>
+                    b.title.toLowerCase().includes(identifier) ||
+                    b.author.toLowerCase().includes(identifier) ||
+                    b.isbn?.toLowerCase().includes(identifier)
+                );
+            } else if (!filters) {
+                 // Handle case where neither identifier nor filters were provided
+                 return { success: false, message: "Please specify book details or filters to search for." };
+            }
+
+            // Return the filtered results
+            return { success: true, payload: foundBooks, targetView: 'books' };
         }
 
         case 'UPDATE_BOOK': {
@@ -564,35 +667,35 @@
           const targetView: View | undefined = viewMap[target as keyof typeof viewMap];
 
           if (target === 'contacts') {
-              let filtered = contacts;
-              if (Object.keys(filters).length > 0) { 
-                  filtered = contacts.filter(c => {
-                      let passes = true;
-                      
-                      // Category Filter (Handles 'not Client' and exact match)
-                      if (filters.category) {
-                          if (filters.category === 'not Client') {
-                              if (c.category === Category.CLIENT) passes = false;
-                          } else {
-                              if (c.category !== filters.category) passes = false;
-                          }
-                      }
-                      
-                      // State Filter 
-                      if (filters.state && c.state !== filters.state) passes = false;
-                      
-                      // City Filter
-                      if (filters.city && c.city !== filters.city) passes = false;
-                      
-                      // Zip Code Filter
-                      if (filters.zip && c.zip !== filters.zip) passes = false;
-                      
-                      return passes;
-                  });
-              }
-              count = filtered.length;
-              message = `There are ${count} contacts${filterDescriptions ? ` where ${filterDescriptions}` : ' in total'}.`;
-          } else if (target === 'books') {
+             let filtered = contacts;
+             // Log the filters received from the backend
+             console.log('[COUNT_DATA] Received Filters:', filters);
+
+             if (Object.keys(filters).length > 0) {
+                 filtered = contacts.filter(c => {
+                     let passes = true;
+
+                     // Log the contact being checked and its category
+                     console.log(`[COUNT_DATA] Checking Contact: ${c.firstName} ${c.lastName}, Category: ${c.category}`);
+
+                     // Category Filter (Handles 'not Client' and exact match)
+                     if (filters.category) {
+                         // Log the comparison being made
+                         console.log(`[COUNT_DATA] Comparing Filter Category "${filters.category?.toLowerCase()}" with Contact Category "${c.category?.toLowerCase()}"`);
+                         if (filters.category === 'not Client') {
+                             if (c.category === Category.CLIENT) passes = false;
+                         } else {
+                             // Compare lowercase string values
+                             if (c.category?.toLowerCase() !== filters.category.toLowerCase()) passes = false;
+                         }
+                     }
+                     // ... (rest of filters like state, city, zip) ...
+                     return passes;
+                 });
+             }
+             count = filtered.length;
+             message = `There are ${count} contacts${filterDescriptions ? ` where ${filterDescriptions}` : ' in total'}.`;
+         } else if (target === 'books') {
               let filtered = books;
               if (Object.keys(filters).length > 0) {
                   filtered = books.filter(b => {
@@ -666,7 +769,7 @@
           if (!metricsRequest) {
             return { success: false, message: "I'm sorry, I couldn't understand the metrics request." };
           }
-          const { target, metric, limit = 10 } = metricsRequest;
+          const { target, metric, limit = 10, filters = {}, timeframe = "today" /* Default timeframe */ } = metricsRequest;
           if (target === 'customers' && metric === 'top-spending') {
               const customerSpending: { [key: string]: { name: string; total: number } } = {};
               transactions.forEach(t => {
@@ -702,6 +805,15 @@
                   targetView: 'reports' 
               };
           }
+          if (target === 'books' && metric === 'total-inventory-value') {
+               const totalValue = books.reduce((sum, book) => sum + (book.price * book.stock), 0);
+               return {
+                   success: true,
+                   // payload: { totalValue: totalValue.toFixed(2) }, // Optional payload
+                   message: `The total retail value of your current inventory is $${totalValue.toFixed(2)}.`,
+                   targetView: 'reports'
+               };
+            }
           if (target === 'events' && metric === 'upcoming') {
              const today = new Date();
              today.setHours(0, 0, 0, 0); // Set to start of today for comparison
@@ -730,7 +842,190 @@
              } else {
                  return { success: true, message: "There are no upcoming events scheduled.", targetView: 'events' };
              }
-         }
+          }
+          if (target === 'books' && metric === 'average-price') {
+             let filteredBooks = books;
+             let filterDescription = "";
+
+             // Apply filters (currently supports genre, add 'format' if needed)
+             if (filters.genre) {
+                 const genreLower = filters.genre.toLowerCase();
+                 filteredBooks = books.filter(b => b.genre?.toLowerCase().includes(genreLower));
+                 filterDescription = ` for the genre "${filters.genre}"`;
+             }
+             // Example if you add format:
+             // else if (filters.format) {
+             //     const formatLower = filters.format.toLowerCase();
+             //     filteredBooks = books.filter(b => b.format?.toLowerCase() === formatLower); // Assuming 'format' field exists
+             //     filterDescription = ` for the format "${filters.format}"`;
+             // }
+
+             if (filteredBooks.length === 0) {
+                 return { success: true, message: `Could not find any books${filterDescription} to calculate an average price.`, targetView: 'reports' };
+             }
+
+             const totalPrice = filteredBooks.reduce((sum, book) => sum + book.price, 0);
+             const averagePrice = totalPrice / filteredBooks.length;
+
+             return {
+                 success: true,
+                 // payload: { averagePrice: averagePrice.toFixed(2), count: filteredBooks.length }, // Optional payload
+                 message: `The average price${filterDescription} is $${averagePrice.toFixed(2)} (based on ${filteredBooks.length} book(s)).`,
+                 targetView: 'reports'
+             };
+          }
+          if (target === 'contacts' && metric === 'vip-members') {
+            const vipThreshold = 500; // Define your VIP spending threshold
+            const customerSpending: { [key: string]: number } = {};
+            transactions.forEach(t => {
+                customerSpending[t.contactId] = (customerSpending[t.contactId] || 0) + t.totalPrice;
+            });
+
+            const vipContactIds = Object.entries(customerSpending)
+                .filter(([_, total]) => total >= vipThreshold)
+                .map(([contactId, _]) => contactId);
+
+            const vipContacts = contacts.filter(c => vipContactIds.includes(c.id));
+
+            if (vipContacts.length > 0) {
+                 return {
+                     success: true,
+                     payload: vipContacts, // Send the list of VIP contacts
+                     message: `Found ${vipContacts.length} VIP members (spent $${vipThreshold}+).`,
+                     targetView: 'contacts' // Go to contacts view to show them
+                 };
+            } else {
+                 return { success: true, message: `No contacts currently meet the VIP criteria (spent $${vipThreshold}+).`, targetView: 'contacts' };
+            }
+          }
+          if (target === 'contacts' && metric === 'lapsed-customers') {
+            const timeframe = metricsRequest.timeframe || "6 months"; // Default if not specified
+            let monthsToSubtract = 6;
+            if (timeframe.includes("1 year")) {
+                monthsToSubtract = 12;
+            } // Add more conditions if needed (e.g., "3 months")
+
+            const cutoffDate = new Date();
+            cutoffDate.setMonth(cutoffDate.getMonth() - monthsToSubtract);
+            cutoffDate.setHours(0, 0, 0, 0); // Start of the day
+
+            // Find the latest transaction date for each contact
+            const lastPurchaseDate: { [key: string]: Date } = {};
+            transactions.forEach(t => {
+                const transactionDate = t.transactionDate?.toDate ? t.transactionDate.toDate() : (t.transactionDate instanceof Date ? t.transactionDate : null);
+                if (transactionDate) {
+                    if (!lastPurchaseDate[t.contactId] || transactionDate > lastPurchaseDate[t.contactId]) {
+                        lastPurchaseDate[t.contactId] = transactionDate;
+                    }
+                }
+            });
+
+            // Filter contacts: include those who have *never* purchased OR whose last purchase was *before* the cutoff
+            const lapsedContacts = contacts.filter(c => {
+                 // Exclude categories that shouldn't lapse (optional)
+                 // if (c.category === Category.VENDOR || c.category === Category.MEDIA) return false;
+
+                 const lastDate = lastPurchaseDate[c.id];
+                 return !lastDate || lastDate < cutoffDate;
+            });
+
+
+            if (lapsedContacts.length > 0) {
+                 return {
+                     success: true,
+                     payload: lapsedContacts,
+                     message: `Found ${lapsedContacts.length} customers who haven't made a purchase in the last ${monthsToSubtract} months.`,
+                     targetView: 'contacts'
+                 };
+            } else {
+                 return { success: true, message: `All relevant contacts have made a purchase within the last ${monthsToSubtract} months.`, targetView: 'contacts' };
+            }
+          }
+          if (target === 'transactions' && metric === 'total-revenue') {
+              const { start, end } = getDateRangeFromTimeframe(timeframe);
+              let totalRevenue = 0;
+
+              transactions.forEach(t => {
+                  const transactionDate = t.transactionDate?.toDate ? t.transactionDate.toDate() : (t.transactionDate instanceof Date ? t.transactionDate : null);
+                  if (transactionDate && transactionDate >= start && transactionDate <= end) {
+                      totalRevenue += t.totalPrice;
+                  }
+              });
+
+              return {
+                  success: true,
+                  message: `Total revenue for ${timeframe} is $${totalRevenue.toFixed(2)}.`,
+                  targetView: 'reports'
+              };
+          }
+          if (target === 'contacts' && metric === 'purchased-by-criteria') {
+              const criteria = metricsRequest.criteria || {};
+              const contactFilters = metricsRequest.filters || {}; // e.g., { contact_category: 'Loyalty Member' }
+
+              let relevantBookIds = new Set<string>();
+
+              // 1. Find books matching the criteria
+              if (criteria.book_author) {
+                  const authorLower = criteria.book_author.toLowerCase();
+                  books.forEach(book => {
+                      if (book.author.toLowerCase().includes(authorLower)) {
+                          relevantBookIds.add(book.id);
+                      }
+                  });
+              } else if (criteria.book_genre) {
+                  const genreLower = criteria.book_genre.toLowerCase();
+                   books.forEach(book => {
+                      if (book.genre?.toLowerCase().includes(genreLower)) {
+                          relevantBookIds.add(book.id);
+                      }
+                  });
+              } // Add more criteria like title if needed
+
+              if (relevantBookIds.size === 0) {
+                   return { success: true, message: "Couldn't find any books matching the specified criteria." };
+              }
+
+              // 2. Find transactions containing those books to get customer IDs
+              const customerIds = new Set<string>();
+              transactions.forEach(t => {
+                  t.books.forEach(bookInTransaction => {
+                      if (relevantBookIds.has(bookInTransaction.id)) {
+                          customerIds.add(t.contactId);
+                      }
+                  });
+              });
+
+              if (customerIds.size === 0) {
+                   return { success: true, message: "Found books matching criteria, but no customers have purchased them yet." };
+              }
+
+              // 3. Filter contacts based on IDs and any additional contact filters
+              let finalContacts = contacts.filter(c => customerIds.has(c.id));
+              let filterDescription = "";
+
+              if (contactFilters.contact_category) {
+                   const categoryLower = contactFilters.contact_category.toLowerCase();
+                   // Adjust category mapping if needed
+                   const targetCategory = categoryLower === 'loyalty member' ? Category.CLIENT : categoryLower; // Example: map 'loyalty' to 'client'
+                   finalContacts = finalContacts.filter(c => c.category?.toLowerCase() === targetCategory);
+                   filterDescription = ` who are category '${contactFilters.contact_category}'`;
+              }
+
+              if (finalContacts.length > 0) {
+                  let criteriaDesc = "";
+                  if (criteria.book_author) criteriaDesc = `books by ${criteria.book_author}`;
+                  else if (criteria.book_genre) criteriaDesc = `${criteria.book_genre} books`;
+
+                   return {
+                       success: true,
+                       payload: finalContacts,
+                       message: `Found ${finalContacts.length} contacts${filterDescription} who purchased ${criteriaDesc}.`,
+                       targetView: 'contacts'
+                   };
+              } else {
+                   return { success: true, message: `Found customers who purchased the items, but none matched the additional filters${filterDescription}.`, targetView: 'contacts' };
+              }
+          }
           return { success: false, message: "I'm sorry, I can't calculate those metrics." };
         }
 
@@ -857,9 +1152,9 @@
         return <Auth />;
       }
       // 2. If user is logged in BUT is an applicant, show the pending modal
-      //if (userRole === UserRole.APPLICANT) {
-        //return <ApplicantModal onLogout={handleLogout} />;
-      //}
+      if (userRole === UserRole.APPLICANT) {
+        return <ApplicantModal onLogout={handleLogout} />;
+      }
       // 3. If user is logged in AND is a Viewer or Admin, show the Dashboard
       return (
         <Dashboard
