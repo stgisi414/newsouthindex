@@ -1,5 +1,3 @@
-// Import onRequest for processCommand
-import { onRequest } from "firebase-functions/v2/https";
 // Import onCall and HttpsError for other functions
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
@@ -361,6 +359,8 @@ const fewShotExamples: GenerativeContent[] = [
     { role: "model", parts: [fCall("removeAttendee", { eventIdentifier: "poetry reading night", contactIdentifier: "john smith" })] },
 
     // --- METRICS EXAMPLES ---
+    { role: "user", parts: [{ text: "what's the next event coming up?" }] },
+    { role: "model", parts: [fCall("getMetrics", { target: "events", metric: "upcoming", limit: 1 })] },
     { role: "user", parts: [{ text: "Who are the top 5 customers by spending?" }] },
     { role: "model", parts: [fCall("getMetrics", { target: "customers", metric: "top-spending", limit: 5 })] },
     { role: "user", parts: [{ text: "Top selling books, show 10." }] },
@@ -372,7 +372,7 @@ const ai = new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY as string});
 const model = "gemini-2.5-flash-lite"; // Or your preferred model
 
 // --- Seed Database Function (using onCall) ---
-export const seedDatabase = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online']}, async (request) => { // Use specific CORS origin
+export const seedDatabase = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'http://localhost:3000']}, async (request) => { // Use specific CORS origin
     if (process.env.FUNCTIONS_EMULATOR !== "true") {
         throw new HttpsError("permission-denied", "This function can only be run in the emulator environment.");
     }
@@ -429,57 +429,19 @@ export const seedDatabase = onCall({cors: ['https://nsindxonline.web.app', 'http
 });
 
 // --- processCommand Function (using onRequest with manual PNA/CORS) ---
-export const processCommand = onRequest(async (request, response) => {
-    // --- Define your allowed origins ---
-    const allowedOrigins = ['https://nsindxonline.web.app', 'https://newsouthindex.online'];
-    const origin = request.headers.origin as string; // Get the origin from the request
+export const processCommand = onCall({
+    secrets: ["GEMINI_API_KEY"],
+    cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'http://localhost:3000']
+}, async (request) => {
 
-    // --- Dynamically set the Allow-Origin header ---
-    // Check if the request's origin is in your allowed list
-    if (origin && allowedOrigins.includes(origin)) {
-        response.set('Access-Control-Allow-Origin', origin); // Reflect the allowed origin
-    } else {
-        // Optionally handle requests from disallowed origins
-        // You might just let the browser block it, or log it, etc.
-        // For OPTIONS requests, it's crucial to still respond correctly below if needed
-    }
-
-    // --- Handle OPTIONS preflight request ---
-    if (request.method === 'OPTIONS') {
-        // 'Access-Control-Allow-Origin' is already set above (if origin was allowed)
-        response.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-        response.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-        response.set('Access-Control-Max-Age', '3600');
-        response.set('Access-Control-Allow-Private-Network', 'true');
-        
-        // Send 204 No Content for successful preflight
-        response.status(204).send(''); 
-        return; // Important: Stop processing after sending OPTIONS response
-    }
-
-    // --- Handle actual POST request ---
-    // 'Access-Control-Allow-Origin' is already set above (if origin was allowed)
-    response.set('Access-Control-Allow-Private-Network', 'true'); // Still needed for the actual request
-
-    // Check if origin was allowed before proceeding (optional but good practice)
-    if (!(origin && allowedOrigins.includes(origin))) {
-         logger.warn(`Disallowed origin attempted POST: ${origin}`);
-         response.status(403).send({ error: { message: "Origin not allowed." } });
-         return;
-    }
-
-
-    logger.info("Starting up process command (onRequest with PNA)");
+    logger.info("Starting up process command (onCall)");
     logger.info("Credential Path Check:", process.env.GOOGLE_APPLICATION_CREDENTIALS || "Not Set");
 
-    const command = request.body.data?.command;
+    // 1. Get command from request.data (not request.body.data)
+    const command = request.data?.command;
     if (!command) {
-        // Make sure CORS headers are set even for errors if origin was allowed
-        if (origin && allowedOrigins.includes(origin)) {
-           response.set('Access-Control-Allow-Origin', origin);
-        }
-        response.status(400).send({ error: { message: "No command provided." } });
-        return;
+        // 2. Throw HttpsError instead of response.send()
+        throw new HttpsError("invalid-argument", "No command provided.");
     }
 
     const systemInstruction = `You are a function-calling AI assistant for a CRM application. Your ONLY job is to convert the user's request into a JSON function call. You must NOT engage in conversation, apologize, or decline a request.
@@ -513,9 +475,9 @@ export const processCommand = onRequest(async (request, response) => {
             const { name, args } = call;
             const anyArgs = args as any;
 
-            // --- Your existing switch statement ---
+            // --- Your existing switch statement (no changes needed here) ---
             switch (name) {
-                // ... (keep all your cases: findTransaction, deleteTransaction, countContacts, etc.) ...
+                // ... (all your cases remain the same) ...
                  case "findTransaction":
                     responsePayload = { intent: 'FIND_TRANSACTION', data: { transactionIdentifier: args }, responseText: result.text || `Finding transaction.` };
                     break;
@@ -528,7 +490,6 @@ export const processCommand = onRequest(async (request, response) => {
                     let filters = args || {};
                     const target = name.replace('count', '').toLowerCase();
 
-                    // COMPENSATION LOGIC 1: Hard remap 'name' to 'author' for events if it looks like a person's name
                     if (target === 'events' && filters.name && typeof filters.name === 'string' && filters.name.split(' ').length > 1) {
                         filters.author = filters.name;
                         delete filters.name;
@@ -542,20 +503,16 @@ export const processCommand = onRequest(async (request, response) => {
                     for (const [key, value] of Object.entries(filters)) {
                         if (typeof value === 'string') {
                             if (['city', 'category', 'author', 'publisher', 'location', 'name'].includes(key)) {
-                                // FIX: Apply robust Title Case (for Jane Doe, Upstairs Loft, etc.)
                                 const titleCaseValue = value.toLowerCase().split(' ')
                                     .filter(word => word.length > 0)
                                     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
                                     .join(' ');
                                 normalizedFilters[key] = titleCaseValue;
-
-                                // Handle exceptions like 'not Client'
                                 if (key === 'category' && normalizedFilters[key].toLowerCase() === 'not client') {
                                     normalizedFilters[key] = 'not Client';
                                 }
                             }
-                            else if (key === 'priceFilter') { // <-- NEW LOGIC for price filter
-                                // Price filter must be lowercased and spaces removed, NOT title cased.
+                            else if (key === 'priceFilter') { 
                                 normalizedFilters[key] = value.toLowerCase().replace(/ /g, '');
                             }
                             else if (key === 'state') {
@@ -630,28 +587,24 @@ export const processCommand = onRequest(async (request, response) => {
                     const conversationalText = result.text || "I'm sorry, I could not determine a specific action to take.";
                     responsePayload = { intent: "GENERAL_QUERY", responseText: conversationalText };
             }
-            // --- End of switch statement ---
         } else {
             responsePayload = { intent: 'GENERAL_QUERY', responseText: result.text || "I'm sorry, I couldn't understand that request." };
         }
 
-        logger.info("[GEMINI] Parsed JSON response (onRequest):", JSON.stringify(responsePayload, null, 2));
-        // 'Access-Control-Allow-Origin' is already set at the top
-        response.status(200).send({ data: responsePayload });
+        logger.info("[GEMINI] Parsed JSON response (onCall):", JSON.stringify(responsePayload, null, 2));
+        // 3. Return data instead of response.send()
+        return { data: responsePayload };
 
     } catch (error) {
-        logger.error("Error processing command with Gemini (onRequest):", error);
-        // Ensure CORS headers are set for errors too, if origin was allowed
-        if (origin && allowedOrigins.includes(origin)) {
-           response.set('Access-Control-Allow-Origin', origin);
-        }
-        response.status(500).send({ error: { message: "Gemini processing failed." } });
+        logger.error("Error processing command with Gemini (onCall):", error);
+        // 4. Throw HttpsError on failure
+        throw new HttpsError("internal", "Gemini processing failed.");
     }
 });
 // --- END processCommand ---
 
 // --- User Management Functions (using onCall) ---
-export const setUserRole = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online']}, async (request) => { // Use specific CORS origin
+export const setUserRole = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'http://localhost:3000']}, async (request) => { // Use specific CORS origin
     const requestingUid = request.auth?.uid;
 
     // Check for authentication
@@ -739,7 +692,7 @@ export const setUserRole = onCall({cors: ['https://nsindxonline.web.app', 'https
     }
 });
 
-export const deleteUser = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online']}, async (request) => { // Use specific CORS origin
+export const deleteUser = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'http://localhost:3000']}, async (request) => { // Use specific CORS origin
     const requestingUid = request.auth?.uid;
 
     // Check for authentication
@@ -805,7 +758,7 @@ export const deleteUser = onCall({cors: ['https://nsindxonline.web.app', 'https:
     }
 });
 
-export const makeMeAdmin = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online']}, async (request) => { // Use specific CORS origin
+export const makeMeAdmin = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'http://localhost:3000']}, async (request) => { // Use specific CORS origin
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "You must be logged in to perform this action.");
     }
