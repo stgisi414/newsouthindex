@@ -4,7 +4,8 @@ import { processNaturalLanguageCommand } from '../services/geminiService';
 import PaperAirplaneIcon from './icons/PaperAirplaneIcon';
 import { User } from 'firebase/auth'; // NEW IMPORT
 import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'; // NEW IMPORTS
-import { db } from '../src/firebaseConfig'; // NEW IMPORT
+import { db } from '../src/firebaseConfig';
+import ReactMarkdown from 'react-markdown';
 
 const MAX_MESSAGES = 50; // NEW CONSTANT
 
@@ -238,6 +239,31 @@ const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed, isAdmin, currentUse
                 }
             }
 
+            if (intent === 'GET_CUSTOMER_SUMMARY' && result.success && result.payload) {
+                const summary = result.payload; // Type safety: maybe add 'as { contactDetails: Contact, ... }' if needed
+
+                // Format the summary payload into a readable string using Markdown
+                const formattedSummary = `
+**Contact Details:**
+Name: ${summary.contactDetails.firstName} ${summary.contactDetails.lastName}
+Email: ${summary.contactDetails.email || 'N/A'}
+Phone: ${summary.contactDetails.phone || 'N/A'}
+Category: ${summary.contactDetails.category || 'N/A'}
+Address: ${[summary.contactDetails.address1, summary.contactDetails.city, summary.contactDetails.state, summary.contactDetails.zip].filter(Boolean).join(', ') || 'N/A'}
+Notes: ${summary.contactDetails.notes || ''}
+
+**CRM Info:**
+Lifetime Value: $${summary.lifetimeValue}
+Transaction Count: ${summary.transactionCount}
+Recent Transactions (${summary.transactions.length}): ${summary.transactions.length > 0 ? summary.transactions.map((t: any) => `#${t.id ? t.id.substring(0, 5) : 'N/A'}`).join(', ') : 'None'}
+Events Attending (${summary.eventsAttending.length}): ${summary.eventsAttending.length > 0 ? summary.eventsAttending.map((e: any) => e.name).join(', ') : 'None'}
+    `;
+
+                // Combine the original message with the formatted details
+                // Ensure result.message is treated as a string even if undefined
+                aiResponseText = `${result.message || ''}\n\n${formattedSummary.trim()}`;
+            }
+
             // This creates the message bubble
             const aiMessage: ChatMessage = {
                 id: (Date.now() + 1).toString(),
@@ -279,12 +305,12 @@ const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed, isAdmin, currentUse
                     {messages.map((msg) => (
                         <div key={msg.id} className={`flex items-start gap-3 ${msg.sender === 'user' ? 'justify-end' : ''}`}>
                             {msg.sender === 'ai' && <div className="h-8 w-8 rounded-full bg-indigo-500 flex-shrink-0"></div>}
-                            <div className={`px-4 py-2 rounded-2xl max-w-xs md:max-w-md ${
+                            <div className={`px-4 py-2 rounded-2xl max-w-xs md:max-w-md prose prose-sm ${
                                 msg.sender === 'user' 
-                                ? 'bg-indigo-600 text-white rounded-br-none' 
+                                ? 'bg-indigo-600 text-white rounded-br-none prose-invert' 
                                 : 'bg-gray-100 text-gray-800 rounded-bl-none'
                             }`}>
-                                <p className="text-sm">{msg.text}</p>
+                                <ReactMarkdown>{msg.text}</ReactMarkdown>
                             </div>
                         </div>
                     ))}

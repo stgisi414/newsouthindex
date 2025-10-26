@@ -1,11 +1,57 @@
-// Import onCall and HttpsError for other functions
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, HttpsError, onRequest, Request } from "firebase-functions/v2/https";
+import { Response } from "express";
 import * as logger from "firebase-functions/logger";
 import { GoogleGenAI, FunctionDeclaration, Type } from "@google/genai";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { mockContacts, mockBooks, mockEvents } from "./mockData";
+import { google } from "googleapis"; // <-- 'google' is imported...
 // Removed cors import as we handle it manually or via onCall config
+
+const client = google.firestore("v1");
+
+// Your GCS bucket name
+const BUCKET_NAME = "gs://nsindx-backup";
+
+export const backupFirestore = onRequest(
+  {
+    timeoutSeconds: 540, // Runtime options go here
+    memory: "256MiB",
+    invoker: "private",
+  },
+  async (req: Request, res: Response) => { // <-- Types go here
+    // We use process.env.GCP_PROJECT for the project ID
+    const projectId = process.env.GCP_PROJECT;
+    if (!projectId) {
+      res.status(500).send("GCP_PROJECT environment variable not set.");
+      return;
+    }
+
+    const databaseName = `projects/${projectId}/databases/(default)`;
+    
+    // Create a new backup folder with a timestamp
+    const timestamp = new Date().toISOString().replace(/:/g, "-");
+    const outputUriPrefix = `${BUCKET_NAME}/backups/${timestamp}`;
+
+    try {
+      // Start the export operation
+      await client.projects.databases.exportDocuments({
+        name: databaseName,
+        requestBody: {
+          outputUriPrefix: outputUriPrefix,
+        },
+      });
+
+      const message = `Firestore export started to ${outputUriPrefix}`;
+      console.log(message);
+      res.status(200).send(message);
+
+    } catch (err) {
+      console.error(err);
+      res.status(500).send("Error starting Firestore export.");
+    }
+  }
+);
 
 // Manually define the types that were causing the TS2305 error to satisfy TypeScript.
 type GenerativeContent = { role: string; parts: { text?: string; functionCall?: any; }[] };
@@ -98,17 +144,383 @@ const getMetricsDeclaration: FunctionDeclaration = {
     },
 };
 
+const logInteractionDeclaration: FunctionDeclaration = {
+  name: "logInteraction",
+  description: "Logs a new interaction (like a phone call, email, or meeting) with a specific contact.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      contactIdentifier: {
+        type: Type.STRING,
+        description: "The name or email of the contact the interaction was with. e.g., 'jane doe' or 'jane@example.com'"
+      },
+      interactionData: {
+        type: Type.OBJECT,
+        description: "The details of the interaction.",
+        properties: {
+          type: {
+            type: Type.STRING,
+            description: "The type of interaction. e.g., 'phone', 'email', 'meeting', 'note'"
+          },
+          notes: {
+            type: Type.STRING,
+            description: "The content or notes from the interaction. e.g., 'discussed new sci-fi arrivals'"
+          }
+        },
+        required: ["notes"]
+      }
+    },
+    required: ["contactIdentifier", "interactionData"]
+  }
+};
+
+// Add this declaration too
+const getCustomerSummaryDeclaration: FunctionDeclaration = {
+    name: "getCustomerSummary",
+    description: "Gets a complete 360-degree summary of a single customer, including their contact details, transaction history, and event attendance.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      contactIdentifier: {
+        type: Type.STRING,
+        description: "The name or email of the contact to summarize. e.g., 'tony stark' or 'tony@stark.com'"
+      }
+    },
+    required: ["contactIdentifier"]
+  }
+};
+
+const addContactDeclaration: FunctionDeclaration = {
+  name: "addContact",
+  description: "Adds a new contact to the database.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      firstName: { type: Type.STRING, description: "The contact's first name." },
+      lastName: { type: Type.STRING, description: "The contact's last name." },
+      honorific: { type: Type.STRING, description: "The contact's title (e.g., Mr, Ms, Dr)." },
+      email: { type: Type.STRING, description: "The contact's email address." },
+      phone: { type: Type.STRING, description: "The contact's phone number." },
+      category: { type: Type.STRING, description: "The contact's category (e.g., Client, Vendor, Personal)." },
+      address1: { type: Type.STRING, description: "The contact's street address." },
+      city: { type: Type.STRING, description: "The contact's city." },
+      state: { type: Type.STRING, description: "The contact's state (2-letter abbreviation)." },
+      zip: { type: Type.STRING, description: "The contact's zip code." },
+    },
+    required: ["firstName", "lastName"],
+  },
+};
+
+const findContactDeclaration: FunctionDeclaration = {
+  name: "findContact",
+  description: "Finds contacts by name, email, or filters. Can return a list or a single contact.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      identifier: {
+        type: Type.STRING,
+        description: "The name or email of the contact to find. e.g., 'jane doe' or 'jane@example.com'"
+      },
+      filters: {
+        type: Type.OBJECT,
+        description: "Filters to apply for listing contacts.",
+        properties: {
+            category: { type: Type.STRING, description: "The category to filter by (e.g., Client, Vendor)." },
+            state: { type: Type.STRING, description: "The state to filter by (e.g., 'AL')." },
+            city: { type: Type.STRING, description: "The city to filter by." }
+        }
+      }
+    },
+  },
+};
+
+const updateContactDeclaration: FunctionDeclaration = {
+  name: "updateContact",
+  description: "Updates one or more fields for a specific contact.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      identifier: {
+        type: Type.STRING,
+        description: "The name or email of the contact to update. e.g., 'emily brown'"
+      },
+      updateData: {
+        type: Type.OBJECT,
+        description: "An object containing the fields to update.",
+        properties: {
+          // You can list all possible fields here, but it's often easier
+          // to just describe it as an object. For strictness, list them:
+          category: { type: Type.STRING, description: "The new category." },
+          city: { type: Type.STRING, description: "The new city." },
+          email: { type: Type.STRING, description: "The new email." },
+          zip: { type: Type.STRING, description: "The new zip code." },
+          notes: { type: Type.STRING, description: "The new notes." },
+          address1: { type: Type.STRING, description: "The new street address." },
+          suffix: { type: Type.STRING, description: "The new suffix (e.g., Jr)." },
+          honorific: { type: Type.STRING, description: "The new honorific." }
+          // Add any other updatable fields
+        },
+      }
+    },
+    required: ["identifier", "updateData"],
+  },
+};
+
+const deleteContactDeclaration: FunctionDeclaration = {
+  name: "deleteContact",
+  description: "Deletes a contact from the database using their name or email.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      identifier: {
+        type: Type.STRING,
+        description: "The name or email of the contact to delete. e.g., 'alice johnson'"
+      },
+    },
+    required: ["identifier"],
+  },
+};
+
+const addBookDeclaration: FunctionDeclaration = {
+  name: "addBook",
+  description: "Adds a new book to the inventory.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      title: { type: Type.STRING, description: "The title of the book." },
+      author: { type: Type.STRING, description: "The author of the book." },
+      price: { type: Type.NUMBER, description: "The retail price of the book." },
+      stock: { type: Type.NUMBER, description: "The number of copies in stock." },
+      isbn: { type: Type.STRING, description: "The ISBN of the book." },
+      genre: { type: Type.STRING, description: "The genre of the book (e.g., Mystery, Sci-Fi)." },
+      publicationYear: { type: Type.NUMBER, description: "The year the book was published." },
+    },
+    required: ["title", "author"],
+  },
+};
+
+const findBookDeclaration: FunctionDeclaration = {
+  name: "findBook",
+  description: "Finds books by title, author, ISBN, or filters.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      identifier: {
+        type: Type.STRING,
+        description: "The title, author, or ISBN of the book to find. e.g., 'the great gatsby' or '9780441172719'"
+      },
+      filters: {
+        type: Type.OBJECT,
+        description: "Filters to apply for listing books.",
+        properties: {
+          genre: { type: Type.STRING, description: "The genre to filter by (e.g., science fiction)." },
+          publicationYearRange: {
+            type: Type.OBJECT,
+            description: "A range of years to filter by.",
+            properties: {
+                start: { type: Type.NUMBER },
+                end: { type: Type.NUMBER }
+            }
+          }
+        }
+      }
+    },
+  },
+};
+
+const updateBookDeclaration: FunctionDeclaration = {
+  name: "updateBook",
+  description: "Updates one or more fields for a specific book.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      bookIdentifier: {
+        type: Type.STRING,
+        description: "The title or ISBN of the book to update. e.g., '1984'"
+      },
+      updateData: {
+        type: Type.OBJECT,
+        description: "An object containing the fields to update.",
+        properties: {
+          stock: { type: Type.NUMBER, description: "The new stock level." },
+          price: { type: Type.NUMBER, description: "The new price." },
+          genre: { type: Type.STRING, description: "The new genre." },
+          publisher: { type: Type.STRING, description: "The new publisher." },
+          author: { type: Type.STRING, description: "The new author." }
+        },
+      }
+    },
+    required: ["bookIdentifier", "updateData"],
+  },
+};
+
+const deleteBookDeclaration: FunctionDeclaration = {
+  name: "deleteBook",
+  description: "Deletes a book from the database using its title or ISBN.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      bookIdentifier: {
+        type: Type.STRING,
+        description: "The title or ISBN of the book to delete. e.g., '1984'"
+      },
+    },
+    required: ["bookIdentifier"],
+  },
+};
+
+const addEventDeclaration: FunctionDeclaration = {
+  name: "addEvent",
+  description: "Schedules a new event.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      name: { type: Type.STRING, description: "The name of the event. e.g., 'Book Signing'" },
+      author: { type: Type.STRING, description: "The featured author for the event. e.g., 'Jane Smith'" },
+      date: { type: Type.STRING, description: "The date of the event in YYYY-MM-DD format. e.g., '2025-11-15'" },
+      time: { type: Type.STRING, description: "The time of the event in HH:MM format. e.g., '17:00'" },
+      location: { type: Type.STRING, description: "The location of the event. e.g., 'Upstairs Loft'" },
+      description: { type: Type.STRING, description: "A brief description of the event." },
+    },
+    required: ["name", "date"],
+  },
+};
+
+const findEventDeclaration: FunctionDeclaration = {
+  name: "findEvent",
+  description: "Finds events by name, author, date, or location.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      identifier: {
+        type: Type.STRING,
+        description: "The name, author, date (YYYY-MM-DD), or location of the event to find. e.g., 'local author signing' or 'jane doe'"
+      },
+    },
+    required: ["identifier"],
+  },
+};
+
+const updateEventDeclaration: FunctionDeclaration = {
+  name: "updateEvent",
+  description: "Updates one or more fields for a specific event.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      eventIdentifier: {
+        type: Type.STRING,
+        description: "The name of the event to update. e.g., 'poetry slam'"
+      },
+      updateData: {
+        type: Type.OBJECT,
+        description: "An object containing the fields to update.",
+        properties: {
+          location: { type: Type.STRING, description: "The new location." },
+          date: { type: Type.STRING, description: "The new date (YYYY-MM-DD)." },
+          time: { type: Type.STRING, description: "The new time (HH:MM)." },
+        },
+      }
+    },
+    required: ["eventIdentifier", "updateData"],
+  },
+};
+
+const deleteEventDeclaration: FunctionDeclaration = {
+  name: "deleteEvent",
+  description: "Deletes or cancels an event using its name or date.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      eventIdentifier: {
+        type: Type.STRING,
+        description: "The name or date of the event to delete. e.g., 'fantasy book club'"
+      },
+    },
+    required: ["eventIdentifier"],
+  },
+};
+
+const addAttendeeDeclaration: FunctionDeclaration = {
+  name: "addAttendee",
+  description: "Adds a contact as an attendee to a specific event.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      eventIdentifier: {
+        type: Type.STRING,
+        description: "The name of the event. e.g., 'Local Author Signing'"
+      },
+      contactIdentifier: {
+        type: Type.STRING,
+        description: "The name or email of the contact to add. e.g., 'Jane Doe'"
+      },
+    },
+    required: ["eventIdentifier", "contactIdentifier"],
+  },
+};
+
+const removeAttendeeDeclaration: FunctionDeclaration = {
+  name: "removeAttendee",
+  description: "Removes a contact from an event's attendee list.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      eventIdentifier: {
+        type: Type.STRING,
+        description: "The name of the event. e.g., 'Poetry Reading Night'"
+      },
+      contactIdentifier: {
+        type: Type.STRING,
+        description: "The name or email of the contact to remove. e.g., 'John Smith'"
+      },
+    },
+    required: ["eventIdentifier", "contactIdentifier"],
+  },
+};
+
+
+
 // --- AI Tools Configuration ---
 const aiTools: GeminiTool[] = [{
-    functionDeclarations: [
-        countContactsDeclaration,
-        countBooksDeclaration,
-        countEventsDeclaration,
-        getMetricsDeclaration,
-        findTransactionDeclaration,
-        deleteTransactionDeclaration,
-        // Include any other function declarations you use here (addContact, findBook, etc.)
-    ],
+  functionDeclarations: [
+    // Counts
+    countContactsDeclaration,
+    countBooksDeclaration,
+    countEventsDeclaration,
+
+    // Metrics
+    getMetricsDeclaration,
+
+    // Transactions
+    findTransactionDeclaration,
+    deleteTransactionDeclaration,
+
+    // Contacts
+    addContactDeclaration,
+    findContactDeclaration,
+    updateContactDeclaration,
+    deleteContactDeclaration,
+
+    // Books
+    addBookDeclaration,
+    findBookDeclaration,
+    updateBookDeclaration,
+    deleteBookDeclaration,
+
+    // Events
+    addEventDeclaration,
+    findEventDeclaration,
+    updateEventDeclaration,
+    deleteEventDeclaration,
+
+    // Attendees
+    addAttendeeDeclaration,
+    removeAttendeeDeclaration,
+    
+    // New CRM Functions
+    logInteractionDeclaration,
+    getCustomerSummaryDeclaration
+  ],
 }];
 
 // --- Few-Shot Examples (Complete List) ---
@@ -200,6 +612,14 @@ const fewShotExamples: GenerativeContent[] = [
     //{ role: "model", parts: [fCall("findContact", { category: "author" } )] },
     { role: "user", parts: [{ text: "What is the lifetime value of sally brown" }] },
     { role: "model", parts: [fCall("getMetrics", { target: "customers", metric: "lifetime-value", contactIdentifier: "sally brown" })] },
+    { role: "user", parts: [{ text: "Show me all contacts in Alabama." }] },
+    { role: "model", parts: [fCall("findContact", { filters: { state: "al" } })] },
+    { role: "user", parts: [{ text: "List all vendors." }] },
+    { role: "model", parts: [fCall("findContact", { filters: { category: "vendor" } })] },
+    { role: "user", parts: [{ text: "Who do I know in Metropolis?" }] },
+    { role: "model", parts: [fCall("findContact", { filters: { city: "metropolis" } })] },
+    { role: "user", parts: [{ text: "Find all clients in New York." }] },
+    { role: "model", parts: [fCall("findContact", { filters: { category: "client", state: "ny" } })] },
 
     // --- CONTACT MANAGEMENT EXAMPLES (UPDATE) ---
     { role: "user", parts: [{ text: "Update Emily Brown's category to Client." }] },
@@ -491,6 +911,41 @@ const fewShotExamples: GenerativeContent[] = [
         metric: "purchased-by-criteria",
         criteria: { book_genre: "science fiction" }
     })] },
+    { role: "user", parts: [{ text: "Who are my 5 most recent customers?" }] },
+    { role: "model", parts: [fCall("getMetrics", { target: "contacts", metric: "recent-customers", limit: 5 })] },
+    { role: "user", parts: [{ text: "How many new clients did we get last month?" }] },
+    { role: "model", parts: [fCall("getMetrics", { target: "contacts", metric: "new-customer-count", timeframe: "last month" })] },
+
+    // --- CONTACT MANAGEMENT EXAMPLES (LOGGING) ---
+    { 
+      role: "user", 
+      parts: [{ text: "Log a phone call with Jane Doe, notes 'discussed new sci-fi arrivals'." }] 
+    },
+    { 
+      role: "model", 
+      parts: [fCall(
+        "logInteraction", // <-- Must match name: "logInteraction"
+        { 
+          contactIdentifier: "jane doe", // <-- Must match 'contactIdentifier'
+          interactionData: {             // <-- Must match 'interactionData'
+            type: "phone", 
+            notes: "discussed new sci-fi arrivals" 
+          } 
+        }
+      )] 
+    },   
+    { role: "user", parts: [{ text: "Add note for Peter Parker: met at coffee shop." }] },
+    { role: "model", parts: [fCall("logInteraction", { contactIdentifier: "peter parker", interactionData: { type: "meeting", notes: "met at coffee shop" } })] },
+    { role: "user", parts: [{ text: "Logged an email to tom@matrix.com regarding invoice #123." }] },
+    { role: "model", parts: [fCall("logInteraction", { contactIdentifier: "tom@matrix.com", interactionData: { type: "email", notes: "Discussed invoice #123" } })] },
+
+    // --- CONTACT MANAGEMENT EXAMPLES (SUMMARY) ---
+    { role: "user", parts: [{ text: "Show me the dashboard for Tony Stark." }] },
+    { role: "model", parts: [fCall("getCustomerSummary", { contactIdentifier: "tony stark" })] },
+    { role: "user", parts: [{ text: "Pull up the full history for 'hulk@avengers.com'." }] },
+    { role: "model", parts: [fCall("getCustomerSummary", { contactIdentifier: "hulk@avengers.com" })] },
+    { role: "user", parts: [{ text: "What's the full rundown on Sarah Connor?" }] },
+    { role: "model", parts: [fCall("getCustomerSummary", { contactIdentifier: "sarah connor" })] },
 ];
 
 // --- Initialize GoogleGenAI client ---
@@ -714,6 +1169,13 @@ export const processCommand = onCall({
                     break;
                 case "getMetrics":
                     responsePayload = { intent: 'METRICS_DATA', data: { metricsRequest: args }, responseText: result.text || `Getting metrics.` };
+                    break;
+                case "logInteraction":
+                    responsePayload = { intent: 'LOG_INTERACTION', data: { contactIdentifier: anyArgs.contactIdentifier, interactionData: anyArgs.interactionData }, responseText: result.text || `Logging interaction.` };
+                    break;
+                
+                case "getCustomerSummary":
+                    responsePayload = { intent: 'GET_CUSTOMER_SUMMARY', data: { contactIdentifier: anyArgs.contactIdentifier }, responseText: result.text || `Getting customer summary.` };
                     break;
                  default:
                     const conversationalText = result.text || "I'm sorry, I could not determine a specific action to take.";

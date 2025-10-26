@@ -470,52 +470,62 @@
         }
           
         case 'FIND_CONTACT': {
-           if (userRole === UserRole.APPLICANT) {
-              return { success: false, message: "You do not have permission to view contacts." };
-           }
-           // Destructure both identifier and potential filters
-           const { contactIdentifier, filters } = (data || {}) as { contactIdentifier?: string, filters?: { category?: string } };
-           const identifier = (contactIdentifier || '').toLowerCase();
-           let foundContacts = contacts;
-           let message = ""; // Initialize message
+          if (userRole === UserRole.APPLICANT) {
+            return { success: false, message: "You do not have permission to view contacts." };
+          }
+          
+          const { contactIdentifier, filters } = (data || {}) as { contactIdentifier?: string, filters?: { category?: string, state?: string, city?: string } };
+          const identifier = (contactIdentifier || '').toLowerCase();
+          
+          let foundContacts = contacts;
+          let message = "";
+          let hasIdentifier = !!identifier;
+          let hasFilters = false;
+          const filterDescriptions: string[] = []; // To build the message
 
-           let onlyCategoryFilter = false; // Flag for category-only search
+          // 1. Apply Filters First
+          if (filters) {
+            if (filters.category) {
+              hasFilters = true;
+              const categoryFilter = filters.category.toLowerCase();
+              const targetCategory = categoryFilter === 'supplier' ? Category.VENDOR : categoryFilter; // Adjust mapping
+              foundContacts = foundContacts.filter(c => c.category?.toLowerCase() === targetCategory);
+              filterDescriptions.push(`category '${filters.category}'`);
+            }
+            if (filters.state) {
+              hasFilters = true;
+              const stateFilter = filters.state.toLowerCase();
+              foundContacts = foundContacts.filter(c => c.state?.toLowerCase() === stateFilter);
+              filterDescriptions.push(`state '${filters.state.toUpperCase()}'`);
+            }
+            if (filters.city) {
+              hasFilters = true;
+              const cityFilter = filters.city.toLowerCase();
+              foundContacts = foundContacts.filter(c => c.city?.toLowerCase().includes(cityFilter));
+              filterDescriptions.push(`city '${filters.city}'`);
+            }
+          }
 
-           if (filters && filters.category) {
-             const categoryFilter = filters.category.toLowerCase();
-             const targetCategory = categoryFilter === 'supplier' ? Category.VENDOR : categoryFilter; // Adjust mapping
-             foundContacts = foundContacts.filter(c => c.category?.toLowerCase() === targetCategory);
-             if (!identifier) { // Check if ONLY category filter was given
-                 onlyCategoryFilter = true; // Set the flag
-                 message = `Found ${foundContacts.length} contacts with category '${filters.category}'. Displaying them now.`;
-             }
-           }
+          // 2. If an identifier was also provided, filter the results *further*
+          if (hasIdentifier) {
+            foundContacts = foundContacts.filter(c =>
+              `${c.firstName} ${c.lastName}`.toLowerCase().includes(identifier) ||
+              c.email?.toLowerCase().includes(identifier)
+            );
+            message = `Found ${foundContacts.length} contacts matching "${contactIdentifier}"` + (hasFilters ? ` and filters (${filterDescriptions.join(', ')}).` : ".");
+          } 
+          // 3. If *only* filters were provided
+          else if (hasFilters) {
+              message = `Found ${foundContacts.length} contacts matching filters: ${filterDescriptions.join(', ')}.`;
+          } 
+          // 4. If *nothing* was provided (no identifier, no filters)
+          else {
+              return { success: false, message: "Please tell me who you're looking for or specify filters (like category, state, or city)." };
+          }
 
-           // If an identifier was provided (either alone or with category filter)
-           if (identifier) {
-             foundContacts = foundContacts.filter(c =>
-               `${c.firstName} ${c.lastName}`.toLowerCase().includes(identifier) ||
-               c.email?.toLowerCase().includes(identifier)
-             );
-             message = `Found ${foundContacts.length} contacts matching "${contactIdentifier}".`;
-           }
-           // If NEITHER identifier NOR filters were provided OR if it defaulted to FIND_CONTACT without a useful identifier/filter
-           else if (!filters && !identifier) {
-               return { success: false, message: "Please tell me who you're looking for or specify a category." };
-           }
-           // Special case: If only category filter was set, but no identifier was intended
-           else if (onlyCategoryFilter) {
-               // Proceed to return the list filtered by category
-           }
-            // Add a fallback check: If identifier is technically present but effectively empty/null, and we didn't have a category filter
-           else if (!identifier && !filters?.category) {
-                return { success: false, message: "Please specify who or what category you are looking for." };
-           }
-
-
-           // Return results (uses the message set above)
-           return { success: true, payload: foundContacts, targetView: 'contacts', message: message };
-         }
+          // 5. Return results
+          return { success: true, payload: foundContacts, targetView: 'contacts', message: message };
+        }
 
         case 'UPDATE_CONTACT': {
           if (!isAdmin) {
@@ -1054,6 +1064,53 @@
                   targetView: 'reports'
               };
           }
+          if (target === 'contacts' && metric === 'recent-customers') {
+              // Find the latest transaction date for each contact
+              const lastPurchaseDate: { [key: string]: Date } = {};
+              transactions.forEach(t => {
+                  const transactionDate = t.transactionDate?.toDate ? t.transactionDate.toDate() : (t.transactionDate instanceof Date ? t.transactionDate : null);
+                  if (transactionDate) {
+                      if (!lastPurchaseDate[t.contactId] || transactionDate > lastPurchaseDate[t.contactId]) {
+                          lastPurchaseDate[t.contactId] = transactionDate;
+                      }
+                  }
+              });
+              
+              // Sort customers by that date, descending
+              const sortedCustomerIds = Object.entries(lastPurchaseDate)
+                  .sort((a, b) => b[1].getTime() - a[1].getTime()) // Sort by date descending
+                  .map(entry => entry[0]);
+
+              // Get the full contact objects
+              const recentContacts = sortedCustomerIds
+                  .map(id => contacts.find(c => c.id === id))
+                  .filter((c): c is Contact => !!c) // Remove undefined
+                  .slice(0, limit); // Apply limit
+
+              return { success: true, payload: recentContacts, message: `Here are the ${recentContacts.length} most recent customers.`, targetView: 'contacts' };
+          }
+
+          if (target === 'contacts' && metric === 'new-customer-count') {
+              // PREREQUISITE: This assumes you add a 'createdAt' field (as a Date or Timestamp) 
+              // to your Contact objects when they are created.
+              if (!contacts[0]?.createdAt) {
+                  return { success: false, message: "I can't calculate new customers without a 'createdAt' date field on the contact records." };
+              }
+              
+              const { start, end } = getDateRangeFromTimeframe(timeframe); 
+              
+              const newContacts = contacts.filter(c => {
+                   const createdDate = c.createdAt?.toDate ? c.createdAt.toDate() : (c.createdAt instanceof Date ? c.createdAt : null);
+                   return createdDate && createdDate >= start && createdDate <= end;
+              });
+              
+              return { 
+                success: true, 
+                message: `Found ${newContacts.length} new contacts for ${timeframe}.`, 
+                payload: newContacts, // Send the list in case user wants to see them
+                targetView: 'contacts' 
+              };
+          }
           return { success: false, message: "I'm sorry, I can't calculate those metrics." };
         }
 
@@ -1157,6 +1214,97 @@
             const actionText = isAttending ? "added" : "removed";
             return { success: true, message: `Successfully ${actionText} ${contactToUpdate.firstName} ${contactToUpdate.lastName} ${isAttending ? 'to' : 'from'} the event "${eventToUpdate.name}".`, targetView: 'events' };
         }
+
+        case 'LOG_INTERACTION': {
+          if (!isAdmin) return { success: false, message: "Sorry, only admins can log interactions." };
+          
+          const { contactIdentifier, interactionData } = (data || {}) as { contactIdentifier?: string, interactionData?: { type?: string, notes?: string } };
+          const identifier = (contactIdentifier || '').toLowerCase();
+
+          if (!identifier || !interactionData?.notes) {
+              return { success: false, message: "Please specify a contact and the notes you want to log." };
+          }
+
+          // Find the contact (using logic from UPDATE_CONTACT)
+          const foundContacts = contacts.filter(c => 
+            `${c.firstName} ${c.lastName}`.toLowerCase().includes(identifier) ||
+            c.email?.toLowerCase().includes(identifier)
+          );
+
+          if (foundContacts.length === 0) {
+            return { success: false, message: `I couldn't find a contact matching "${contactIdentifier}".` };
+          }
+          if (foundContacts.length > 1) {
+            return { success: false, message: "I found multiple contacts matching that name. Can you be more specific?" };
+          }
+          
+          const contactToUpdate = foundContacts[0];
+          const type = interactionData?.type?.toUpperCase() || 'NOTE';
+          const newNote = `[${new Date().toLocaleDateString()} - ${type}]: ${interactionData.notes}`;
+          
+          // Prepend the new note to existing notes
+          const existingNotes = contactToUpdate.notes || '';
+          const updatedNotes = `${newNote}\n${existingNotes}`.trim();
+
+          // Call your existing updateContact function
+          await updateContact({ ...contactToUpdate, notes: updatedNotes });
+          
+          return { success: true, message: `Logged interaction for ${contactToUpdate.firstName}.`, targetView: 'contacts' };
+        }
+
+      case 'GET_CUSTOMER_SUMMARY': {
+          if (userRole === UserRole.APPLICANT) {
+            return { success: false, message: "You do not have permission to view customer summaries." };
+          }
+          const { contactIdentifier } = (data || {}) as { contactIdentifier?: string };
+          const identifier = (contactIdentifier || '').toLowerCase();
+
+          if (!identifier) {
+              return { success: false, message: "Please specify a contact to get their summary." };
+          }
+
+          // Find the contact
+          const foundContacts = contacts.filter(c => 
+            `${c.firstName} ${c.lastName}`.toLowerCase().includes(identifier) ||
+            c.email?.toLowerCase().includes(identifier)
+          );
+
+          if (foundContacts.length === 0) {
+            return { success: false, message: `I couldn't find a contact matching "${contactIdentifier}".` };
+          }
+          if (foundContacts.length > 1) {
+            return { success: false, message: "I found multiple contacts matching that name. Can you be more specific?" };
+          }
+
+          const contact = foundContacts[0];
+          
+          // 1. Get Transactions and Lifetime Value
+          const contactTransactions = transactions.filter(t => t.contactId === contact.id);
+          const lifetimeValue = contactTransactions.reduce((sum, t) => sum + t.totalPrice, 0);
+
+          // 2. Get Events Attending
+          const contactEvents = events
+            .filter(e => e.attendeeIds?.includes(contact.id))
+            .map(e => ({ id: e.id, name: e.name, date: e.date })); // Just get key info
+
+          // 3. Combine into a summary payload
+          const summary = {
+              contactDetails: contact,
+              lifetimeValue: lifetimeValue.toFixed(2),
+              transactionCount: contactTransactions.length,
+              transactions: contactTransactions.slice(0, 5), // Send last 5 for preview
+              eventsAttending: contactEvents,
+          };
+
+          // This payload can be used to populate a modal or a dedicated summary view
+          return { 
+              success: true, 
+              payload: summary, 
+              message: `Here is the summary for ${contact.firstName} ${contact.lastName}.`,
+              targetView: 'contacts' // Or a new 'summary' view if you build one
+          };
+        }
+
         default:
           return { success: true };
       }
