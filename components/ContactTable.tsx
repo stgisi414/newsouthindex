@@ -1,7 +1,8 @@
 import React, { useState, useMemo, Fragment } from 'react';
-import { Contact, Category, isValidEmail, isValidPhone, isValidUrl } from '../types'; // <-- FIX: Import validation functions
+import { Contact, Category, isValidEmail, isValidPhone, isValidUrl } from '../types';
 import EditIcon from './icons/EditIcon';
 import DeleteIcon from './icons/DeleteIcon';
+import CategoryEditPopup from './CategoryEditPopup'; // <-- FIX: Import new popup
 
 interface ContactTableProps {
     contacts: Contact[];
@@ -24,7 +25,7 @@ const ALL_CONTACT_FIELDS: { key: DisplayableContactKey; label: string; hiddenInM
     { key: 'state', label: 'State', hiddenInMobile: true },
 ];
 
-const CATEGORY_VALUES = Object.values(Category);
+// No longer needed: const CATEGORY_VALUES = Object.values(Category);
 
 const ITEMS_PER_PAGE = 10;
 
@@ -33,11 +34,22 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
+    const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null); // <-- FIX: State for popup
 
     const sortedContacts = useMemo(() => {
         const sorted = [...contacts].sort((a, b) => {
-            const valA = (a[sortKey as keyof typeof a] || '').toString().toLowerCase();
-            const valB = (b[sortKey as keyof typeof b] || '').toString().toLowerCase();
+            let valA: string;
+            let valB: string;
+
+            // <-- FIX: Handle sorting for category array
+            if (sortKey === 'category') {
+                valA = (Array.isArray(a.category) ? a.category : []).join(', ').toLowerCase();
+                valB = (Array.isArray(b.category) ? b.category : []).join(', ').toLowerCase();
+            } else {
+                valA = (a[sortKey as keyof typeof a] || '').toString().toLowerCase();
+                valB = (b[sortKey as keyof typeof b] || '').toString().toLowerCase();
+            }
+
             if (valA < valB) return -1;
             if (valA > valB) return 1;
             return 0;
@@ -72,23 +84,19 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
         return sortOrder === 'asc' ? '▲' : '▼';
     };
 
-    const handleFieldUpdate = (e: React.FocusEvent<HTMLSpanElement | HTMLSelectElement>, contact: Contact, field: keyof Contact) => {
+    const handleFieldUpdate = (e: React.FocusEvent<HTMLSpanElement>, contact: Contact, field: keyof Contact) => {
         if (!isAdmin) return;
         
-        let value: string | null;
+        // This function no longer handles 'category'
+        if (field === 'category') return; 
 
-        if (field === 'category') {
-            value = (e.currentTarget as HTMLSelectElement).value;
-        } else {
-            value = e.currentTarget.textContent;
-        }
-
+        let value = e.currentTarget.textContent;
         const originalValue = contact[field] || '';
 
-        let updatedValue: string | Category | undefined = value.trim();
+        let updatedValue: string | undefined = value?.trim();
         
         if (field === 'email') {
-            updatedValue = updatedValue.toLowerCase();
+            updatedValue = updatedValue?.toLowerCase();
         }
         
         if (updatedValue === '' || updatedValue === '-') {
@@ -98,17 +106,17 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
         if (updatedValue !== undefined) {
              if (field === 'phone' && !isValidPhone(updatedValue as string)) {
                  alert(`Validation Error: Invalid phone format for input: ${value}`);
-                 e.currentTarget.textContent = originalValue;
+                 e.currentTarget.textContent = originalValue as string;
                  return; 
              }
              if (field === 'url' && !isValidUrl(updatedValue as string)) {
                  alert(`Validation Error: Invalid URL format for input: ${value}`);
-                 e.currentTarget.textContent = originalValue;
+                 e.currentTarget.textContent = originalValue as string;
                  return; 
              }
              if (field === 'email' && !isValidEmail(updatedValue as string)) {
                 alert(`Validation Error: Invalid email format for input: ${value}`);
-                e.currentTarget.textContent = originalValue;
+                e.currentTarget.textContent = originalValue as string;
                 return;
              }
         }
@@ -117,14 +125,22 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
         onUpdateContact(updatedContact as Contact);
     };
 
-    const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>, contact: Contact) => {
-        if (!isAdmin) return;
-        
-        const value = e.currentTarget.value as Category;
-        const updatedContact = { ...contact, category: value };
-        
-        onUpdateContact(updatedContact);
+    // <-- FIX: New handler for saving from the popup
+    const handleSaveCategory = (categories: Category[]) => {
+        if (!editingCategoryId) return;
+
+        const contactToUpdate = contacts.find(c => c.id === editingCategoryId);
+        if (contactToUpdate) {
+            onUpdateContact({ ...contactToUpdate, category: categories });
+        }
+        setEditingCategoryId(null); // Close popup
     };
+
+    // Find the contact being edited for the popup
+    const contactForPopup = useMemo(() => {
+        if (!editingCategoryId) return undefined;
+        return contacts.find(c => c.id === editingCategoryId);
+    }, [editingCategoryId, contacts]);
 
     return (
         <div className="bg-white shadow-lg rounded-xl overflow-hidden">
@@ -136,7 +152,6 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                 <th
                                     key={key}
                                     scope="col"
-                                    // FIX: Change 'px-6' to 'px-3' to reduce horizontal padding inside the header cells
                                     className={`px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer 
                                         ${hiddenInMobile ? 'hidden lg:table-cell' : ''}
                                     `}
@@ -161,27 +176,35 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                         const isCategory = key === 'category';
                                         const isEditable = isAdmin && !isCategory;
                                         
-                                        const displayValue = contact[key] || (isEditable ? '' : '-');
+                                        // <-- FIX: Handle category array display
+                                        let displayValue: string | React.ReactNode = '-';
+                                        if (isCategory) {
+                                            const categories = Array.isArray(contact.category) ? contact.category : [];
+                                            if (categories.length > 0) {
+                                                displayValue = categories.join(', ');
+                                            }
+                                        } else {
+                                            displayValue = contact[key] || (isEditable ? '' : '-');
+                                        }
 
                                         return (
                                             <td 
                                                 key={key} 
-                                                // FIX: Change 'px-6' to 'px-3' to reduce horizontal padding inside the data cells
                                                 className={`px-3 py-4 whitespace-nowrap text-sm text-gray-500 
                                                     ${key === 'firstName' || key === 'lastName' ? 'font-medium text-gray-900' : ''}
                                                     ${hiddenInMobile ? 'hidden lg:table-cell' : ''}
                                                 `}
                                             >
-                                                {isCategory && isAdmin ? (
-                                                    <select
-                                                        value={contact.category}
-                                                        onChange={(e) => handleCategoryChange(e, contact)}
-                                                        className="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                                {/* --- FIX: New Category display/edit logic --- */}
+                                                {isCategory ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => isAdmin && setEditingCategoryId(contact.id)}
+                                                        disabled={!isAdmin}
+                                                        className={`w-full text-left ${isAdmin ? 'cursor-pointer hover:text-indigo-600' : 'cursor-not-allowed'}`}
                                                     >
-                                                        {CATEGORY_VALUES.map((category) => (
-                                                            <option key={category} value={category}>{category}</option>
-                                                        ))}
-                                                    </select>
+                                                        {displayValue}
+                                                    </button>
                                                 ) : (
                                                     <span
                                                         contentEditable={isEditable}
@@ -195,7 +218,6 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                             </td>
                                         );
                                     })}
-                                    {/* FIX: Change 'px-6' to 'px-3' for the actions column */}
                                     <td className="px-3 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <div className="flex items-center justify-end space-x-4">
                                             <button 
@@ -232,6 +254,7 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                                     {contact.url || (isAdmin ? '' : '-')}
                                                 </span></p>
                                                 <p><strong className="font-medium text-gray-800">Address 1:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'address1')} suppressContentEditableWarning={true}>{contact.address1 || (isAdmin ? '' : '-')}</span></p>
+
                                                 <p><strong className="font-medium text-gray-800">Address 2:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'address2')} suppressContentEditableWarning={true}>{contact.address2 || (isAdmin ? '' : '-')}</span></p>
                                                 <p><strong className="font-medium text-gray-800">City, State, Zip:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'city')} suppressContentEditableWarning={true}>{contact.city || ''}</span>, <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'state')} suppressContentEditableWarning={true}>{contact.state || ''}</span> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'zip')} suppressContentEditableWarning={true}>{contact.zip || ''}</span></p>
                                                 <p><strong className="font-medium text-gray-800">Notes:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'notes')} suppressContentEditableWarning={true}>{contact.notes || (isAdmin ? '' : '-')}</span></p>
@@ -271,6 +294,15 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                     </div>
                 </div>
             </div>
+
+            {/* --- FIX: Render the popup --- */}
+            {contactForPopup && (
+                <CategoryEditPopup
+                    contact={contactForPopup}
+                    onClose={() => setEditingCategoryId(null)}
+                    onSave={handleSaveCategory}
+                />
+            )}
         </div>
     );
 };

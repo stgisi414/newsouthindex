@@ -1,6 +1,6 @@
 export enum Category {
     VENDOR = 'Vendor',
-    CLIENT = 'Client',
+    CUSTOMER = 'Customer',
     MEDIA = 'Media',
     PERSONAL = 'Personal',
     OTHER = 'Other'
@@ -10,10 +10,10 @@ export interface Contact {
     id: string;
     honorific?: string;
     firstName: string;
-    middleInitial?: string;
+    middleName?: string;
     lastName: string;
     suffix?: string;
-    category: Category;
+    category: Category[];
     phone?: string; // Made optional to simplify validation
     email: string;
     url?: string;

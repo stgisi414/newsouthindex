@@ -18,7 +18,7 @@ const countDataTestCases = [
   { command: "how many events are scheduled?", expectedIntent: "COUNT_DATA", expectedTarget: "events" },
   // Filtered Counts
   { command: "how many contacts are in AL?", expectedIntent: "COUNT_DATA", expectedTarget: "contacts", expectedFilters: { state: "AL" } },
-  { command: "count clients", expectedIntent: "COUNT_DATA", expectedTarget: "contacts", expectedFilters: { category: "Client" } },
+  { command: "count Customers", expectedIntent: "COUNT_DATA", expectedTarget: "contacts", expectedFilters: { category: "Customer" } },
   { command: "how many books are out of stock?", expectedIntent: "COUNT_DATA", expectedTarget: "books", expectedFilters: { stock: 0 } },
   { command: "count the books by Harper Lee", expectedIntent: "COUNT_DATA", expectedTarget: "books", expectedFilters: { author: "Harper Lee" } },
   { command: "how many events are at the Main Store?", expectedIntent: "COUNT_DATA", expectedTarget: "events", expectedFilters: { location: "Main Store" } },

@@ -78,21 +78,21 @@ export const Auth = () => {
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg">
         <div className="flex items-center justify-center gap-4 border-b pb-4">
-          <img src="/newsouthbookslogo.jpg" alt="New South Books Logo" className="h-12 w-auto" />
+          <img src="/newsouthbookslogo.jpg" alt="NewSouth Books Logo" className="h-12 w-auto" />
           <h2 className="text-2xl font-bold text-gray-900">
-            New South Index
+            NewSouth Index
           </h2>
         </div>
         <div className="text-center text-gray-600">
           <p>
-            Welcome! This is a private contact management tool for New South Books.
+            Welcome! This is a private contact management tool for NewSouth Books.
           </p>
           <p className="mt-2 text-sm">
             Please sign in to continue.
           </p>
           <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
             <p className="text-xs text-yellow-800">
-              <strong>This is a private system for authorized New South Bookstore staff only.</strong>
+              <strong>This is a private system for authorized NewSouth Bookstore staff only.</strong>
               <br />
               Do not attempt to log in if you are not an employee.
             </p>

@@ -6,9 +6,10 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { mockContacts, mockBooks, mockEvents } from "./mockData";
 import { google } from "googleapis"; // <-- 'google' is imported...
+import { Category } from "./types"
 // Removed cors import as we handle it manually or via onCall config
 
-const client = google.firestore("v1");
+const Customer = google.firestore("v1");
 
 // Your GCS bucket name
 const BUCKET_NAME = "gs://nsindx-backup";
@@ -35,7 +36,7 @@ export const backupFirestore = onRequest(
 
     try {
       // Start the export operation
-      await client.projects.databases.exportDocuments({
+      await Customer.projects.databases.exportDocuments({
         name: databaseName,
         requestBody: {
           outputUriPrefix: outputUriPrefix,
@@ -95,7 +96,14 @@ const countContactsDeclaration: FunctionDeclaration = {
             city: { type: Type.STRING, description: "The city to filter contacts by (e.g., 'Montgomery')." },
             state: { type: Type.STRING, description: "The state abbreviation to filter contacts by (e.g., 'AL')." },
             zip: { type: Type.STRING, description: "The zip code to filter contacts by." },
-            category: { type: Type.STRING, description: "The category of the contact (e.g., 'Client', 'Vendor', 'Media', 'Personal', 'Other', 'not Client')." },
+            category: {
+              type: Type.ARRAY,
+              description: "A list of categories to filter contacts by (e.g., ['Customer', 'Vendor']).",
+              items: {
+                type: Type.STRING,
+                enum: Object.values(Category),
+              },
+            },
         },
     },
 };
@@ -201,7 +209,14 @@ const addContactDeclaration: FunctionDeclaration = {
       honorific: { type: Type.STRING, description: "The contact's title (e.g., Mr, Ms, Dr)." },
       email: { type: Type.STRING, description: "The contact's email address." },
       phone: { type: Type.STRING, description: "The contact's phone number." },
-      category: { type: Type.STRING, description: "The contact's category (e.g., Client, Vendor, Personal)." },
+      category: {
+        type: Type.ARRAY,
+        description: "A list of categories for the contact (e.g., ['Customer', 'Vendor']).",
+        items: {
+          type: Type.STRING,
+          enum: Object.values(Category),
+        },
+      },
       address1: { type: Type.STRING, description: "The contact's street address." },
       city: { type: Type.STRING, description: "The contact's city." },
       state: { type: Type.STRING, description: "The contact's state (2-letter abbreviation)." },
@@ -225,7 +240,14 @@ const findContactDeclaration: FunctionDeclaration = {
         type: Type.OBJECT,
         description: "Filters to apply for listing contacts.",
         properties: {
-            category: { type: Type.STRING, description: "The category to filter by (e.g., Client, Vendor)." },
+            category: {
+              type: Type.ARRAY,
+              description: "A list of categories to filter contacts by (e.g., ['Customer']).",
+              items: {
+                type: Type.STRING,
+                enum: Object.values(Category),
+              },
+            },
             state: { type: Type.STRING, description: "The state to filter by (e.g., 'AL')." },
             city: { type: Type.STRING, description: "The city to filter by." }
         }
@@ -250,7 +272,14 @@ const updateContactDeclaration: FunctionDeclaration = {
         properties: {
           // You can list all possible fields here, but it's often easier
           // to just describe it as an object. For strictness, list them:
-          category: { type: Type.STRING, description: "The new category." },
+          category: {
+            type: Type.ARRAY,
+            description: "The new list of categories (e.g., ['Customer', 'Vendor']).",
+            items: {
+              type: Type.STRING,
+              enum: Object.values(Category),
+            },
+          },
           city: { type: Type.STRING, description: "The new city." },
           email: { type: Type.STRING, description: "The new email." },
           zip: { type: Type.STRING, description: "The new zip code." },
@@ -548,8 +577,8 @@ const fewShotExamples: GenerativeContent[] = [
     { role: "model", parts: [{ text: "I can help you create a new transaction or check top-selling books. What would you like to know?" }] },
     
     // --- CONTACT MANAGEMENT EXAMPLES (ADD) ---
-    { role: "user", parts: [{ text: "Add a new client: Mr. Thomas Anderson, email is tom@matrix.com." }] },
-    { role: "model", parts: [fCall("addContact", { honorific: "mr", firstName: "thomas", lastName: "anderson", email: "tom@matrix.com", category: "client" })] },
+    { role: "user", parts: [{ text: "Add a new Customer: Mr. Thomas Anderson, email is tom@matrix.com." }] },
+    { role: "model", parts: [fCall("addContact", { honorific: "mr", firstName: "thomas", lastName: "anderson", email: "tom@matrix.com", category: "Customer" })] },
     { role: "user", parts: [{ text: "Create a vendor contact named Wayne Enterprises, phone 555-BATMAN." }] },
     { role: "model", parts: [fCall("addContact", { firstName: "wayne", lastName: "enterprises", phone: "555-BATMAN", category: "vendor" })] },
     { role: "user", parts: [{ text: "New personal contact: Lois Lane, in Metropolis." }] },
@@ -564,8 +593,8 @@ const fewShotExamples: GenerativeContent[] = [
     { role: "model", parts: [fCall("addContact", { firstName: "tony", lastName: "stark", category: "other" })] },
     { role: "user", parts: [{ text: "Vendor: Bruce Banner, address New York, NY." }] },
     { role: "model", parts: [fCall("addContact", { firstName: "bruce", lastName: "banner", category: "vendor", city: "new york", state: "ny" })] },
-    { role: "user", parts: [{ text: "Client: Hermione Granger, email hg@hogwarts.edu" }] },
-    { role: "model", parts: [fCall("addContact", { firstName: "hermione", lastName: "granger", category: "client", email: "hg@hogwarts.edu" })] },
+    { role: "user", parts: [{ text: "Customer: Hermione Granger, email hg@hogwarts.edu" }] },
+    { role: "model", parts: [fCall("addContact", { firstName: "hermione", lastName: "granger", category: "Customer", email: "hg@hogwarts.edu" })] },
     { role: "user", parts: [{ text: "Add Media contact: Gale Hawthorne, city Panem" }] },
     { role: "model", parts: [fCall("addContact", { firstName: "gale", lastName: "hawthorne", category: "media", city: "panem" })] },
     { role: "user", parts: [{ text: "Please add a contact named Clark Kent with address 344 Clinton St, Smallville, KS 66002." }] },
@@ -618,12 +647,12 @@ const fewShotExamples: GenerativeContent[] = [
     { role: "model", parts: [fCall("findContact", { filters: { category: "vendor" } })] },
     { role: "user", parts: [{ text: "Who do I know in Metropolis?" }] },
     { role: "model", parts: [fCall("findContact", { filters: { city: "metropolis" } })] },
-    { role: "user", parts: [{ text: "Find all clients in New York." }] },
-    { role: "model", parts: [fCall("findContact", { filters: { category: "client", state: "ny" } })] },
+    { role: "user", parts: [{ text: "Find all Customers in New York." }] },
+    { role: "model", parts: [fCall("findContact", { filters: { category: "Customer", state: "ny" } })] },
 
     // --- CONTACT MANAGEMENT EXAMPLES (UPDATE) ---
-    { role: "user", parts: [{ text: "Update Emily Brown's category to Client." }] },
-    { role: "model", parts: [fCall("updateContact", { identifier: "emily brown", updateData: { category: "client" } })] },
+    { role: "user", parts: [{ text: "Update Emily Brown's category to Customer." }] },
+    { role: "model", parts: [fCall("updateContact", { identifier: "emily brown", updateData: { category: "Customer" } })] },
     { role: "user", parts: [{ text: "Change Robert Williams' city to Mobile." }] },
     { role: "model", parts: [fCall("updateContact", { identifier: "robert williams", updateData: { city: "mobile" } })] },
     { role: "user", parts: [{ text: "Edit John Smith's email to new.john.smith@vendor.com" }] },
@@ -799,8 +828,8 @@ const fewShotExamples: GenerativeContent[] = [
     { role: "model", parts: [fCall("countContacts", { city: "montgomery" })] },
     { role: "user", parts: [{ text: "count the contacts in alabama" }] },
     { role: "model", parts: [fCall("countContacts", { state: "al" })] },
-    { role: "user", parts: [{ text: "how many clients?" }] },
-    { role: "model", parts: [fCall("countContacts", { category: "client" })] },
+    { role: "user", parts: [{ text: "how many Customers?" }] },
+    { role: "model", parts: [fCall("countContacts", { category: "Customer" })] },
     { role: "user", parts: [{ text: "number of non-vendor contacts" }] },
     { role: "model", parts: [fCall("countContacts", { category: "not vendor" })] },
     { role: "user", parts: [{ text: "List all contacts in the vendor category" }] },
@@ -913,7 +942,7 @@ const fewShotExamples: GenerativeContent[] = [
     })] },
     { role: "user", parts: [{ text: "Who are my 5 most recent customers?" }] },
     { role: "model", parts: [fCall("getMetrics", { target: "contacts", metric: "recent-customers", limit: 5 })] },
-    { role: "user", parts: [{ text: "How many new clients did we get last month?" }] },
+    { role: "user", parts: [{ text: "How many new Customers did we get last month?" }] },
     { role: "model", parts: [fCall("getMetrics", { target: "contacts", metric: "new-customer-count", timeframe: "last month" })] },
 
     // --- CONTACT MANAGEMENT EXAMPLES (LOGGING) ---
@@ -948,7 +977,7 @@ const fewShotExamples: GenerativeContent[] = [
     { role: "model", parts: [fCall("getCustomerSummary", { contactIdentifier: "sarah connor" })] },
 ];
 
-// --- Initialize GoogleGenAI client ---
+// --- Initialize GoogleGenAI Customer ---
 const ai = new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY as string});
 const model = "gemini-2.5-flash-lite"; // Or your preferred model
 
@@ -1089,8 +1118,8 @@ export const processCommand = onCall({
                                     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
                                     .join(' ');
                                 normalizedFilters[key] = titleCaseValue;
-                                if (key === 'category' && normalizedFilters[key].toLowerCase() === 'not client') {
-                                    normalizedFilters[key] = 'not Client';
+                                if (key === 'category' && normalizedFilters[key].toLowerCase() === 'not Customer') {
+                                    normalizedFilters[key] = 'not Customer';
                                 }
                             }
                             else if (key === 'priceFilter') { 

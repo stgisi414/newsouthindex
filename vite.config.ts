@@ -56,7 +56,7 @@ export default defineConfig(({ mode }) => {
         },
         // Include your manifest details here if not linked separately
         manifest: {
-             name: 'New South Index',
+             name: 'NewSouth Index',
              short_name: 'NSIndex',
              // ... other manifest properties ...
         }

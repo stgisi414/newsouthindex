@@ -47,7 +47,7 @@
         <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg text-center">
           <img
             src="/newsouthbookslogo.jpg"
-            alt="New South Books Logo"
+            alt="NewSouth Books Logo"
             className="w-auto h-16 mx-auto"
           />
           <h2 className="text-2xl font-bold text-gray-900">
@@ -439,122 +439,177 @@
           return { success: true, payload: foundTransactions, targetView: 'transactions' };
         }
         case 'ADD_CONTACT': {
-          const { contactData } = (data || {}) as { contactData?: any };
-          const { contactIdentifier } = (data || {}) as { contactIdentifier?: string };
-          
-          const nameParts = (contactIdentifier || '').split(' ').filter(p => p.length > 0);
-          
-          // Get the raw names, which might be lowercase
-          const rawFirstName = contactData?.firstName || nameParts[0] || 'Unknown';
-          const rawLastName = contactData?.lastName || (nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Contact');
-          
-          // Create the new contact with capitalized names
-          const newContact = {
-             firstName: capitalize(rawFirstName),
-             lastName: capitalize(rawLastName),
-             category: contactData?.category || Category.OTHER,
-             phone: contactData?.phone || 'N/A',
-             email: contactData?.email || `${rawFirstName.toLowerCase()}.${rawLastName.toLowerCase()}@default.com`,
-             notes: contactData?.notes || `Added via AI.`,
-             // Add address fields from contactData, providing defaults if necessary
-             address1: contactData?.address1 || '', // Use empty string if not provided
-             address2: contactData?.address2 || '', // Assuming address2 might exist
-             city: capitalize(contactData?.city || ''), // Capitalize city if present
-             state: contactData?.state?.toUpperCase() || '', // Uppercase state if present
-             zip: contactData?.zip || '',
-          } as Omit<Contact, "id">;
+            const { contactData } = (data || {}) as { contactData?: any };
+            const { contactIdentifier } = (data || {}) as { contactIdentifier?: string };
+            
+            const nameParts = (contactIdentifier || '').split(' ').filter(p => p.length > 0);
+            
+            // Get the raw names, which might be lowercase
+            const rawFirstName = contactData?.firstName || nameParts[0] || 'Unknown';
+            const rawLastName = contactData?.lastName || (nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Contact');
+            
+            // --- FIX: Handle category array ---
+            // The AI will now send an array for category, based on our new tool definition.
+            let categoryToSave: Category[];
+            if (Array.isArray(contactData?.category) && contactData.category.length > 0) {
+                categoryToSave = contactData.category;
+            } else if (contactData?.category && typeof contactData.category === 'string') {
+                // Fallback in case AI still sends a string (e.g., from old 'addContact' tool)
+                categoryToSave = [contactData.category as Category];
+            } else {
+                // Default if not provided
+                categoryToSave = [Category.OTHER];
+            }
+            // --- End Fix ---
 
-          const result = await addContact(newContact);
-          // The result.message will now use the capitalized names from newContact
-          return { ...result, targetView: 'contacts' };
+            // Create the new contact with capitalized names
+            const newContact = {
+                firstName: capitalize(rawFirstName),
+                lastName: capitalize(rawLastName),
+                // --- FIX: Use middleName and assign category array ---
+                middleName: contactData?.middleName || '', // Use middleName
+                category: categoryToSave,
+                // --- End Fix ---
+                phone: contactData?.phone || 'N/A',
+                email: contactData?.email || `${rawFirstName.toLowerCase()}.${rawLastName.toLowerCase()}@default.com`,
+                notes: contactData?.notes || `Added via AI.`,
+                // Add address fields from contactData, providing defaults if necessary
+                address1: contactData?.address1 || '', // Use empty string if not provided
+                address2: contactData?.address2 || '', // Assuming address2 might exist
+                city: capitalize(contactData?.city || ''), // Capitalize city if present
+                state: contactData?.state?.toUpperCase() || '', // Uppercase state if present
+                zip: contactData?.zip || '',
+            } as Omit<Contact, "id">;
+
+            const result = await addContact(newContact);
+            // The result.message will now use the capitalized names from newContact
+            return { ...result, targetView: 'contacts' };
         }
           
         case 'FIND_CONTACT': {
-          if (userRole === UserRole.APPLICANT) {
-            return { success: false, message: "You do not have permission to view contacts." };
-          }
-          
-          const { contactIdentifier, filters } = (data || {}) as { contactIdentifier?: string, filters?: { category?: string, state?: string, city?: string } };
-          const identifier = (contactIdentifier || '').toLowerCase();
-          
-          let foundContacts = contacts;
-          let message = "";
-          let hasIdentifier = !!identifier;
-          let hasFilters = false;
-          const filterDescriptions: string[] = []; // To build the message
-
-          // 1. Apply Filters First
-          if (filters) {
-            if (filters.category) {
-              hasFilters = true;
-              const categoryFilter = filters.category.toLowerCase();
-              const targetCategory = categoryFilter === 'supplier' ? Category.VENDOR : categoryFilter; // Adjust mapping
-              foundContacts = foundContacts.filter(c => c.category?.toLowerCase() === targetCategory);
-              filterDescriptions.push(`category '${filters.category}'`);
+            if (userRole === UserRole.APPLICANT) {
+                return { success: false, message: "You do not have permission to view contacts." };
             }
-            if (filters.state) {
-              hasFilters = true;
-              const stateFilter = filters.state.toLowerCase();
-              foundContacts = foundContacts.filter(c => c.state?.toLowerCase() === stateFilter);
-              filterDescriptions.push(`state '${filters.state.toUpperCase()}'`);
-            }
-            if (filters.city) {
-              hasFilters = true;
-              const cityFilter = filters.city.toLowerCase();
-              foundContacts = foundContacts.filter(c => c.city?.toLowerCase().includes(cityFilter));
-              filterDescriptions.push(`city '${filters.city}'`);
-            }
-          }
+            
+            // --- FIX: Change filters type to 'any' to handle both string and array ---
+            const { contactIdentifier, filters } = (data || {}) as { contactIdentifier?: string, filters?: any };
+            // --- End Fix ---
+            
+            const identifier = (contactIdentifier || '').toLowerCase();
+            
+            let foundContacts = contacts;
+            let message = "";
+            let hasIdentifier = !!identifier;
+            let hasFilters = false;
+            const filterDescriptions: string[] = []; // To build the message
 
-          // 2. If an identifier was also provided, filter the results *further*
-          if (hasIdentifier) {
-            foundContacts = foundContacts.filter(c =>
-              `${c.firstName} ${c.lastName}`.toLowerCase().includes(identifier) ||
-              c.email?.toLowerCase().includes(identifier)
-            );
-            message = `Found ${foundContacts.length} contacts matching "${contactIdentifier}"` + (hasFilters ? ` and filters (${filterDescriptions.join(', ')}).` : ".");
-          } 
-          // 3. If *only* filters were provided
-          else if (hasFilters) {
-              message = `Found ${foundContacts.length} contacts matching filters: ${filterDescriptions.join(', ')}.`;
-          } 
-          // 4. If *nothing* was provided (no identifier, no filters)
-          else {
-              return { success: false, message: "Please tell me who you're looking for or specify filters (like category, state, or city)." };
-          }
+            // 1. Apply Filters First
+            if (filters) {
+                // --- FIX: Updated Category Filter Logic (Handles Array AND String) ---
+                if (filters.category) {
+                    hasFilters = true;
+                    let filterCategories: string[] = [];
 
-          // 5. Return results
-          return { success: true, payload: foundContacts, targetView: 'contacts', message: message };
+                    // Standardize the filter to an array
+                    if (Array.isArray(filters.category) && filters.category.length > 0) {
+                        filterCategories = filters.category.map((fc: string) => fc.toLowerCase());
+                        filterDescriptions.push(`category '${filters.category.join(', ')}'`);
+                    } else if (typeof filters.category === 'string') {
+                        // This handles the current bug
+                        filterCategories = [filters.category.toLowerCase()];
+                        filterDescriptions.push(`category '${filters.category}'`);
+                    }
+
+                    if (filterCategories.length > 0) {
+                        foundContacts = foundContacts.filter(c => {
+                            // Get the contact's categories in lowercase, ensuring it's an array
+                            const contactCategories = (Array.isArray(c.category) ? c.category : []).map(cc => cc.toLowerCase());
+                            // Check if *any* of the contact's categories match *any* of the filter categories
+                            return contactCategories.some(cc => filterCategories.includes(cc));
+                        });
+                    }
+                }
+                // --- End Fix ---
+
+                if (filters.state) {
+                    hasFilters = true;
+                    const stateFilter = filters.state.toLowerCase();
+                    foundContacts = foundContacts.filter(c => c.state?.toLowerCase() === stateFilter);
+                    filterDescriptions.push(`state '${filters.state.toUpperCase()}'`);
+                }
+                if (filters.city) {
+                    hasFilters = true;
+                    const cityFilter = filters.city.toLowerCase();
+                    foundContacts = foundContacts.filter(c => c.city?.toLowerCase().includes(cityFilter));
+                    filterDescriptions.push(`city '${filters.city}'`);
+                }
+            }
+            
+            // 2. Apply Identifier Search on *already filtered* results
+            if (hasIdentifier) {
+                foundContacts = foundContacts.filter(c =>
+                    `${c.firstName} ${c.lastName}`.toLowerCase().includes(identifier) ||
+                    c.email?.toLowerCase().includes(identifier)
+                );
+            }
+            
+            // 3. Build Response Message
+            if (foundContacts.length === 0) {
+                if (hasIdentifier && hasFilters) {
+                    message = `I couldn't find any contacts matching "${contactIdentifier}" with ${filterDescriptions.join(' and ')}.`;
+                } else if (hasIdentifier) {
+                    message = `I couldn't find any contacts matching "${contactIdentifier}".`;
+                } else if (hasFilters) {
+                    message = `I couldn't find any contacts with ${filterDescriptions.join(' and ')}.`;
+                } else {
+                    message = "I couldn't find any contacts."; // Should not happen if just "find contacts"
+                }
+            } else if (foundContacts.length > 1) {
+                if (hasIdentifier && !hasFilters) {
+                    message = `I found ${foundContacts.length} contacts matching "${contactIdentifier}". Displaying all.`;
+                } else if (hasFilters) {
+                    message = `I found ${foundContacts.length} contacts matching ${filterDescriptions.join(' and ')}.`;
+                } else {
+                    message = `Found ${foundContacts.length} contacts.`;
+                }
+            } else {
+                // Found 1 contact
+                message = `I found 1 contact: ${foundContacts[0].firstName} ${foundContacts[0].lastName}.`;
+            }
+
+            return { success: true, message: message, payload: foundContacts, targetView: 'contacts' };
         }
 
         case 'UPDATE_CONTACT': {
-          if (!isAdmin) {
-            return { success: false, message: "I'm sorry, but only admins can update contacts." };
-          }
-          const { contactIdentifier, updateData } = (data || {}) as { contactIdentifier?: string, updateData?: Partial<Contact> };
-          const identifier = (contactIdentifier || '').toLowerCase();
-          if (!identifier) {
-            return { success: false, message: "I'm not sure which contact you want to update. Please specify a name or email." };
-          }
+            if (!isAdmin) {
+                return { success: false, message: "I'm sorry, but only admins can update contacts." };
+            }
+            const { contactIdentifier, updateData } = (data || {}) as { contactIdentifier?: string, updateData?: Partial<Contact> };
+            const identifier = (contactIdentifier || '').toLowerCase();
+            if (!identifier) {
+                return { success: false, message: "I'm not sure which contact you want to update. Please specify a name or email." };
+            }
 
-          const foundContacts = contacts.filter(c => 
-            `${c.firstName} ${c.lastName}`.toLowerCase().includes(identifier) ||
-            c.email?.toLowerCase().includes(identifier)
-          );
+            const foundContacts = contacts.filter(c => 
+                `${c.firstName} ${c.lastName}`.toLowerCase().includes(identifier) ||
+                c.email?.toLowerCase().includes(identifier)
+            );
 
-          if (foundContacts.length === 0) {
-            return { success: false, message: `I couldn't find a contact matching "${contactIdentifier}".` };
-          }
+            if (foundContacts.length === 0) {
+                return { success: false, message: `I couldn't find a contact matching "${contactIdentifier}".` };
+            }
 
-          if (foundContacts.length > 1) {
-            return { success: false, message: "I found multiple contacts matching that name. Can you be more specific?" };
-          }
+            if (foundContacts.length > 1) {
+                return { success: false, message: "I found multiple contacts matching that name. Can you be more specific?" };
+            }
 
-          const contactToUpdate = foundContacts[0];
-          
-          // This is a direct update of a single field from AI, wrap it to match the standard function signature
-          await updateContact({ ...contactToUpdate, ...updateData }); // Removed 'result' as updateContact returns void
-          return { success: true, message: `Updated ${contactToUpdate.firstName}`, targetView: 'contacts' };
+            const contactToUpdate = foundContacts[0];
+            
+            // This line is correct. 
+            // `updateData` will be (for example) { category: ["Customer", "Vendor"] }
+            // The spread operator will merge this, overwriting the old contactToUpdate.category
+            await updateContact({ ...contactToUpdate, ...updateData }); 
+            return { success: true, message: `Updated ${contactToUpdate.firstName}`, targetView: 'contacts' };
         }
 
         case 'DELETE_CONTACT': {
@@ -651,61 +706,107 @@
         }
         
         case 'COUNT_DATA': {
-          if (userRole === UserRole.APPLICANT) {
-            return { success: false, message: "You do not have permission to view this information." };
-          }
-          
-          const { countRequest, updateData } = (data || {}) as { countRequest?: any, updateData?: any };
+            if (userRole === UserRole.APPLICANT) {
+                return { success: false, message: "You do not have permission to view this information." };
+            }
+            
+            const { countRequest, updateData } = (data || {}) as { countRequest?: any, updateData?: any };
 
-          if (!countRequest?.target) {
-              return { success: false, message: "I'm sorry, I couldn't understand the count request." };
-          }
+            if (!countRequest?.target) {
+                return { success: false, message: "I'm sorry, I couldn't understand the count request." };
+            }
 
-          // Filters contain the final, normalized, capitalized filters (e.g., { category: 'Personal', state: 'AL' })
-          const filters = updateData || countRequest.filters || {};
-          
-          const { target } = countRequest;
-          let count = 0;
-          let message = '';
-          
-          // Generate the description for the response message
-          const filterDescriptions = Object.keys(filters).length > 0
-              ? Object.entries(filters).map(([key, value]) => `${key} is '${value}'`).join(' and ')
-              : '';
+            // Filters contain the final, normalized, capitalized filters (e.g., { category: ['Customer'], state: 'AL' })
+            const filters = updateData || countRequest.filters || {};
+            
+            const { target } = countRequest;
+            let count = 0;
+            let message = '';
+            
+            // --- FIX: Generate filter descriptions, handling BOTH array and string ---
+            const filterDescriptions = Object.keys(filters).length > 0
+                ? Object.entries(filters).map(([key, value]) => {
+                    if (key === 'category') {
+                        if (Array.isArray(value)) {
+                            if (value.includes('not Customer')) {
+                                return "category is 'not Customer'";
+                            }
+                            return `category is '${value.join(', ')}'`;
+                        }
+                        // Handle the case where it's still a string
+                        return `category is '${value}'`; 
+                    }
+                    return `${key} is '${value}'`;
+                }).join(' and ')
+                : '';
+            // --- END FIX ---
 
-          const viewMap = { 'contacts': 'contacts', 'books': 'books', 'events': 'events' };
-          const targetView: View | undefined = viewMap[target as keyof typeof viewMap];
+            const viewMap = { 'contacts': 'contacts', 'books': 'books', 'events': 'events' };
+            const targetView: View | undefined = viewMap[target as keyof typeof viewMap];
 
-          if (target === 'contacts') {
-             let filtered = contacts;
-             // Log the filters received from the backend
-             console.log('[COUNT_DATA] Received Filters:', filters);
+            if (target === 'contacts') {
+                let filtered = contacts;
+                
+                if (Object.keys(filters).length > 0) {
+                    filtered = contacts.filter(c => {
+                        let passes = true;
+                        const contactCategories = (Array.isArray(c.category) ? c.category : []).map(cat => cat.toLowerCase());
 
-             if (Object.keys(filters).length > 0) {
-                 filtered = contacts.filter(c => {
-                     let passes = true;
+                        // --- FIX: Category Filter (Handles BOTH Array and String) ---
+                        if (filters.category) {
+                            let filterCategories: string[] = [];
+                            
+                            // Standardize the filter to an array
+                            if (Array.isArray(filters.category)) {
+                                filterCategories = filters.category.map((fc: string) => fc.toLowerCase());
+                            } else if (typeof filters.category === 'string') {
+                                // This handles the current bug
+                                filterCategories = [filters.category.toLowerCase()];
+                            }
 
-                     // Log the contact being checked and its category
-                     console.log(`[COUNT_DATA] Checking Contact: ${c.firstName} ${c.lastName}, Category: ${c.category}`);
+                            if (filterCategories.length > 0) {
+                                if (filterCategories.includes('not customer')) {
+                                    // Handle "not Customer"
+                                    if (contactCategories.includes(Category.Customer.toLowerCase())) {
+                                        passes = false;
+                                    }
+                                } else {
+                                    // Check if *at least one* of the contact's categories is present in the filter categories
+                                    const match = filterCategories.some(fc => contactCategories.includes(fc));
+                                    if (!match) {
+                                        passes = false;
+                                    }
+                                }
+                            }
+                        }
+                        // --- END FIX ---
 
-                     // Category Filter (Handles 'not Client' and exact match)
-                     if (filters.category) {
-                         // Log the comparison being made
-                         console.log(`[COUNT_DATA] Comparing Filter Category "${filters.category?.toLowerCase()}" with Contact Category "${c.category?.toLowerCase()}"`);
-                         if (filters.category === 'not Client') {
-                             if (c.category === Category.CLIENT) passes = false;
-                         } else {
-                             // Compare lowercase string values
-                             if (c.category?.toLowerCase() !== filters.category.toLowerCase()) passes = false;
-                         }
-                     }
-                     // ... (rest of filters like state, city, zip) ...
-                     return passes;
-                 });
-             }
-             count = filtered.length;
-             message = `There are ${count} contacts${filterDescriptions ? ` where ${filterDescriptions}` : ' in total'}.`;
-         } else if (target === 'books') {
+                        // --- FIX: Added missing State, City, and Zip filters ---
+                        if (filters.state) {
+                            if (c.state?.toLowerCase() !== filters.state.toLowerCase()) {
+                                passes = false;
+                            }
+                        }
+                        
+                        if (filters.city) {
+                            if (c.city?.toLowerCase() !== filters.city.toLowerCase()) {
+                                passes = false;
+                            }
+                        }
+                        
+                        if (filters.zip) {
+                            if (c.zip?.toLowerCase() !== filters.zip.toLowerCase()) {
+                                passes = false;
+                            }
+                        }
+                        // --- END FIX ---
+                        
+                        return passes;
+                    });
+                }
+                count = filtered.length;
+                message = `There are ${count} contacts${filterDescriptions ? ` where ${filterDescriptions}` : ' in total'}.`;
+            } else if (target === 'books') {
               let filtered = books;
               if (Object.keys(filters).length > 0) {
                   filtered = books.filter(b => {
@@ -1368,7 +1469,7 @@
         </main>
         <footer className="w-full bg-white shadow-inner mt-auto py-4 px-4 sm:px-6 lg:px-8">
           <div className="max-w-7xl mx-auto text-center text-sm text-gray-500">
-            © New South Books 2025 <i>All Rights Reserved.</i>
+            © NewSouth Books 2025 <i>All Rights Reserved.</i>
           </div>
         </footer>
       </div>

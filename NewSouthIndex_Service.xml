@@ -3,7 +3,7 @@
   <RegistrationInfo>
     <Date>2025-10-16T17:15:00</Date>
     <Author>stefd</Author>
-    <Description>Runs the startup scripts for the New South Index development environment.</Description>
+    <Description>Runs the startup scripts for the NewSouth Index development environment.</Description>
   </RegistrationInfo>
   <Triggers>
     <LogonTrigger>

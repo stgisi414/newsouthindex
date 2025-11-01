@@ -370,8 +370,8 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
             <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <img src="/newsouthbookslogo.jpg" alt="New South Books Logo" className="h-12 w-auto" />
-                  <h1 className="text-3xl font-bold leading-tight text-gray-900">New South Index</h1>
+                  <img src="/newsouthbookslogo.jpg" alt="NewSouth Books Logo" className="h-12 w-auto" />
+                  <h1 className="text-3xl font-bold leading-tight text-gray-900">NewSouth Index</h1>
                 </div>
                 <button
                   onClick={onLogout}
@@ -394,7 +394,9 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
               </nav>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2 space-y-6">
+              
+              {/* --- FIX: Main content column is now dynamic --- */}
+              <div className={isAiChatOpen ? "lg:col-span-2 space-y-6" : "lg:col-span-3 space-y-6"}>
                 {adminStatus && <p className="text-sm text-center text-gray-600 p-2 bg-gray-100 rounded-md">{adminStatus}</p>}
 
                 {isAdmin && isAdminPanelOpen && <AdminPanel users={users} currentUser={currentUser} />}
@@ -411,6 +413,16 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                         >
                           <UserCircleIcon className="h-5 w-5 sm:mr-2" />
                           <span className="hidden sm:inline">{isAdminPanelOpen ? 'Hide Admin' : 'Show Admin'}</span>
+                        </button>
+
+                        {/* --- FIX: Moved AI Toggle Button Here --- */}
+                        <button
+                          onClick={() => setIsAiChatOpen(prev => !prev)}
+                          className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition-colors"
+                        >
+                          {/* You could add an icon here if one was imported */}
+                          <span className="hidden sm:inline">{isAiChatOpen ? 'Hide AI' : 'Show AI'}</span>
+                          <span className="sm:hidden">{isAiChatOpen ? 'Hide' : 'Show'} AI</span>
                         </button>
 
                         {import.meta.env.DEV && (
@@ -512,14 +524,11 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                 {currentView === 'reports' && <Reports contacts={contacts} transactions={transactions} books={books} />}
                 {/* --- END UPDATED --- */}
               </div>
-              <div className="lg:col-span-1 space-y-4">
-                <button
-                  onClick={() => setIsAiChatOpen(prev => !prev)}
-                  className="w-full px-4 py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition-colors"
-                >
-                  {isAiChatOpen ? 'Hide AI Assistant' : 'Show AI Assistant'}
-                </button>
-                {isAiChatOpen && (
+
+              {/* --- FIX: This entire column is now conditional --- */}
+              {isAiChatOpen && (
+                <div className="lg:col-span-1 space-y-4">
+                  {/* --- FIX: The toggle button was removed from here --- */}
                   <div className="h-[calc(85vh-4rem)]"> {/* Adjust height as needed */}
                     <AIChat
                       onCommandProcessed={processAndHandleAiCommand}
@@ -528,8 +537,8 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                       onAiSearch={handleAiSearch}
                     />
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </main>
           <ContactForm

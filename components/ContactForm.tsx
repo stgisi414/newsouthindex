@@ -55,11 +55,12 @@ interface ContactFormProps {
 const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, contactToEdit }) => {
     // --- State Hooks ---
     const initialFormState = {
-        honorific: '', firstName: '', middleInitial: '', lastName: '', suffix: '',
-        category: Category.OTHER, phone: '', email: '', url: '',
+        honorific: '', firstName: '', middleName: '', lastName: '', suffix: '',
+        category: [] as Category[], // <-- FIX: Changed to empty array
+        phone: '', email: '', url: '',
         address1: '', address2: '', city: '', state: '', zip: '', notes: '',
     };
-    const [formState, setFormState] = useState<Omit<Contact, 'id'>>(initialFormState);
+    const [formState, setFormState] = useState<Omit<Contact, 'id' | 'createdAt' | 'createdBy' | 'lastModifiedAt' | 'lastModifiedBy'>>(initialFormState);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
     const autocompleteRef = useRef<HTMLElement & { value: string, place?: google.maps.places.Place | null } | null>(null);
     const [mapsApiLoaded, setMapsApiLoaded] = useState(false);
@@ -79,7 +80,31 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
      useEffect(() => {
         if (!isOpen) return;
         setErrors({});
-        const initialState = contactToEdit ? { ...initialFormState, ...contactToEdit } : initialFormState;
+
+        let initialState = contactToEdit 
+            ? { ...initialFormState, ...contactToEdit } 
+            : initialFormState;
+
+        // --- FIX: Handle Category conversion for old data ---
+        if (contactToEdit) {
+            if (typeof contactToEdit.category === 'string') {
+                // If it's old string data, convert to array
+                initialState.category = [contactToEdit.category as Category];
+            } else if (Array.isArray(contactToEdit.category)) {
+                // If it's already an array, use it
+                initialState.category = contactToEdit.category;
+            } else {
+                // Otherwise, default to empty array
+                initialState.category = [];
+            }
+        }
+        // --- End Category Fix ---
+
+        // Handle mapping if 'middleInitial' still exists on old data
+        if (contactToEdit && (contactToEdit as any).middleInitial && !contactToEdit.middleName) {
+            initialState.middleName = (contactToEdit as any).middleInitial;
+        }
+
         setFormState(initialState);
         setPlaceDetails(null); // Reset details on open
 
@@ -172,6 +197,26 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
         setFormState(prev => ({ ...prev, [name]: value }));
     };
     
+    // --- FIX: New handler for category checkboxes ---
+    const handleCategoryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { value, checked } = e.target;
+        const category = value as Category;
+
+        setFormState(prev => {
+            const currentCategories = prev.category || [];
+            if (checked) {
+                // Add category if it's not already included
+                if (!currentCategories.includes(category)) {
+                    return { ...prev, category: [...currentCategories, category] };
+                }
+            } else {
+                // Remove category
+                return { ...prev, category: currentCategories.filter(cat => cat !== category) };
+            }
+            return prev; // Return previous state if no change
+        });
+    };
+    
     const validate = () => {
         const newErrors: { [key: string]: string } = {};
         
@@ -195,8 +240,14 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
             const cleanedState = Object.fromEntries(
                 Object.entries(formState).filter(([, value]) => value !== '' && value !== null)
             );
+
+            // Ensure category is an array, even if empty
+            const finalState = {
+                ...cleanedState,
+                category: formState.category || []
+            };
             
-            onSave(contactToEdit ? { ...cleanedState, id: contactToEdit.id } as Contact : cleanedState as Omit<Contact, 'id'>);
+            onSave(contactToEdit ? { ...finalState, id: contactToEdit.id } as Contact : finalState as Omit<Contact, 'id'>);
             onClose();
         }
     };
@@ -213,7 +264,21 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                         {/* Name Fields */}
                         <div className="md:col-span-1">
                             <label htmlFor="honorific" className="block text-sm font-medium text-gray-700">Honorific</label>
-                            <input type="text" id="honorific" name="honorific" value={formState.honorific || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" />
+                            <select
+                                id="honorific"
+                                name="honorific"
+                                value={formState.honorific || ''}
+                                onChange={handleChange}
+                                className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                            >
+                                <option value="">-- Select --</option>
+                                <option value="Mr.">Mr.</option>
+                                <option value="Mrs.">Mrs.</option>
+                                <option value="Miss">Miss</option>
+                                <option value="Ms.">Ms.</option>
+                                <option value="Dr.">Dr.</option>
+                                <option value="Rev.">Rev.</option>
+                            </select>
                         </div>
                         <div className="md:col-span-2">
                             <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name <span className="text-red-500">*</span></label>
@@ -221,8 +286,8 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                             {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
                         </div>
                         <div className="md:col-span-1">
-                            <label htmlFor="middleInitial" className="block text-sm font-medium text-gray-700">MI</label>
-                            <input type="text" id="middleInitial" name="middleInitial" value={formState.middleInitial || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" maxLength={1} />
+                            <label htmlFor="middleName" className="block text-sm font-medium text-gray-700">Middle</label>
+                            <input type="text" id="middleName" name="middleName" value={formState.middleName || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" />
                         </div>
                         <div className="md:col-span-3">
                             <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">Last Name <span className="text-red-500">*</span></label>
@@ -300,13 +365,30 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                             {errors.zip && <p className="text-red-500 text-xs mt-1">{errors.zip}</p>}
                         </div>
 
-                        {/* ... (Category, Notes fields) ... */}
+                        {/* --- FIX: Category Checkboxes --- */}
                          <div className="md:col-span-4">
-                             <label htmlFor="category" className="block text-sm font-medium text-gray-700">Category</label>
-                             <select id="category" name="category" value={formState.category} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                                {Object.values(Category).map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                            </select>
+                             <label className="block text-sm font-medium text-gray-700">Category</label>
+                             <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+                                {Object.values(Category).map(cat => (
+                                    <div key={cat} className="flex items-center">
+                                        <input
+                                            id={`category-${cat}`}
+                                            name="category"
+                                            type="checkbox"
+                                            value={cat}
+                                            checked={(formState.category || []).includes(cat)}
+                                            onChange={handleCategoryChange}
+                                            className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                                        />
+                                        <label htmlFor={`category-${cat}`} className="ml-3 block text-sm text-gray-900">
+                                            {cat}
+                                        </label>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
+                        {/* --- End Category Fix --- */}
+
                         <div className="md:col-span-4">
                             <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Notes</label>
                             <textarea

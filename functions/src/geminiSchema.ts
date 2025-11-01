@@ -23,9 +23,12 @@ const contactProperties = {
     description: "The contact's suffix (e.g., Jr., Sr., II, III).",
   },
   category: {
-    type: Type.STRING,
+    type: Type.ARRAY,
     description: "The category of the contact.",
-    enum: Object.values(Category),
+    items: {
+      type: "string",
+      enum: Object.values(Category),
+    },
   },
   phone: {
     type: Type.STRING,
@@ -207,8 +210,14 @@ export const responseSchema = {
         filters: {
           type: Type.OBJECT,
           description: "Filters to apply before counting.",
-          properties: {
-            category: { type: Type.STRING, description: "Filter contacts by category." },
+          properties: {category: {
+              type: Type.ARRAY,
+              description: "Filter contacts by category.",
+              items: {
+                type: "string",
+                enum: Object.values(Category),
+              },
+            },
             state: { type: Type.STRING, description: "Filter contacts by state." },
             city: { type: Type.STRING, description: "Filter contacts by city." },
             zip: { type: Type.STRING, description: "Filter contacts by zip code." },

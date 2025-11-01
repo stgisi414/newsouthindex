@@ -1,11 +1,24 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { AppUser, Contact, UserRole, Book, Transaction, Event, Category } from "./types";
+// FIX: Added ChatMessage to imports, assuming it's in types.ts. 
+// If not, the interface definition below will handle it.
+import { AppUser, Contact, UserRole, Book, Transaction, Event, Category, ChatMessage } from "./types";
 import { processNaturalLanguageCommand } from '../services/geminiService';
 import PaperAirplaneIcon from './icons/PaperAirplaneIcon';
 import { User } from 'firebase/auth'; // NEW IMPORT
 import { doc, setDoc, getDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'; // NEW IMPORTS
 import { db } from '../src/firebaseConfig';
 import ReactMarkdown from 'react-markdown';
+
+// FIX: Added ChatMessage interface definition, as it's used
+// in this file but not imported or defined in the provided code.
+// (If this is already in types.ts, you can remove this definition).
+export interface ChatMessage {
+  id: string;
+  sender: 'user' | 'ai';
+  text: string;
+  userId: string;
+  timestamp: string | null;
+}
 
 const MAX_MESSAGES = 50; // NEW CONSTANT
 
@@ -129,6 +142,12 @@ const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed, isAdmin, currentUse
         // Check for currentUser as a guard clause
         if (!input.trim() || isThinking || !currentUser) return;
 
+        let processedInput = input.trim();
+        // \b ensures it's a whole word, "list" and not "playlist"
+        if (processedInput.toLowerCase().startsWith('list ')) { 
+            processedInput = processedInput.replace(/^list\b/i, 'find');
+        }
+
         const userMessage: ChatMessage = {
             id: Date.now().toString(),
             sender: 'user',
@@ -165,16 +184,20 @@ const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed, isAdmin, currentUse
             if (!alreadyHandled && intent === 'FIND_CONTACT' && result.success) {
                  const foundContacts = result.payload as Contact[];
                  if (foundContacts.length > 0) {
-                    onAiSearch(foundContacts, 'contacts');
-                     const contactsText = foundContacts.map(c => {
-                        const email = c.email || 'N/A';
-                        const phone = c.phone || 'N/A';
-                        const category = c.category || 'Other';
-                        return `\n- ${c.firstName} ${c.lastName} (${category}): ${email}, Phone: ${phone}`;
-                    }).join('');
-                     aiResponseText = `I found the following contact(s): ${contactsText}`;
+                     onAiSearch(foundContacts, 'contacts');
+                       const contactsText = foundContacts.map(c => {
+                           const email = c.email || 'N/A';
+                           const phone = c.phone || 'N/A';
+                           // --- FIX: Handle category array ---
+                           const category = (Array.isArray(c.category) && c.category.length > 0)
+                               ? c.category.join(', ')
+                               : 'N/A';
+                           // --- End Fix ---
+                           return `\n- ${c.firstName} ${c.lastName} (${category}): ${email}, Phone: ${phone}`;
+                       }).join('');
+                         aiResponseText = `I found the following contact(s): ${contactsText}`;
                  } else {
-                     aiResponseText = `I couldn't find any contacts matching that description.`;
+                       aiResponseText = `I couldn't find any contacts matching that description.`;
                  }
             }
 
@@ -248,7 +271,7 @@ const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed, isAdmin, currentUse
 Name: ${summary.contactDetails.firstName} ${summary.contactDetails.lastName}
 Email: ${summary.contactDetails.email || 'N/A'}
 Phone: ${summary.contactDetails.phone || 'N/A'}
-Category: ${summary.contactDetails.category || 'N/A'}
+Category: ${(Array.isArray(summary.contactDetails.category) && summary.contactDetails.category.length > 0) ? summary.contactDetails.category.join(', ') : 'N/A'}
 Address: ${[summary.contactDetails.address1, summary.contactDetails.city, summary.contactDetails.state, summary.contactDetails.zip].filter(Boolean).join(', ') || 'N/A'}
 Notes: ${summary.contactDetails.notes || ''}
 
@@ -318,11 +341,11 @@ Events Attending (${summary.eventsAttending.length}): ${summary.eventsAttending.
                         <div className="flex items-start gap-3">
                            <div className="h-8 w-8 rounded-full bg-indigo-500 flex-shrink-0"></div>
                            <div className="px-4 py-2 rounded-2xl bg-gray-100 text-gray-800 rounded-bl-none">
-                             <div className="flex items-center space-x-1">
-                               <div className="h-2 w-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                               <div className="h-2 w-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                               <div className="h-2 w-2 bg-gray-400 rounded-full animate-bounce"></div>
-                             </div>
+                               <div className="flex items-center space-x-1">
+                                   <div className="h-2 w-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                   <div className="h-2 w-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                   <div className="h-2 w-2 bg-gray-400 rounded-full animate-bounce"></div>
+                               </div>
                            </div>
                         </div>
                     )}
