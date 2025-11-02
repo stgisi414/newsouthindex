@@ -107,10 +107,10 @@ const EventForm: React.FC<EventFormProps> = ({
     const availableContacts = useMemo(() => {
         const search = attendeeSearch.toLowerCase();
 
-        // --- FIX #1: Add safety checks for contacts array and contact properties ---
+        // --- FIX #1 (Revised): Relax safety check and make search logic safe ---
         return (contacts || []).filter(c => {
-            // Safety check for bad data or missing fields
-            if (!c || !c.id || !c.firstName || !c.lastName) {
+            // Safety check: only require a contact object and an ID
+            if (!c || !c.id) {
                 return false; 
             }
 
@@ -124,11 +124,11 @@ const EventForm: React.FC<EventFormProps> = ({
                 return true; 
             }
 
-            // Show if search matches first or last name
-            return (
-                c.firstName.toLowerCase().includes(search) || 
-                c.lastName.toLowerCase().includes(search)
-            );
+            // Safely check first and last names for a match
+            const fNameMatch = c.firstName ? c.firstName.toLowerCase().includes(search) : false;
+            const lNameMatch = c.lastName ? c.lastName.toLowerCase().includes(search) : false;
+
+            return fNameMatch || lNameMatch;
         });
     }, [contacts, formState.attendeeIds, attendeeSearch]);
 

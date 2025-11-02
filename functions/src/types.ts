@@ -24,6 +24,7 @@ export interface AppUser {
   role: Role;
   displayName?: string;
   createdAt: Timestamp;
+  showAiChat?: boolean;
 }
 
 export interface FirebaseTimestamp {

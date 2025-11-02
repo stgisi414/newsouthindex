@@ -21,10 +21,12 @@
   import Dashboard from "./components/Dashboard";
   import { Auth } from "./components/Auth";
   import { AppUser, Contact, UserRole, Book, Transaction, Event, Category } from "./types"; // Import Category
+  import TutorialPage from "./components/TutorialPage";
 
   const seedDatabase = httpsCallable(functions, 'seedDatabase');
 
   type View = 'contacts' | 'books' | 'transactions' | 'reports' | 'events';
+  type AppView = 'dashboard' | 'tutorial';
 
   // Utility function to remove undefined values from an object
   const removeUndefined = (obj: Record<string, any>) => {
@@ -86,6 +88,8 @@
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
     const [events, setEvents] = useState<Event[]>([]);
+    const [appView, setAppView] = useState<AppView>('dashboard');
+    const [isAiChatOpen, setIsAiChatOpen] = useState(true);
     const seeded = useRef(false);
 
     // NEW: Separate useEffect to listen for all users (required for 'Become First Admin' check, even for applicants)
@@ -112,6 +116,21 @@
           setUserRole(roleFromToken);
           setIsAdmin(roleFromToken === UserRole.ADMIN);
 
+          try {
+            const userDocRef = doc(db, "users", currentUser.uid);
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+              // Default to true if field is undefined
+              setIsAiChatOpen(userDocSnap.data()?.showAiChat ?? true);
+            } else {
+              // Default for new users
+              setIsAiChatOpen(true);
+            }
+          } catch (error) {
+            console.error("Error fetching user preferences:", error);
+            setIsAiChatOpen(true); // Default to true on error
+          }
+
           if (import.meta.env.DEV && roleFromToken !== UserRole.APPLICANT && !seeded.current) {
             seeded.current = true;
             console.log("In dev environment, attempting to seed database...");
@@ -127,6 +146,7 @@
           setUserRole(null);
           setIsAdmin(false);
           seeded.current = false;
+          setAppView('dashboard');
         }
         setLoading(false);
       });
@@ -208,6 +228,24 @@
         setEvents([]);
       }
     }, [user, userRole]);
+
+    const handleToggleAiChat = async () => {
+      if (!user) return; // Shouldn't happen if they can click, but good safety check
+
+      const newPreference = !isAiChatOpen;
+      setIsAiChatOpen(newPreference); // Optimistic UI update
+
+      try {
+        const userDocRef = doc(db, "users", user.uid);
+        await updateDoc(userDocRef, {
+          showAiChat: newPreference
+        });
+      } catch (error) {
+        console.error("Error saving AI chat preference:", error);
+        // Optional: Revert state if save fails
+        // setIsAiChatOpen(!newPreference);
+      }
+    };
 
     const addContact = async (contactData: Omit<Contact, "id">) => {
       if (!isAdmin) {
@@ -1466,6 +1504,10 @@
       if (!user) {
         return <Auth />;
       }
+      // --- NEW: Check for Tutorial view FIRST ---
+      if (appView === 'tutorial') {
+        return <TutorialPage onBackToDashboard={() => setAppView('dashboard')} />;
+      }
       // 2. If user is logged in BUT is an applicant, show the pending modal
       if (userRole === UserRole.APPLICANT) {
         return <ApplicantModal onLogout={handleLogout} />;
@@ -1492,6 +1534,9 @@
           onUpdateEventAttendees={updateEventAttendees}
           onProcessAiCommand={onProcessAiCommand}
           onLogout={handleLogout}
+          onShowTutorial={() => setAppView('tutorial')}
+          isAiChatOpen={isAiChatOpen}
+          onToggleAiChat={handleToggleAiChat}
           isAdmin={isAdmin}
           users={users}
           currentUser={user}

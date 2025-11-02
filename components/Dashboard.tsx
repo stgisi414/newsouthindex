@@ -17,6 +17,7 @@ import PlusIcon from "./icons/PlusIcon";
 import UserCircleIcon from "./icons/UserCircleIcon";
 import BeakerIcon from "./icons/BeakerIcon";
 import UserPlusIcon from "./icons/UserPlusIcon";
+import BookOpenIcon from "./icons/BookOpenIcon";
 import AdminPanel from "./AdminPanel";
 import Reports from "./Reports";
 import AIAssistantTestSuite from "./AIAssistantTestSuite";
@@ -88,6 +89,9 @@ interface DashboardProps {
     onUpdateEventAttendees: (eventId: string, contactId: string, isAttending: boolean) => void;
     onProcessAiCommand: (intent: string, data: any) => Promise<{ success: boolean; payload?: any; message?: string; targetView?: View }>;
     onLogout: () => void;
+    onShowTutorial: () => void;
+    isAiChatOpen: boolean;
+    onToggleAiChat: () => void;
     isAdmin: boolean;
     users: AppUser[];
     currentUser: User;
@@ -97,7 +101,7 @@ const makeMeAdmin = httpsCallable(functions, 'makeMeAdmin');
 
 type View = 'contacts' | 'books' | 'transactions' | 'reports' | 'events';
 
-const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateContact, onDeleteContact, books, onAddBook, onUpdateBook, onDeleteBook, transactions, onAddTransaction, onUpdateTransaction, onDeleteTransaction, events, onAddEvent, onUpdateEvent, onDeleteEvent, onUpdateEventAttendees, onProcessAiCommand, onLogout, isAdmin, users, currentUser }) => {
+const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateContact, onDeleteContact, books, onAddBook, onUpdateBook, onDeleteBook, transactions, onAddTransaction, onUpdateTransaction, onDeleteTransaction, events, onAddEvent, onUpdateEvent, onDeleteEvent, onUpdateEventAttendees, onProcessAiCommand, onLogout, onShowTutorial, isAiChatOpen, onToggleAiChat, isAdmin, users, currentUser }) => {
     const [currentView, setCurrentView] = useState<View>('contacts');
     const [searchQuery, setSearchQuery] = useState('');
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -109,7 +113,6 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
     const [isEventFormOpen, setIsEventFormOpen] = useState(false);
     const [editingEvent, setEditingEvent] = useState<Event | null>(null);
     const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
-    const [isAiChatOpen, setIsAiChatOpen] = useState(true);
     const [adminStatus, setAdminStatus] = useState<string | null>(null);
     const hasAdmins = useMemo(() => users.some(user => user.isAdmin), [users]);
     const [aiSearchResults, setAiSearchResults] = useState<any[] | null>(null);
@@ -374,13 +377,22 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
                   <img src="/newsouthbookslogo.jpg" alt="NewSouth Books Logo" className="h-12 w-auto" />
                   <h1 className="text-3xl font-bold leading-tight text-gray-900">NewSouth Index</h1>
                 </div>
-                <button
-                  onClick={onLogout}
-                  className="px-4 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors text-sm"
-                >
-                  <LogoutIcon className="h-5 w-5 sm:mr-2 md:hidden" />
-                  <span className="hidden sm:inline">Logout</span>
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={onShowTutorial}
+                    className="flex items-center px-3 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors text-sm"
+                  >
+                    <BookOpenIcon className="h-5 w-5 sm:mr-2" />
+                    <span className="hidden sm:inline">Help & Tutorial</span>
+                  </button>
+                  <button
+                    onClick={onLogout}
+                    className="flex items-center px-3 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors text-sm"
+                  >
+                    <LogoutIcon className="h-5 w-5 sm:mr-2" />
+                    <span className="hidden sm:inline">Logout</span>
+                  </button>
+                </div>
               </div>
             </div>
           </header>
@@ -418,7 +430,7 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
 
                         {/* --- FIX: Moved AI Toggle Button Here --- */}
                         <button
-                          onClick={() => setIsAiChatOpen(prev => !prev)}
+                          onClick={onToggleAiChat}
                           className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition-colors"
                         >
                           {/* You could add an icon here if one was imported */}
@@ -567,6 +579,9 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
             onClose={() => setIsEventFormOpen(false)}
             onSave={handleSaveEvent}
             eventToEdit={editingEvent}
+            contacts={contacts} 
+            onAddAttendee={onUpdateEventAttendees}
+            onRemoveAttendee={onUpdateEventAttendees}
           />
         </div>
     );

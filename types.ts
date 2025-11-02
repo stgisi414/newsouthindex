@@ -49,6 +49,7 @@ export interface AppUser {
     role: UserRole;
     isAdmin: boolean;
     isMasterAdmin?: boolean;
+    showAiChat?: boolean;
 }
 
 export interface Book {
