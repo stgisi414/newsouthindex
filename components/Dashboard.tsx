@@ -39,6 +39,7 @@ const contactFilterConfig: FilterFieldConfig[] = [
   { field: 'state', label: 'State', type: 'text' },
   { field: 'zip', label: 'Zip Code', type: 'text' },
   { field: 'category', label: 'Category', type: 'select', options: Object.values(Category) },
+  { field: 'sendTNSBNewsletter', label: 'Newsletter', type: 'boolean', }
   // Add more fields as needed
 ];
 

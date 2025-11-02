@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Book, isValidPrice } from '../types';
 
+const formatTimestamp = (timestamp: any): string => {
+    if (!timestamp) return 'N/A';
+    try {
+        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+        if (isNaN(date.getTime())) return 'Invalid Date';
+        return date.toLocaleString(); // e.g., "11/1/2025, 7:30:00 PM"
+    } catch (error) {
+        console.error("Error formatting timestamp:", error);
+        return 'N/A';
+    }
+};
+
 interface BookFormProps {
     isOpen: boolean;
     onClose: () => void;
@@ -142,6 +154,17 @@ const BookForm: React.FC<BookFormProps> = ({ isOpen, onClose, onSave, bookToEdit
                              {errors.stock && <p className="text-red-500 text-xs mt-1">{errors.stock}</p>}
                         </div>
                     </div>
+                    {bookToEdit && (
+                        <div className="md:col-span-4 mt-6 pt-4 border-t border-gray-200">
+                            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Metadata</h3>
+                            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-600">
+                                <p><strong>Created By:</strong> {bookToEdit.createdBy || 'Unknown'}</p>
+                                <p><strong>Created At:</strong> {formatTimestamp(bookToEdit.createdAt)}</p>
+                                <p><strong>Last Editor:</strong> {bookToEdit.lastModifiedBy || 'Unknown'}</p>
+                                <p><strong>Last Modified:</strong> {formatTimestamp(bookToEdit.lastModifiedAt)}</p>
+                            </div>
+                        </div>
+                    )}
                     <div className="mt-6 flex justify-end space-x-4">
                         <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancel</button>
                         <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Save Book</button>

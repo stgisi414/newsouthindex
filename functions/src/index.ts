@@ -221,6 +221,7 @@ const addContactDeclaration: FunctionDeclaration = {
       city: { type: Type.STRING, description: "The contact's city." },
       state: { type: Type.STRING, description: "The contact's state (2-letter abbreviation)." },
       zip: { type: Type.STRING, description: "The contact's zip code." },
+      sendTNSBNewsletter: { type: Type.BOOLEAN, description: "Whether the contact wants to receive the TNSB Newsletter." },
     },
     required: ["firstName", "lastName"],
   },
@@ -249,7 +250,10 @@ const findContactDeclaration: FunctionDeclaration = {
               },
             },
             state: { type: Type.STRING, description: "The state to filter by (e.g., 'AL')." },
-            city: { type: Type.STRING, description: "The city to filter by." }
+            city: { type: Type.STRING, description: "The city to filter by." },
+            zip: { type: Type.STRING, description: "The zip code to filter by." }, // <-- ADDED
+            sendTNSBNewsletter: { type: Type.BOOLEAN, description: "Filter by newsletter subscription status." }, // <-- ADDED
+            phone: { type: Type.STRING, description: "The phone number to filter by." } // <-- ADDED
         }
       }
     },
@@ -286,7 +290,8 @@ const updateContactDeclaration: FunctionDeclaration = {
           notes: { type: Type.STRING, description: "The new notes." },
           address1: { type: Type.STRING, description: "The new street address." },
           suffix: { type: Type.STRING, description: "The new suffix (e.g., Jr)." },
-          honorific: { type: Type.STRING, description: "The new honorific." }
+          honorific: { type: Type.STRING, description: "The new honorific." },
+          sendTNSBNewsletter: { type: Type.BOOLEAN, description: "Set whether the contact wants to receive the TNSB Newsletter." }
           // Add any other updatable fields
         },
       }
@@ -606,6 +611,8 @@ const fewShotExamples: GenerativeContent[] = [
         state: "ks",
         zip: "66002" // Extract zip
     })] },
+    { role: "user", parts: [{ text: "Add new customer John Doe, john@doe.com, and sign him up for the newsletter." }] },
+    { role: "model", parts: [fCall("addContact", { firstName: "john", lastName: "doe", email: "john@doe.com", category: ["Customer"], sendTNSBNewsletter: true })] },
 
     // --- CONTACT MANAGEMENT EXAMPLES (FIND) ---
     { role: "user", parts: [{ text: "What's the phone number for John Smith?" }] },
@@ -649,6 +656,8 @@ const fewShotExamples: GenerativeContent[] = [
     { role: "model", parts: [fCall("findContact", { filters: { city: "metropolis" } })] },
     { role: "user", parts: [{ text: "Find all Customers in New York." }] },
     { role: "model", parts: [fCall("findContact", { filters: { category: "Customer", state: "ny" } })] },
+    { role: "user", parts: [{ text: "Does john@doe.com get the newsletter?" }] },
+    { role: "model", parts: [fCall("findContact", { identifier: "john@doe.com" })] },
 
     // --- CONTACT MANAGEMENT EXAMPLES (UPDATE) ---
     { role: "user", parts: [{ text: "Update Emily Brown's category to Customer." }] },
@@ -671,6 +680,8 @@ const fewShotExamples: GenerativeContent[] = [
     { role: "model", parts: [fCall("updateContact", { identifier: "bruce banner", updateData: { category: "personal" } })] },
     { role: "user", parts: [{ text: "Change Hermione Granger's honorific to Ms." }] },
     { role: "model", parts: [fCall("updateContact", { identifier: "hermione granger", updateData: { honorific: "ms" } })] },
+    { role: "user", parts: [{ text: "Opt Jane Smith out of the TNSB newsletter." }] },
+    { role: "model", parts: [fCall("updateContact", { identifier: "jane smith", updateData: { sendTNSBNewsletter: false } })] },
 
     // --- CONTACT MANAGEMENT EXAMPLES (DELETE) ---
     { role: "user", parts: [{ text: "Remove Alice Johnson from my contacts." }] },
@@ -1155,7 +1166,16 @@ export const processCommand = onCall({
                     responsePayload = { intent: 'ADD_CONTACT', data: { contactData: args }, responseText: result.text || `Adding contact.` };
                     break;
                 case "findContact":
-                    responsePayload = { intent: 'FIND_CONTACT', data: { contactIdentifier: anyArgs.identifier }, responseText: result.text || `Finding contact.` };
+                    // Check if identifier or filters are present
+                    const findData = anyArgs.identifier 
+                        ? { contactIdentifier: anyArgs.identifier } 
+                        : { filters: anyArgs.filters };
+                        
+                    responsePayload = { 
+                        intent: 'FIND_CONTACT', 
+                        data: findData, // Use the new findData object
+                        responseText: result.text || `Finding contact.` 
+                    };
                     break;
                 case "updateContact":
                     if (anyArgs.updateData.category && typeof anyArgs.updateData.category === 'string') {

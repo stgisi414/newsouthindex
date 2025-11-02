@@ -66,6 +66,10 @@ const contactProperties = {
     type: Type.STRING,
     description: "Any notes about the contact.",
   },
+  sendTNSBNewsletter: {
+    type: Type.BOOLEAN,
+    description: "Whether the contact wants to receive the TNSB Newsletter.",
+  },
 };
 
 const bookProperties = {

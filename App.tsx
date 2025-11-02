@@ -216,9 +216,10 @@
        try {
         await addDoc(collection(db, "contacts"), {
           ...contactData,
+          createdAt: serverTimestamp(),
           createdBy: user?.email,
-          createdDate: serverTimestamp(),
-          lastModifiedDate: serverTimestamp(),
+          lastModifiedAt: serverTimestamp(),
+          lastModifiedBy: user?.email,
         });
         return { success: true, message: `Successfully added ${contactData.firstName} ${contactData.lastName}.` };
       } catch (error) {
@@ -235,7 +236,8 @@
         // FIX: Filter out 'undefined' values before sending to Firestore
         const updateData = removeUndefined({
             ...contact,
-            lastModifiedDate: serverTimestamp(),
+            lastModifiedAt: serverTimestamp(),
+            lastModifiedBy: user?.email,
         });
         
         await updateDoc(contactDoc, updateData);
@@ -259,17 +261,31 @@
     };
     
     const addBook = async (bookData: Omit<Book, "id">) => {
-      if (!isAdmin) return;
-      // Clean the object to remove any 'undefined' fields before saving
-      const cleanBookData = removeUndefined(bookData);
-      await addDoc(collection(db, "books"), cleanBookData);
+        if (!isAdmin) return;
+        const cleanBookData = removeUndefined(bookData);
+        
+        // --- FIX: The object { ... } goes *after* the collection() call
+        await addDoc(collection(db, "books"), {
+            ...cleanBookData,
+            createdAt: serverTimestamp(),
+            createdBy: user?.email,
+            lastModifiedAt: serverTimestamp(),
+            lastModifiedBy: user?.email,
+        });
     };
+
     const updateBook = async (book: Book) => {
-       if (!isAdmin) return;
-       const bookDoc = doc(db, "books", book.id);
-       // Use the helper to clean the data first
-       const cleanBookData = removeUndefined({ ...book });
-       await updateDoc(bookDoc, cleanBookData);
+        if (!isAdmin) return;
+        const bookDoc = doc(db, "books", book.id);
+        
+        // This is perfect. No changes needed.
+        const updateData = removeUndefined({
+            ...book,
+            lastModifiedAt: serverTimestamp(),
+            lastModifiedBy: user?.email,
+        });
+            
+        await updateDoc(bookDoc, updateData);
     };
     const deleteBook = async (id: string) => {
       if (!isAdmin) return;
@@ -277,48 +293,55 @@
     };
 
     const addTransaction = async (transactionData: { contactId: string; booksWithQuantity: { book: Book, quantity: number }[], transactionDate?: Date }) => {
-      if (!isAdmin) return;
-      // THIS LINE IS THE MAIN CHANGE: Destructure the new field
-      const { contactId, booksWithQuantity, transactionDate } = transactionData;
-      const contact = contacts.find(c => c.id === contactId);
-      if (!contact) return;
+        if (!isAdmin) return;
+        const { contactId, booksWithQuantity, transactionDate } = transactionData;
+        const contact = contacts.find(c => c.id === contactId);
+        if (!contact) return;
 
-      const totalPrice = booksWithQuantity.reduce((sum, { book, quantity }) => sum + (book.price * quantity), 0);
-      
-      const batch = writeBatch(db);
+        const totalPrice = booksWithQuantity.reduce((sum, { book, quantity }) => sum + (book.price * quantity), 0);
+            
+        const batch = writeBatch(db);
+        const transactionRef = doc(collection(db, "transactions"));
 
-      const transactionRef = doc(collection(db, "transactions"));
-      batch.set(transactionRef, {
-        contactId,
-        contactName: `${contact.firstName} ${contact.lastName}`,
-        books: booksWithQuantity.map(({ book, quantity }) => ({ 
-          id: book.id, 
-          title: book.title, 
-          price: book.price, 
-          quantity 
-        })),
-        totalPrice,
-        // CRITICAL FIX: Use provided date or serverTimestamp()
-        transactionDate: transactionDate ? transactionDate : serverTimestamp(),
-      });
+        batch.set(transactionRef, {
+            contactId,
+            contactName: `${contact.firstName} ${contact.lastName}`,
+            books: booksWithQuantity.map(({ book, quantity }) => ({ 
+                id: book.id, 
+                title: book.title, 
+                price: book.price, 
+                quantity 
+            })),
+            totalPrice,
+            transactionDate: transactionDate ? transactionDate : serverTimestamp(),
+            
+            // --- FIX: Add this metadata ---
+            createdAt: serverTimestamp(),
+            createdBy: user?.email,
+            lastModifiedAt: serverTimestamp(),
+            lastModifiedBy: user?.email,
+        });
 
-      booksWithQuantity.forEach(({ book, quantity }) => {
-        const bookRef = doc(db, "books", book.id);
-        batch.update(bookRef, { stock: increment(-quantity) });
-      });
+        booksWithQuantity.forEach(({ book, quantity }) => {
+            const bookRef = doc(db, "books", book.id);
+            batch.update(bookRef, { stock: increment(-quantity) });
+        });
 
-      await batch.commit();
-  };
-    
-    // NEW: Handler for inline transaction field updates
+        await batch.commit();
+    };
+        
     const updateTransaction = async (transaction: Transaction, updatedData: Partial<Transaction>) => {
         if (!isAdmin) return;
         const transactionDoc = doc(db, "transactions", transaction.id);
         
-        // Filter out undefined values (which could occur if updatedData contained one)
         const sanitizedData = removeUndefined(updatedData);
 
-        await updateDoc(transactionDoc, sanitizedData);
+        // --- FIX: Add metadata to the update ---
+        await updateDoc(transactionDoc, {
+            ...sanitizedData,
+            lastModifiedAt: serverTimestamp(),
+            lastModifiedBy: user?.email,
+        });
     };
 
     const deleteTransaction = async (transactionId: string) => {
@@ -340,14 +363,29 @@
     };
 
     const addEvent = async (eventData: Omit<Event, "id">) => {
-      if (!isAdmin) return;
-      await addDoc(collection(db, "events"), { ...eventData, attendeeIds: [] });
+        if (!isAdmin) return;
+
+        // --- FIX: Add metadata fields ---
+        await addDoc(collection(db, "events"), {
+            ...eventData,
+            attendeeIds: [],
+            createdAt: serverTimestamp(),
+            createdBy: user?.email,
+            lastModifiedAt: serverTimestamp(),
+            lastModifiedBy: user?.email,
+        });
     };
 
     const updateEvent = async (event: Event) => {
-      if (!isAdmin) return;
-      const eventDoc = doc(db, "events", event.id);
-      await updateDoc(eventDoc, { ...event });
+        if (!isAdmin) return;
+        const eventDoc = doc(db, "events", event.id);
+
+        // --- FIX: Add metadata fields ---
+        await updateDoc(eventDoc, {
+            ...event,
+            lastModifiedAt: serverTimestamp(),
+            lastModifiedBy: user?.email,
+        });
     };
 
     const deleteEvent = async (id: string) => {

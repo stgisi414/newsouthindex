@@ -45,6 +45,18 @@ const loadGoogleMapsScript = () => {
   });
 };
 
+const formatTimestamp = (timestamp: any): string => {
+    if (!timestamp) return 'N/A';
+    try {
+        const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+        if (isNaN(date.getTime())) return 'Invalid Date';
+        return date.toLocaleString(); // e.g., "11/1/2025, 7:30:00 PM"
+    } catch (error) {
+        console.error("Error formatting timestamp:", error);
+        return 'N/A';
+    }
+};
+
 interface ContactFormProps {
     isOpen: boolean;
     onClose: () => void;
@@ -59,6 +71,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
         category: [] as Category[], // <-- FIX: Changed to empty array
         phone: '', email: '', url: '',
         address1: '', address2: '', city: '', state: '', zip: '', notes: '',
+        sendTNSBNewsletter: false,
     };
     const [formState, setFormState] = useState<Omit<Contact, 'id' | 'createdAt' | 'createdBy' | 'lastModifiedAt' | 'lastModifiedBy'>>(initialFormState);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -195,6 +208,11 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setFormState(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, checked } = e.target;
+        setFormState(prev => ({ ...prev, [name]: checked }));
     };
     
     // --- FIX: New handler for category checkboxes ---
@@ -389,6 +407,24 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                         </div>
                         {/* --- End Category Fix --- */}
 
+                        {/* --- ADD: Newsletter Toggle --- */}
+                        <div className="md:col-span-4">
+                            <div className="flex items-center">
+                                <input
+                                    id="sendTNSBNewsletter"
+                                    name="sendTNSBNewsletter"
+                                    type="checkbox"
+                                    checked={!!formState.sendTNSBNewsletter} // Use !! to ensure it's a boolean
+                                    onChange={handleCheckboxChange}
+                                    className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                                />
+                                <label htmlFor="sendTNSBNewsletter" className="ml-3 block text-sm font-medium text-gray-700">
+                                    Send TNSB Newsletter
+                                </label>
+                            </div>
+                        </div>
+                        {/* --- End Newsletter Toggle --- */}
+
                         <div className="md:col-span-4">
                             <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Notes</label>
                             <textarea
@@ -401,6 +437,18 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                             />
                         </div>
                     </div>
+
+                    {contactToEdit && (
+                        <div className="md:col-span-4 mt-6 pt-4 border-t border-gray-200">
+                            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Metadata</h3>
+                            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-600">
+                                <p><strong>Created By:</strong> {contactToEdit.createdBy || 'Unknown'}</p>
+                                <p><strong>Created At:</strong> {formatTimestamp(contactToEdit.createdAt)}</p>
+                                <p><strong>Last Editor:</strong> {contactToEdit.lastModifiedBy || 'Unknown'}</p>
+                                <p><strong>Last Modified:</strong> {formatTimestamp(contactToEdit.lastModifiedAt)}</p>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Form Buttons */}
                     <div className="mt-8 flex justify-end space-x-4 flex-shrink-0"> {/* Added flex-shrink-0 */}

@@ -23,6 +23,7 @@ const ALL_CONTACT_FIELDS: { key: DisplayableContactKey; label: string; hiddenInM
     { key: 'phone', label: 'Phone', hiddenInMobile: true },
     { key: 'city', label: 'City', hiddenInMobile: true },
     { key: 'state', label: 'State', hiddenInMobile: true },
+    { key: 'sendTNSBNewsletter', label: 'Newsletter', hiddenInMobile: true },
 ];
 
 // No longer needed: const CATEGORY_VALUES = Object.values(Category);
@@ -174,6 +175,7 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                 <tr className="hover:bg-gray-50 transition-colors duration-150">
                                     {ALL_CONTACT_FIELDS.map(({ key, hiddenInMobile }) => {
                                         const isCategory = key === 'category';
+                                        const isNewsletter = key === 'sendTNSBNewsletter';
                                         const isEditable = isAdmin && !isCategory;
                                         
                                         // <-- FIX: Handle category array display
@@ -183,6 +185,18 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                             if (categories.length > 0) {
                                                 displayValue = categories.join(', ');
                                             }
+                                       } else if (isNewsletter) {
+                                            const subscribed = !!contact.sendTNSBNewsletter;
+                                            displayValue = (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => isAdmin && onUpdateContact({ ...contact, sendTNSBNewsletter: !subscribed })}
+                                                    disabled={!isAdmin}
+                                                    className={`w-full text-left ${isAdmin ? 'cursor-pointer' : 'cursor-not-allowed'} ${subscribed ? 'text-green-600' : 'text-red-600'}`}
+                                                >
+                                                    {subscribed ? 'Yes' : 'No'}
+                                                </button>
+                                            );
                                         } else {
                                             displayValue = contact[key] || (isEditable ? '' : '-');
                                         }
@@ -205,6 +219,8 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                                     >
                                                         {displayValue}
                                                     </button>
+                                                ) : isNewsletter ? (
+                                                    displayValue
                                                 ) : (
                                                     <span
                                                         contentEditable={isEditable}
@@ -253,6 +269,17 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                                 >
                                                     {contact.url || (isAdmin ? '' : '-')}
                                                 </span></p>
+                                                <p>
+                                                    <strong className="font-medium text-gray-800">Newsletter:</strong>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => isAdmin && onUpdateContact({ ...contact, sendTNSBNewsletter: !contact.sendTNSBNewsletter })}
+                                                        disabled={!isAdmin}
+                                                        className={`ml-2 ${isAdmin ? 'cursor-pointer font-medium' : 'cursor-not-allowed'} ${contact.sendTNSBNewsletter ? 'text-green-600' : 'text-red-600'}`}
+                                                    >
+                                                        {contact.sendTNSBNewsletter ? 'Subscribed' : 'Not Subscribed'}
+                                                    </button>
+                                                </p>
                                                 <p><strong className="font-medium text-gray-800">Address 1:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'address1')} suppressContentEditableWarning={true}>{contact.address1 || (isAdmin ? '' : '-')}</span></p>
 
                                                 <p><strong className="font-medium text-gray-800">Address 2:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'address2')} suppressContentEditableWarning={true}>{contact.address2 || (isAdmin ? '' : '-')}</span></p>

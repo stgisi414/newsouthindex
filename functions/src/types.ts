@@ -26,6 +26,12 @@ export interface AppUser {
   createdAt: Timestamp;
 }
 
+export interface FirebaseTimestamp {
+  seconds: number;
+  nanoseconds: number;
+  toDate: () => Date;
+}
+
 // Contact Interface
 export interface Contact {
   id: string;
@@ -44,11 +50,13 @@ export interface Contact {
   state?: string;
   zip?: string;
   notes?: string;
-  createdAt: Timestamp;
-  createdBy: string; // Name of the staffer who created it
-  lastModifiedAt: Timestamp;
-  lastModifiedBy: string; // Name of the staffer who last modified it
+  sendTNSBNewsletter?: boolean;
+  createdAt?: FirebaseTimestamp | Date | any;
+  createdBy?: string;
+  lastModifiedAt?: FirebaseTimestamp | Date | any;
+  lastModifiedBy?: string;
 }
+
 
 // Book Interface
 export interface Book {
@@ -57,14 +65,14 @@ export interface Book {
     author: string;
     isbn?: string;
     publisher?: string;
-    publicationYear?: number;
-    genre?: string;
     price: number;
     stock: number;
-    createdAt: Timestamp;
-    createdBy: string;
-    lastModifiedAt: Timestamp;
-    lastModifiedBy: string;
+    genre?: string;
+    publicationYear?: number;
+    createdAt?: FirebaseTimestamp | Date | any;
+    createdBy?: string;
+    lastModifiedAt?: FirebaseTimestamp | Date | any;
+    lastModifiedBy?: string;
 }
 
 // Transaction Interface
@@ -90,13 +98,14 @@ export interface Transaction {
 export interface Event {
   id: string;
   name: string;
-  author: string;
-  date: Timestamp;
-  location: string;
+  date: any; 
+  time?: string;
+  location?: string;
   description?: string;
-  attendees: string[]; // Array of Contact IDs
-  createdAt: Timestamp;
-  createdBy: string;
-  lastModifiedAt: Timestamp;
-  lastModifiedBy: string;
+  author?: string; 
+  attendeeIds?: string[];
+  createdAt?: FirebaseTimestamp | Date | any;
+  createdBy?: string;
+  lastModifiedAt?: FirebaseTimestamp | Date | any;
+  lastModifiedBy?: string;
 }

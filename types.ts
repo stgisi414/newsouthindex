@@ -6,26 +6,35 @@ export enum Category {
     OTHER = 'Other'
 }
 
+export interface FirebaseTimestamp {
+  seconds: number;
+  nanoseconds: number;
+  toDate: () => Date;
+}
+
+// Contact Interface
 export interface Contact {
-    id: string;
-    honorific?: string;
-    firstName: string;
-    middleName?: string;
-    lastName: string;
-    suffix?: string;
-    category: Category[];
-    phone?: string; // Made optional to simplify validation
-    email: string;
-    url?: string;
-    address1?: string;
-    address2?: string;
-    city?: string;
-    state?: string;
-    zip?: string;
-    notes?: string;
-    createdDate?: any;
-    lastModifiedDate?: any;
-    createdBy?: string;
+  id: string;
+  honorific?: string;
+  firstName: string;
+  middleName?: string; // <-- Changed from middleInitial
+  lastName: string;
+  suffix?: string;
+  category: Category[]; // <-- FIX: Changed from Category to Category[]
+  phone?: string;
+  email: string;
+  url?: string;
+  address1?: string;
+  address2?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  notes?: string;
+  sendTNSBNewsletter?: boolean;
+  createdAt?: FirebaseTimestamp | Date | any;
+  createdBy?: string;
+  lastModifiedAt?: FirebaseTimestamp | Date | any;
+  lastModifiedBy?: string;
 }
 
 export enum UserRole {
@@ -52,6 +61,10 @@ export interface Book {
     stock: number;
     genre?: string;
     publicationYear?: number;
+    createdAt?: FirebaseTimestamp | Date | any;
+    createdBy?: string;
+    lastModifiedAt?: FirebaseTimestamp | Date | any;
+    lastModifiedBy?: string;
 }
 
 export interface Transaction {
@@ -85,6 +98,10 @@ export interface Event {
     description?: string;
     author?: string; 
     attendeeIds?: string[];
+    createdAt?: FirebaseTimestamp | Date | any;
+    createdBy?: string;
+    lastModifiedAt?: FirebaseTimestamp | Date | any;
+    lastModifiedBy?: string;
 }
 
 export interface Attendee {

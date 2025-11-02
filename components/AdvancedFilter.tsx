@@ -4,7 +4,7 @@ import ChevronDownIcon from './icons/ChevronDownIcon';
 import ChevronUpIcon from './icons/ChevronUpIcon';
 
 // Define types for configuration
-type FilterType = 'text' | 'select' | 'numberRange' | 'dateRange';
+type FilterType = 'text' | 'select' | 'numberRange' | 'dateRange' | 'boolean';
 interface FilterFieldConfig {
   field: string; // The key in the data object (e.g., 'firstName', 'category', 'price')
   label: string; // User-friendly label (e.g., 'First Name', 'Category', 'Price')
@@ -58,6 +58,14 @@ const itemMatchesFilters = <T extends Record<string, any>>(item: T, filters: Rec
              return false;
          }
          break;
+      case 'boolean':
+        // filterValue will be 'true' or 'false' (as strings)
+        const filterBool = filterValue === 'true';
+        const itemBool = !!itemValue; // Coerce undefined/null to false
+        if (itemBool !== filterBool) {
+            return false;
+        }
+        break;
       // Add other types as needed
     }
   }
@@ -104,7 +112,7 @@ function AdvancedFilter<T extends Record<string, any>>({ data, filterConfig, onF
       }
 
       // Clear filter if value is empty/null/default
-      if (value === '' || value === null || (type === 'select' && value === 'All')) {
+      if (value === '' || value === null || (type === 'select' && value === 'All') || (type === 'boolean' && value === 'All')) {
          delete newFilters[field];
       }
       // Clear range if both min/max or start/end are empty/null
@@ -180,7 +188,18 @@ function AdvancedFilter<T extends Record<string, any>>({ data, filterConfig, onF
                      />
                  </div>
              );
-      // Add cases for 'numberRange', 'dateRange', etc.
+      case 'boolean':
+        return (
+            <select
+                value={activeFilters[field] || 'All'}
+                onChange={(e) => handleInputChange(field, e.target.value, type)}
+                className={commonClasses}
+            >
+                <option value="All">All</option>
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+            </select>
+        );
       default:
         return null;
     }
