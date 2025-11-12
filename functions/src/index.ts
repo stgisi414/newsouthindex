@@ -1,5 +1,5 @@
 import { onCall, HttpsError, onRequest, Request } from "firebase-functions/v2/https";
-import * as functions from "firebase-functions/v1";
+import { auth } from "firebase-functions/v1";
 import { Response } from "express";
 import * as logger from "firebase-functions/logger";
 import { GoogleGenAI, FunctionDeclaration, Type } from "@google/genai";
@@ -1436,7 +1436,7 @@ export const makeMeAdmin = onCall({cors: ['https://nsindxonline.web.app', 'https
 // --- ADD THIS NEW FUNCTION ---
 // This trigger creates a default user document in Firestore when a new
 // user signs up in Firebase Auth.
-export const onUserCreate = functions.auth.user().onCreate(async (user) => {
+export const onUserCreate = auth.user().onCreate(async (user) => {
   // The 'user' object is directly available, no 'event.data' needed
   logger.info(`New user signed up: ${user.uid}, Email: ${user.email}`);
 

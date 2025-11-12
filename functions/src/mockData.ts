@@ -1,17 +1,11 @@
-enum Category {
-    VENDOR = 'Vendor',
-    Customer = 'Customer',
-    MEDIA = 'Media',
-    PERSONAL = 'Personal',
-    OTHER = 'Other'
-}
+import { Category } from "./types";
 
 // Mock Contacts
 export const mockContacts = [
-    { firstName: "Alice", lastName: "Johnson", email: "alice.j@example.com", phone: "555-0101", category: Category.Customer, city: "Montgomery", state: "AL", zip: "36104" },
+    { firstName: "Alice", lastName: "Johnson", email: "alice.j@example.com", phone: "555-0101", category: Category.CUSTOMER, city: "Montgomery", state: "AL", zip: "36104" },
     { firstName: "Bob", lastName: "Williams", email: "bob.w@example.com", phone: "555-0102", category: Category.VENDOR, city: "Birmingham", state: "AL", zip: "35203" },
     { firstName: "Charlie", lastName: "Brown", email: "charlie.b@example.com", phone: "555-0103", category: Category.MEDIA, city: "Mobile", state: "AL", zip: "36602" },
-    { firstName: "Diana", lastName: "Miller", email: "diana.m@example.com", phone: "555-0104", category: Category.PERSONAL, city: "Huntsville", state: "AL", zip: "35801" },
+    { firstName: "Diana", lastName: "Miller", email: "diana.m@example.com", phone: "555-0104", category: Category.OTHER, city: "Huntsville", state: "AL", zip: "3A5801" }, // Changed PERSONAL to OTHER
 ];
 
 // Mock Books
