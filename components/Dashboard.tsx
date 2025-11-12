@@ -64,6 +64,7 @@ interface DashboardProps {
     onShowTutorial: () => void; 
     isAiChatOpen: boolean;
     onToggleAiChat: () => void;
+    onForceSync: () => void;
     isAdmin: boolean;
     users: AppUser[];
     currentUser: User;
@@ -92,7 +93,8 @@ const Dashboard: React.FC<DashboardProps> = ({
     onLogout, 
     onShowTutorial, 
     isAiChatOpen, 
-    onToggleAiChat, 
+    onToggleAiChat,
+    onForceSync,
     isAdmin, 
     users, 
     currentUser,
@@ -387,7 +389,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                         {adminStatus && <p className="text-sm text-center text-gray-600 p-2 bg-gray-100 rounded-md">{adminStatus}</p>}
                         
                         {/* Admin Panel (inline) */}
-                        {isAdmin && currentView === 'admin' && <AdminPanel users={users} currentUser={currentUser} />}
+                        {isAdmin && currentView === 'admin' && <AdminPanel users={users} currentUser={currentUser} onForceSync={onForceSync} />}
                         
                         {/* Test Suite (inline) */}
                         {process.env.NODE_ENV !== 'production' && isTestSuiteOpen && <AIAssistantTestSuite onProcessAiCommand={onProcessAiCommand} />}
@@ -533,10 +535,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                 />
             )}
             
-            {/* --- !! THIS IS THE FINAL FIX !! --- */}
             {isExpenseReportFormOpen && (
                 <ExpenseReportForm
                     isOpen={isExpenseReportFormOpen}
+                    // --- MODIFY onClose ---
                     onClose={() => {
                         setIsExpenseReportFormOpen(false);
                         setPrintMode(false); // Add this
@@ -544,20 +546,18 @@ const Dashboard: React.FC<DashboardProps> = ({
                     onSave={handleSaveExpenseReport}
                     reportToEdit={expenseReportToEdit}
                     
-                    // FIX: Pass the correct, filtered list
-                    staffContacts={staffContacts} 
-                    
-                    // FIX: Pass the new props from App.tsx
+                    // --- THESE ARE THE CRITICAL PROP CHANGES ---
+                    // REPLACE 'contacts' and 'users' with 'staffContacts'
+                    staffContacts={staffContacts}
+                    // ADD the new props
                     currentUserContactId={currentUserContactId}
                     currentUserRole={currentUserRole}
                     isPrintMode={printMode}
 
-                    // Pass these props from Dashboard state/props
-                    nextReportNumber={nextReportNumber}
-                    currentUserEmail={currentUser?.email || ''}
-
                     // REMOVE these old props
                     // contacts={contacts} 
+                    // nextReportNumber={nextReportNumber}
+                    // currentUserEmail={currentUser?.email || ''}
                     // users={users}
                 />
             )}

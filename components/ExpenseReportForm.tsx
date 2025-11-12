@@ -46,6 +46,7 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
     { itemDate: new Date().toISOString().split('T')[0], description: '', cashAmount: 0 },
   ]);
   const [dateSubmitted, setDateSubmitted] = useState('');
+  const [errors, setErrors] = useState<{ staff?: string }>({}); // <-- ADD: Error state
 
   // Find the contact associated with the logged-in user's email
   const loggedInContact = useMemo(() => {
@@ -66,9 +67,13 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
     // Get emails of all admins and bookkeepers from the *users* list
     const internalUserEmails = new Set(
       users
-        // --- FIX: Added check to ensure user has an email before mapping ---
+        // --- FIX: Added check for isMasterAdmin ---
         .filter(u => 
-          (u.role === UserRole.ADMIN || u.role === UserRole.BOOKKEEPER) &&
+          (
+            u.role === UserRole.ADMIN || 
+            u.role === UserRole.BOOKKEEPER ||
+            u.isMasterAdmin === true // <-- THIS IS THE FIX
+          ) &&
           u.email 
         )
         .map(u => u.email.toLowerCase())
@@ -102,6 +107,7 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      setErrors({}); // <-- ADD: Clear errors when form opens
       if (reportToEdit) {
         // Editing existing report
         setReportNumber(reportToEdit.reportNumber || 1000);
@@ -126,12 +132,9 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
         if (loggedInContact) {
           setContactName(`${loggedInContact.firstName} ${loggedInContact.lastName}`);
           setContactId(loggedInContact.id);
-        } else if (staffContacts.length > 0) {
-          // Default to first staff member if no email match
-          setContactName(`${staffContacts[0].firstName} ${staffContacts[0].lastName}`);
-          setContactId(staffContacts[0].id);
         } else {
-          setContactName('No Staff Found'); // Fallback
+          // --- FIX: Default to an empty selection ---
+          setContactName(''); 
           setContactId('');
         }
         setItems([{ itemDate: new Date().toISOString().split('T')[0], description: '', cashAmount: 0 }]);
@@ -152,16 +155,22 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
     setItems(newItems);
   };
 
-  // --- ADDED: Handle staff dropdown change ---
+  // --- ADD: Handle staff dropdown change ---
   const handleStaffChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedId = e.target.value;
     const selectedContact = staffContacts.find(c => c.id === selectedId);
     if (selectedContact) {
       setContactId(selectedContact.id);
       setContactName(`${selectedContact.firstName} ${selectedContact.lastName}`);
+      if (errors.staff) {
+        setErrors(prev => ({ ...prev, staff: undefined })); // Clear error on selection
+      }
+    } else {
+      // --- ADD: Handle deselecting (if they choose the disabled option) ---
+      setContactId('');
+      setContactName('');
     }
   };
-  // --- END ADD ---
 
   const addNewItemRow = () => {
     setItems([...items, { itemDate: new Date().toISOString().split('T')[0], description: '', cashAmount: 0 }]);
@@ -177,8 +186,22 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
     return items.reduce((sum, item) => sum + (Number(item.cashAmount) || 0), 0);
   }, [items]);
 
+  // --- ADD: Validation function ---
+  const validateForm = (): boolean => {
+    const newErrors: { staff?: string } = {};
+    if (!contactId || contactId === '') {
+      newErrors.staff = 'A staff member must be selected.';
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!validateForm()) {
+      return; // Stop submission if validation fails
+    }
 
     const reportData = {
       reportNumber: reportNumber,
@@ -233,7 +256,7 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
                 <select
                   value={contactId}
                   onChange={handleStaffChange}
-                  className="px-3 py-1 bg-white border border-gray-300 rounded-md shadow-sm"
+                  className={`px-3 py-1 bg-white border ${errors.staff ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`}
                 >
                   <option value="" disabled>-- Select Staff --</option>
                   {staffContacts.map(staff => (
@@ -242,8 +265,10 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
                     </option>
                   ))}
                 </select>
-                 {/* --- END FIX --- */}
               </div>
+              {errors.staff && (
+                <p className="text-red-600 text-sm ml-32">{errors.staff}</p>
+              )}
             </div>
             <div className="flex-1 space-y-2 text-right">
               <div className="flex items-center justify-end">

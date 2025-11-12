@@ -1428,3 +1428,58 @@ export const makeMeAdmin = onCall({cors: ['https://nsindxonline.web.app', 'https
         throw new HttpsError("internal", "Failed to set admin role. Check the function logs.");
     }
 });
+
+// --- NEW MANUAL SYNC FUNCTION ---
+export const forceSetMyRole = onCall({
+  cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'http://localhost:3000']
+}, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be logged in.");
+  }
+
+  try {
+    // 1. Get the user's document from Firestore
+    const userDocRef = admin.firestore().collection("users").doc(uid);
+    const userDoc = await userDocRef.get();
+
+    if (!userDoc.exists) {
+      throw new HttpsError("not-found", "Your user document was not found.");
+    }
+
+    const userData = userDoc.data();
+    if (!userData) {
+      throw new HttpsError("internal", "Could not read user data.");
+    }
+
+    // 2. Read the roles from the document
+    const isMasterAdmin = userData.isMasterAdmin === true;
+    const role = userData.role;
+    const contactId = userData.contactId || null;
+
+    // 3. Determine the final "role" claim
+    let finalRoleClaim = 'applicant'; // Safe default
+    if (isMasterAdmin) {
+      finalRoleClaim = 'master-admin';
+    } else if (role) {
+      finalRoleClaim = role;
+    }
+    
+    // 4. Build the new claims object
+    const newClaims = {
+      role: finalRoleClaim,
+      contactId: contactId
+    };
+
+    // 5. Force-set the claims on the Auth token
+    await admin.auth().setCustomUserClaims(uid, newClaims);
+    
+    logger.info(`Successfully FORCED claim sync for ${uid}:`, newClaims);
+    return { success: true, message: "Claims synced!", claims: newClaims };
+
+  } catch (error) {
+    logger.error(`Error in forceSetMyRole for ${uid}:`, error);
+    if (error instanceof HttpsError) { throw error; }
+    throw new HttpsError("internal", "Failed to force-set role.");
+  }
+});

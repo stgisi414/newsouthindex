@@ -18,9 +18,10 @@ const deleteUser = httpsCallable<{ userId: string }, { message: string }>(
 interface AdminPanelProps {
   users: AppUser[];
   currentUser: User; // Use the more specific auth User type
+  onForceSync: () => void;
 }
 
-const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser }) => {
+const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser, onForceSync }) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -200,6 +201,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser }) => {
             })}
           </tbody>
         </table>
+      </div>
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <h3 className="text-xl font-semibold text-gray-900 mb-4">
+          Admin Tools
+        </h3>
+        <div className="space-y-4">
+          <div>
+            <button
+              onClick={onForceSync}
+              className="px-4 py-2 bg-red-600 text-white rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+            >
+              Force Sync My Permissions
+            </button>
+            <p className="text-sm text-gray-500 mt-2">
+              Use this if your permissions (like Master Admin) are out of date. 
+              You will need to log out and log back in after clicking.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

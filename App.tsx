@@ -83,6 +83,7 @@
     const [user, setUser] = useState<User | null>(null);
     const [isAdmin, setIsAdmin] = useState(false);
     const [userRole, setUserRole] = useState<UserRole | null>(null);
+    // const [isMasterAdmin, setIsMasterAdmin] = useState(false); // <-- ADD THIS STATE
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [users, setUsers] = useState<AppUser[]>([]);
     const [expenseReports, setExpenseReports] = useState<ExpenseReport[]>([]);
@@ -91,6 +92,24 @@
     const [isAiChatOpen, setIsAiChatOpen] = useState(true);
     const [userContactId, setUserContactId] = useState<string | null>(null);
     const seeded = useRef(false);
+
+    // --- ADD THIS NEW FUNCTION CALL ---
+    const forceRoleSync = httpsCallable(functions, 'forceSetMyRole');
+
+    const handleForceSync = async () => {
+      if (!confirm("This will force-sync your permissions. Continue?")) {
+        return;
+      }
+      try {
+        console.log("Forcing role sync...");
+        const result = await forceRoleSync();
+        console.log("Sync result:", result.data);
+        alert("Sync complete! Your new claims are: " + JSON.stringify((result.data as any).claims) + "\n\nYou MUST now log out and log back in.");
+      } catch (error) {
+        console.error("Error forcing sync:", error);
+        alert("Sync failed. Check console for errors.");
+      }
+    };
 
     // NEW: Separate useEffect to listen for all users (required for 'Become First Admin' check, even for applicants)
     useEffect(() => {
@@ -113,35 +132,38 @@
       if (currentUser) {
         const idTokenResult = await currentUser.getIdTokenResult(true);
         const roleFromToken = (idTokenResult.claims.role as UserRole) || UserRole.APPLICANT;
+
+        console.log("--- DEBUG: AUTH TOKEN CLAIMS ---");
+        console.log(idTokenResult.claims);
         
         setUserRole(roleFromToken);
         
-        // --- FIX 1: Check for ADMIN or MASTER_ADMIN ---
+        // This check is fine
         setIsAdmin(roleFromToken === UserRole.ADMIN || roleFromToken === UserRole.MASTER_ADMIN);
 
         try {
           const userDocRef = doc(db, "users", currentUser.uid);
           const userDocSnap = await getDoc(userDocRef);
           if (userDocSnap.exists()) {
-            const userData = userDocSnap.data(); // Get user data
+            const userData = userDocSnap.data(); 
             
-            // Default to true if field is undefined
             setIsAiChatOpen(userData?.showAiChat ?? true);
             
-            // --- FIX 2: Get the user's linked contactId ---
-            setUserContactId(userData?.contactId || null);
+            // This is still needed for the 'else' block in the query
+            setUserContactId(userData?.contactId || null); 
+
+            // setIsMasterAdmin(userData?.isMasterAdmin ?? false); // <-- REMOVE THIS
 
           } else {
-            // Default for new users
             setIsAiChatOpen(true);
-            
-            // --- FIX 3: Set contactId to null for new users ---
             setUserContactId(null);
+            // setIsMasterAdmin(false); // <-- REMOVE THIS
           }
         } catch (error) {
           console.error("Error fetching user preferences:", error);
-          setIsAiChatOpen(true); // Default to true on error
-          setUserContactId(null); // Also default to null on error
+          setIsAiChatOpen(true); 
+          setUserContactId(null); 
+          // setIsMasterAdmin(false); // <-- REMOVE THIS
         }
 
         // Your existing database seeder logic (unchanged)
@@ -162,22 +184,19 @@
         setIsAdmin(false);
         seeded.current = false;
         setAppView('dashboard');
-        
-        // --- FIX 4: Clear contactId on logout ---
         setUserContactId(null); 
+        // setIsMasterAdmin(false); // <-- REMOVE THIS
       }
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, []); // Empty array is correct
 
     useEffect(() => {
       
-      // Define cleanup functions at the top
       let unsubscribeContacts = () => {};
       let unsubscribeReports = () => {};
 
-      // --- FIX: This block now *only* checks for basic view permissions ---
       if (user && userRole !== UserRole.APPLICANT) {
         
         // --- START CONNECTIVITY CHECKS --- (Your code, unchanged)
@@ -229,33 +248,28 @@
 
         // --- UPDATED: Expense Reports Logic ---
         
-        // 1. First, determine if we are ready to fetch reports
+        // 1. Determine if ready (this now ONLY uses token data for permission)
         const isReadyToFetchReports = 
           userRole === UserRole.MASTER_ADMIN || 
           userRole === UserRole.BOOKKEEPER ||
-          (userRole === UserRole.ADMIN && userContactId) ||
+          (userRole === UserRole.ADMIN && userContactId) || // userContactId from doc is fine
           (userRole === UserRole.VIEWER && userContactId);
 
         // 2. Only run the reports query IF we are ready
         if (isReadyToFetchReports) {
             let reportsQuery;
             
-            // Check if the user is Master Admin OR Bookkeeper
+            // Check if the user is Master Admin OR Bookkeeper (from TOKEN)
             if (userRole === UserRole.MASTER_ADMIN || userRole === UserRole.BOOKKEEPER) {
-                 // If so, fetch ALL reports
                  reportsQuery = query(collection(db, "expenseReports"), orderBy("reportNumber", "desc"));
             } else {
-                 // Otherwise (for Regular Admins, Viewers, etc.), 
-                 // fetch only reports where staffContactId matches their linked contactId
                  reportsQuery = query(
                      collection(db, "expenseReports"), 
-                     where("staffContactId", "==", userContactId), // Use the linked ID
+                     where("staffContactId", "==", userContactId),
                      orderBy("reportNumber", "desc")
                  );
             }
-            // --- END UPDATE ---
 
-            // 3. Attach the listener
             unsubscribeReports = onSnapshot(reportsQuery, (snapshot) => {
               setExpenseReports(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as ExpenseReport)));
             }, (error) => {
@@ -263,8 +277,6 @@
             });
         
         } else {
-           // We are not ready to fetch reports (e.g., userContactId is still loading)
-           // Clear just the reports, not contacts
            setExpenseReports([]);
         }
 
@@ -1607,41 +1619,41 @@
       // 3. If user is logged in AND is a Viewer or Admin, show the Dashboard
       return (
         <Dashboard
-          contacts={contacts}
-          onAddContact={addContact}
-          onUpdateContact={updateContact}
-          onDeleteContact={deleteContact}
-          
-          expenseReports={expenseReports}
-          onAddExpenseReport={addExpenseReport}
-          onUpdateExpenseReport={updateExpenseReport}
-          onDeleteExpenseReport={deleteExpenseReport}
+            contacts={contacts}
+            onAddContact={addContact}
+            onUpdateContact={updateContact}
+            onDeleteContact={deleteContact}
+            
+            expenseReports={expenseReports}
+            onAddExpenseReport={addExpenseReport}
+            onUpdateExpenseReport={updateExpenseReport}
+            onDeleteExpenseReport={deleteExpenseReport}
 
-          //books={books}
-          //onAddBook={addBook}
-          //onUpdateBook={updateBook}
-          //onDeleteBook={deleteBook}
-          //transactions={transactions}
-          //onAddTransaction={addTransaction}
-          //onUpdateTransaction={updateTransaction}
-          //onDeleteTransaction={deleteTransaction}
-          //events={events}
-          //onAddEvent={addEvent}
-          //onUpdateEvent={updateEvent}
-          //onDeleteEvent={deleteEvent}
-          //onUpdateEventAttendees={updateEventAttendees}
-          
-          onProcessAiCommand={onProcessAiCommand}
-          onLogout={handleLogout}
-          isAiChatOpen={isAiChatOpen}
-          onToggleAiChat={handleToggleAiChat}
-          isAdmin={isAdmin}
-          users={users}
-          currentUser={user}
-          currentUserRole={userRole}
-          currentUserContactId={userContactId}
-          // I have removed the 'books' and 'transactions' props that were here
-        />
+            //books={books}
+            //onAddBook={addBook}
+            //onUpdateBook={updateBook}
+            //onDeleteBook={deleteBook}
+            //transactions={transactions}
+            //onAddTransaction={addTransaction}
+            //onUpdateTransaction={updateTransaction}
+            //onDeleteTransaction={deleteTransaction}
+            //events={events}
+            //onAddEvent={addEvent}
+            //onUpdateEvent={updateEvent}
+            //onDeleteEvent={deleteEvent}
+            //onUpdateEventAttendees={updateEventAttendees}
+            
+            onProcessAiCommand={onProcessAiCommand}
+            onLogout={handleLogout}
+            isAiChatOpen={isAiChatOpen}
+            onToggleAiChat={handleToggleAiChat}
+            isAdmin={isAdmin}
+            users={users}
+            currentUser={user}
+            currentUserRole={userRole}
+            currentUserContactId={userContactId}
+            // I have removed the 'books' and 'transactions' props that were here
+          />
       );
     };
 
