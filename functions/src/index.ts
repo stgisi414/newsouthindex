@@ -1,4 +1,5 @@
 import { onCall, HttpsError, onRequest, Request } from "firebase-functions/v2/https";
+import * as functions from "firebase-functions/v1";
 import { Response } from "express";
 import * as logger from "firebase-functions/logger";
 import { GoogleGenAI, FunctionDeclaration, Type } from "@google/genai";
@@ -1419,6 +1420,10 @@ export const makeMeAdmin = onCall({cors: ['https://nsindxonline.web.app', 'https
             role: 'admin',
             isAdmin: true,
             isMasterAdmin: true, // Set the first admin as Master Admin
+            email: email, // <-- ADD THIS
+            showAiChat: true, // <-- ADD THIS
+            contactId: null, // <-- ADD THIS
+            createdAt: FieldValue.serverTimestamp(), // <-- ADD THIS
         }, { merge: true });
         // --- End of key change ---
         logger.info(`Successfully set 'admin' role for ${email} (${uid}) via onCall.`);
@@ -1427,6 +1432,38 @@ export const makeMeAdmin = onCall({cors: ['https://nsindxonline.web.app', 'https
         logger.error("Error in makeMeAdmin function (onCall):", error);
         throw new HttpsError("internal", "Failed to set admin role. Check the function logs.");
     }
+});
+// --- ADD THIS NEW FUNCTION ---
+// This trigger creates a default user document in Firestore when a new
+// user signs up in Firebase Auth.
+export const onUserCreate = functions.auth.user().onCreate(async (user) => {
+  // The 'user' object is directly available, no 'event.data' needed
+  logger.info(`New user signed up: ${user.uid}, Email: ${user.email}`);
+
+  const userDocRef = admin.firestore().collection("users").doc(user.uid);
+
+  try {
+    // Set the default user document
+    await userDocRef.set({
+      email: user.email || null,
+      role: "applicant", // Default role for all new users
+      isAdmin: false,
+      isMasterAdmin: false,
+      showAiChat: true, // Default preference
+      contactId: null, // No contact linked by default
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    // Also set their default auth claim
+    await admin.auth().setCustomUserClaims(user.uid, {
+      role: "applicant",
+      contactId: null,
+    });
+
+    logger.info(`Successfully created user document for ${user.uid}`);
+  } catch (error) {
+    logger.error(`Error creating user document for ${user.uid}:`, error);
+  }
 });
 
 // --- NEW MANUAL SYNC FUNCTION ---

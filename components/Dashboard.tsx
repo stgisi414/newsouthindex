@@ -184,7 +184,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             users
                 .filter(user => 
                     user.contactId && (
-                        user.role === UserRole.STAFF ||
+                        // user.role === UserRole.STAFF || // <-- REMOVE THIS
                         user.role === UserRole.ADMIN ||
                         user.role === UserRole.BOOKKEEPER ||
                         user.role === UserRole.MASTER_ADMIN
@@ -194,7 +194,10 @@ const Dashboard: React.FC<DashboardProps> = ({
         );
         
         // Filter the main contacts list to get the full contact objects
-        return contacts.filter(contact => staffUserContactIds.has(contact.id));
+        return contacts.filter(contact => 
+            staffUserContactIds.has(contact.id) && 
+            contact.category?.includes(Category.STAFF) // <-- ADD THIS CHECK
+        );
 
     }, [users, contacts]); // This recalculates only when users or contacts change
 
@@ -400,11 +403,13 @@ const Dashboard: React.FC<DashboardProps> = ({
                                 <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
                                     {isAdmin && (
                                         <button
-                                            onClick={() => handleViewChange('admin')}
+                                            onClick={() => handleViewChange(currentView === 'admin' ? 'contacts' : 'admin')}
                                             className={`flex items-center justify-center p-2 sm:px-4 sm:py-2 font-semibold rounded-lg shadow-md transition-colors ${currentView === 'admin' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
                                         >
                                             <UserCircleIcon className="h-5 w-5 sm:mr-2" />
-                                            <span className="hidden sm:inline">Admin Panel</span>
+                                            <span className="hidden sm:inline">
+                                                {currentView === 'admin' ? 'Hide Admin' : 'Admin Panel'}
+                                            </span>
                                         </button>
                                     )}
 
