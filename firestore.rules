@@ -3,61 +3,74 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- ROBUST HELPER FUNCTIONS ---
-    // These check roles directly from Firestore, avoiding errors if custom tokens are stale or not yet present.
-    function isUserAdmin() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    // --- HELPER FUNCTIONS (Reading from Auth Token) ---
+    function isUserRole(role) {
+      return request.auth.token.role == role;
     }
-
+    function isUserMasterAdmin() {
+      return isUserRole('master-admin');
+    }
+    function isUserAdmin() {
+      return isUserRole('admin');
+    }
+    function isUserAdminOrHigher() {
+      return isUserAdmin() || isUserMasterAdmin();
+    }
+    function isUserBookkeeper() {
+       return isUserRole('bookkeeper');
+    }
     function isUserViewer() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'viewer' || isUserAdmin());
+      return isUserRole('viewer') || isUserAdminOrHigher();
+    }
+    
+    // This helper function MUST read from the DB
+    // We make it safer by using .get()
+    function getUserContactId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('contactId', null);
     }
     // ----------------------------
 
     match /users/{userId} {
-      // FIX #1: Allows an admin to get the list of all users for the Admin Panel.
-      allow list: if isUserAdmin() || request.auth != null;
-      // FIX #2: Allows any newly authenticated user to CREATE their own user document.
+      allow list: if isUserAdminOrHigher() || request.auth != null;
       allow create: if request.auth.uid == userId;
-      // Allow users to read their own doc, and admins to read any.
-      allow read: if request.auth.uid == userId ||
-      isUserAdmin();
+      allow read: if request.auth.uid == userId || isUserAdminOrHigher();
+      allow update, delete: if isUserMasterAdmin();
 
-      // Only admins can update roles or delete users.
-      allow update, delete: if isUserAdmin();
-
-      // NEW FIX: Allow user to read/write their own chat history subcollection
       match /chat/{chatId} {
           allow read, write: if request.auth.uid == userId;
       }
     }
 
-    // --- RESTORED RULES FOR OTHER COLLECTIONS USING ROBUST FUNCTIONS ---
     match /contacts/{contactId} {
       allow read: if isUserViewer();
-      allow write: if isUserAdmin();
+      allow write: if isUserAdminOrHigher();
     }
 
-    match /books/{bookId} {
-        allow read: if isUserViewer();
-        allow write: if isUserAdmin();
-    }
-
-    // Using your more permissive rule for transactions
-    match /transactions/{transactionId} {
-        allow read: if isUserViewer();
-        allow create, update, delete: if isUserAdmin();
-    }
-
-    match /events/{eventId} {
-        allow read: if isUserViewer();
-        allow write: if isUserAdmin();
-    }
-    
     match /chatHistory/{chatId} {
       allow read, write: if request.auth != null;
+    }
+
+    // --- UPDATED EXPENSE REPORT RULES ---
+    match /expenseReports/{reportId} {
+      
+      // Create: (Unchanged)
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.createdBy; 
+
+      // --- FIX: ADDED 'LIST' PERMISSION ---
+      // This rule allows queries on the collection
+      allow list: if 
+        // Master Admins and Bookkeepers can query the whole collection
+        isUserMasterAdmin() || isUserBookkeeper() ||
+        // Other users can ONLY query if they are filtering by their own contactId
+        (getUserContactId() != null && request.query.where.staffContactId == getUserContactId());
+
+      // Read/Update/Delete: (For single documents)
+      // This rule allows getting/editing a specific document
+      allow read, update, delete: if 
+        isUserMasterAdmin() || 
+        isUserBookkeeper() ||
+        // The staff member on the report can get/edit it
+        (getUserContactId() != null && resource.data.staffContactId == getUserContactId());
     }
   }
 }

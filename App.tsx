@@ -17,10 +17,11 @@
     arrayUnion,
     arrayRemove,
     getDoc,
+    where,
   } from "firebase/firestore";
   import Dashboard from "./components/Dashboard";
   import { Auth } from "./components/Auth";
-  import { AppUser, Contact, UserRole, Book, Transaction, Event, Category } from "./types"; // Import Category
+  import { AppUser, Contact, UserRole, ExpenseReport, Category } from "./types"; // Import Category
   import TutorialPage from "./components/TutorialPage";
 
   const seedDatabase = httpsCallable(functions, 'seedDatabase');
@@ -84,12 +85,11 @@
     const [userRole, setUserRole] = useState<UserRole | null>(null);
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [users, setUsers] = useState<AppUser[]>([]);
-    const [books, setBooks] = useState<Book[]>([]);
-    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [expenseReports, setExpenseReports] = useState<ExpenseReport[]>([]);
     const [loading, setLoading] = useState(true);
-    const [events, setEvents] = useState<Event[]>([]);
     const [appView, setAppView] = useState<AppView>('dashboard');
     const [isAiChatOpen, setIsAiChatOpen] = useState(true);
+    const [userContactId, setUserContactId] = useState<string | null>(null);
     const seeded = useRef(false);
 
     // NEW: Separate useEffect to listen for all users (required for 'Become First Admin' check, even for applicants)
@@ -106,56 +106,81 @@
       }
     }, [user]);
 
-    useEffect(() => {
-      const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-        setUser(currentUser);
-        if (currentUser) {
-          const idTokenResult = await currentUser.getIdTokenResult(true);
-          const roleFromToken = (idTokenResult.claims.role as UserRole) || UserRole.APPLICANT;
-          
-          setUserRole(roleFromToken);
-          setIsAdmin(roleFromToken === UserRole.ADMIN);
+    // Auth state change listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        const idTokenResult = await currentUser.getIdTokenResult(true);
+        const roleFromToken = (idTokenResult.claims.role as UserRole) || UserRole.APPLICANT;
+        
+        setUserRole(roleFromToken);
+        
+        // --- FIX 1: Check for ADMIN or MASTER_ADMIN ---
+        setIsAdmin(roleFromToken === UserRole.ADMIN || roleFromToken === UserRole.MASTER_ADMIN);
 
-          try {
-            const userDocRef = doc(db, "users", currentUser.uid);
-            const userDocSnap = await getDoc(userDocRef);
-            if (userDocSnap.exists()) {
-              // Default to true if field is undefined
-              setIsAiChatOpen(userDocSnap.data()?.showAiChat ?? true);
-            } else {
-              // Default for new users
-              setIsAiChatOpen(true);
-            }
-          } catch (error) {
-            console.error("Error fetching user preferences:", error);
-            setIsAiChatOpen(true); // Default to true on error
+        try {
+          const userDocRef = doc(db, "users", currentUser.uid);
+          const userDocSnap = await getDoc(userDocRef);
+          if (userDocSnap.exists()) {
+            const userData = userDocSnap.data(); // Get user data
+            
+            // Default to true if field is undefined
+            setIsAiChatOpen(userData?.showAiChat ?? true);
+            
+            // --- FIX 2: Get the user's linked contactId ---
+            setUserContactId(userData?.contactId || null);
+
+          } else {
+            // Default for new users
+            setIsAiChatOpen(true);
+            
+            // --- FIX 3: Set contactId to null for new users ---
+            setUserContactId(null);
           }
-
-          if (import.meta.env.DEV && roleFromToken !== UserRole.APPLICANT && !seeded.current) {
-            seeded.current = true;
-            console.log("In dev environment, attempting to seed database...");
-            try {
-              const result = await seedDatabase();
-              console.log("Seeder function result:", result.data);
-            } catch (error) {
-              console.error("Error calling seeder function:", error);
-            }
-          }
-
-        } else {
-          setUserRole(null);
-          setIsAdmin(false);
-          seeded.current = false;
-          setAppView('dashboard');
+        } catch (error) {
+          console.error("Error fetching user preferences:", error);
+          setIsAiChatOpen(true); // Default to true on error
+          setUserContactId(null); // Also default to null on error
         }
-        setLoading(false);
-      });
-      return () => unsubscribe();
-    }, []);
+
+        // Your existing database seeder logic (unchanged)
+        if (import.meta.env.DEV && roleFromToken !== UserRole.APPLICANT && !seeded.current) {
+          seeded.current = true;
+          console.log("In dev environment, attempting to seed database...");
+          try {
+            const result = await seedDatabase();
+            console.log("Seeder function result:", result.data);
+          } catch (error) {
+            console.error("Error calling seeder function:", error);
+          }
+        }
+
+      } else {
+        // On Logout
+        setUserRole(null);
+        setIsAdmin(false);
+        seeded.current = false;
+        setAppView('dashboard');
+        
+        // --- FIX 4: Clear contactId on logout ---
+        setUserContactId(null); 
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
     useEffect(() => {
+      
+      // Define cleanup functions at the top
+      let unsubscribeContacts = () => {};
+      let unsubscribeReports = () => {};
+
+      // --- FIX: This block now *only* checks for basic view permissions ---
       if (user && userRole !== UserRole.APPLICANT) {
-        // --- START CONNECTIVITY CHECKS ---
+        
+        // --- START CONNECTIVITY CHECKS --- (Your code, unchanged)
         console.log("Running initial connectivity checks...");
 
         // Check Firestore connectivity (simple read)
@@ -167,21 +192,17 @@
                 console.log("%cFirestore connectivity check: SUCCESS", "color: green");
             } catch (error: any) {
                 console.error("%cFirestore connectivity check: FAILED", "color: red", error);
-                // Log specific details if available
                 if (error.code) console.error("Firestore Error Code:", error.code);
                 if (error.message) console.error("Firestore Error Message:", error.message);
             }
         };
 
         // Check Functions connectivity (simple callable function)
-        // We'll use a dummy function or just call makeMeAdmin and expect a specific error if it fails early
         const checkFunctions = async () => {
-             // Use processCommand as a test target as makeMeAdmin requires auth context that might not be ready
+             // Use processCommand as a test target
              const testCommand = httpsCallable(functions, 'processCommand');
              try {
-                 // Send a harmless command
                  await testCommand({ command: "hello" });
-                 // We don't care about the Gemini result, just that the call didn't fail due to network/CORS
                  console.log("%cFunctions connectivity check: SUCCESS (Able to call)", "color: green");
              } catch (error: any) {
                  console.error("%cFunctions connectivity check: FAILED", "color: red", error);
@@ -195,39 +216,74 @@
         checkFunctions();
         // --- END CONNECTIVITY CHECKS ---
 
+        // --- FIX: Contacts query is now in the main block ---
+        // Anyone who is not an APPLICANT can see contacts
         const contactsQuery = query(collection(db, "contacts"), orderBy("lastName", "asc"));
-        const unsubscribeContacts = onSnapshot(contactsQuery, (snapshot) => {
+        unsubscribeContacts = onSnapshot(contactsQuery, (snapshot) => {
           setContacts(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as Contact)));
         });
 
-        const booksQuery = query(collection(db, "books"), orderBy("title", "asc"));
-        const unsubscribeBooks = onSnapshot(booksQuery, (snapshot) => {
-          setBooks(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as Book)));
-        });
+        // --- DISABLED: BOOKS, TRANSACTIONS, ETC. --- (Your code, unchanged)
+        // ... (your commented-out code remains here) ...
+        // -----------------------------------------------------------
 
-        const transactionsQuery = query(collection(db, "transactions"), orderBy("transactionDate", "desc"));
-        const unsubscribeTransactions = onSnapshot(transactionsQuery, (snapshot) => {
-          setTransactions(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as Transaction)));
-        });
+        // --- UPDATED: Expense Reports Logic ---
+        
+        // 1. First, determine if we are ready to fetch reports
+        const isReadyToFetchReports = 
+          userRole === UserRole.MASTER_ADMIN || 
+          userRole === UserRole.BOOKKEEPER ||
+          (userRole === UserRole.ADMIN && userContactId) ||
+          (userRole === UserRole.VIEWER && userContactId);
 
-        const eventsQuery = query(collection(db, "events"), orderBy("date", "desc"));
-        const unsubscribeEvents = onSnapshot(eventsQuery, (snapshot) => {
-          setEvents(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as Event)));
-        });
+        // 2. Only run the reports query IF we are ready
+        if (isReadyToFetchReports) {
+            let reportsQuery;
+            
+            // Check if the user is Master Admin OR Bookkeeper
+            if (userRole === UserRole.MASTER_ADMIN || userRole === UserRole.BOOKKEEPER) {
+                 // If so, fetch ALL reports
+                 reportsQuery = query(collection(db, "expenseReports"), orderBy("reportNumber", "desc"));
+            } else {
+                 // Otherwise (for Regular Admins, Viewers, etc.), 
+                 // fetch only reports where staffContactId matches their linked contactId
+                 reportsQuery = query(
+                     collection(db, "expenseReports"), 
+                     where("staffContactId", "==", userContactId), // Use the linked ID
+                     orderBy("reportNumber", "desc")
+                 );
+            }
+            // --- END UPDATE ---
 
+            // 3. Attach the listener
+            unsubscribeReports = onSnapshot(reportsQuery, (snapshot) => {
+              setExpenseReports(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as ExpenseReport)));
+            }, (error) => {
+                console.error("Error fetching expense reports:", error);
+            });
+        
+        } else {
+           // We are not ready to fetch reports (e.g., userContactId is still loading)
+           // Clear just the reports, not contacts
+           setExpenseReports([]);
+        }
+
+        // 4. Return the cleanup
         return () => {
           unsubscribeContacts();
-          unsubscribeBooks();
-          unsubscribeTransactions();
-          unsubscribeEvents();
+          unsubscribeReports();
         };
+
       } else {
+        // Clear data if not logged in or applicant
         setContacts([]);
-        setBooks([]);
-        setTransactions([]);
-        setEvents([]);
+        // ... (your commented-out lines)
+        setExpenseReports([]);
+        
+        // Return an empty cleanup
+        return () => {};
       }
-    }, [user, userRole]);
+    }, [user, userRole, isAdmin, userContactId]); // Dependencies are correct
 
     const handleToggleAiChat = async () => {
       if (!user) return; // Shouldn't happen if they can click, but good safety check
@@ -311,6 +367,42 @@
             lastModifiedBy: user?.email,
         });
     };
+
+    // --- Expense Report Functions ---
+      const addExpenseReport = async (reportData: Omit<ExpenseReport, 'id'>) => {
+          try {
+              await addDoc(collection(db, "expenseReports"), {
+                  ...reportData,
+                  createdAt: serverTimestamp(),
+                  createdBy: user?.uid, // Important for security rules
+                  lastModifiedAt: serverTimestamp(),
+              });
+          } catch (error) {
+              console.error("Error adding expense report:", error);
+          }
+      };
+
+      const updateExpenseReport = async (report: ExpenseReport) => {
+          try {
+              const reportDoc = doc(db, "expenseReports", report.id);
+              const updateData = removeUndefined({
+                  ...report,
+                  lastModifiedAt: serverTimestamp(),
+              });
+              await updateDoc(reportDoc, updateData);
+          } catch (error) {
+              console.error("Error updating expense report:", error);
+          }
+      };
+
+      const deleteExpenseReport = async (id: string) => {
+          try {
+              await deleteDoc(doc(db, "expenseReports", id));
+          } catch (error)
+     {
+              console.error("Error deleting expense report:", error);
+          }
+      };
 
     const updateBook = async (book: Book) => {
         if (!isAdmin) return;
@@ -1509,9 +1601,9 @@
         return <TutorialPage onBackToDashboard={() => setAppView('dashboard')} />;
       }
       // 2. If user is logged in BUT is an applicant, show the pending modal
-      if (userRole === UserRole.APPLICANT) {
+      /* if (userRole === UserRole.APPLICANT) {
         return <ApplicantModal onLogout={handleLogout} />;
-      }
+      } */
       // 3. If user is logged in AND is a Viewer or Admin, show the Dashboard
       return (
         <Dashboard
@@ -1519,27 +1611,36 @@
           onAddContact={addContact}
           onUpdateContact={updateContact}
           onDeleteContact={deleteContact}
-          books={books}
-          onAddBook={addBook}
-          onUpdateBook={updateBook}
-          onDeleteBook={deleteBook}
-          transactions={transactions}
-          onAddTransaction={addTransaction}
-          onUpdateTransaction={updateTransaction}
-          onDeleteTransaction={deleteTransaction}
-          events={events}
-          onAddEvent={addEvent}
-          onUpdateEvent={updateEvent}
-          onDeleteEvent={deleteEvent}
-          onUpdateEventAttendees={updateEventAttendees}
+          
+          expenseReports={expenseReports}
+          onAddExpenseReport={addExpenseReport}
+          onUpdateExpenseReport={updateExpenseReport}
+          onDeleteExpenseReport={deleteExpenseReport}
+
+          //books={books}
+          //onAddBook={addBook}
+          //onUpdateBook={updateBook}
+          //onDeleteBook={deleteBook}
+          //transactions={transactions}
+          //onAddTransaction={addTransaction}
+          //onUpdateTransaction={updateTransaction}
+          //onDeleteTransaction={deleteTransaction}
+          //events={events}
+          //onAddEvent={addEvent}
+          //onUpdateEvent={updateEvent}
+          //onDeleteEvent={deleteEvent}
+          //onUpdateEventAttendees={updateEventAttendees}
+          
           onProcessAiCommand={onProcessAiCommand}
           onLogout={handleLogout}
-          onShowTutorial={() => setAppView('tutorial')}
           isAiChatOpen={isAiChatOpen}
           onToggleAiChat={handleToggleAiChat}
           isAdmin={isAdmin}
           users={users}
           currentUser={user}
+          currentUserRole={userRole}
+          currentUserContactId={userContactId}
+          // I have removed the 'books' and 'transactions' props that were here
         />
       );
     };

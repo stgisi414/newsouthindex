@@ -7,6 +7,14 @@ interface CategoryEditPopupProps {
     onClose: () => void;
 }
 
+const SORTED_CATEGORIES = [
+    Category.CUSTOMER,
+    Category.MEDIA,
+    Category.STAFF,
+    Category.VENDOR,
+    Category.OTHER
+];
+
 const CategoryEditPopup: React.FC<CategoryEditPopupProps> = ({ contact, onSave, onClose }) => {
     // Ensure contact.category is always an array for the state
     const [selectedCategories, setSelectedCategories] = useState<Category[]>(
@@ -39,7 +47,7 @@ const CategoryEditPopup: React.FC<CategoryEditPopupProps> = ({ contact, onSave, 
                 </h3>
                 
                 <div className="space-y-2">
-                    {Object.values(Category).map(cat => (
+                    {SORTED_CATEGORIES.map(cat => (
                         <div key={cat} className="flex items-center">
                             <input
                                 id={`popup-category-${cat}`}

@@ -13,11 +13,15 @@ interface ContactTableProps {
 }
 
 type SortKey = keyof Contact;
-type DisplayableContactKey = Exclude<SortKey, 'id' | 'lastModifiedDate' | 'createdDate' | 'createdBy'>;
+// FIX: Remove 'id' from the Exclude list so it can be displayed
+type DisplayableContactKey = Exclude<SortKey, 'lastModifiedDate' | 'createdDate' | 'createdBy'>;
 
+// FIX: Add 'ID' as the first item and 'Suffix' after lastName
 const ALL_CONTACT_FIELDS: { key: DisplayableContactKey; label: string; hiddenInMobile?: boolean }[] = [
+    { key: 'id', label: 'ID' },
     { key: 'firstName', label: 'First Name' },
     { key: 'lastName', label: 'Last Name' },
+    { key: 'suffix', label: 'Suffix', hiddenInMobile: true },
     { key: 'category', label: 'Category' },
     { key: 'email', label: 'Email' },
     { key: 'phone', label: 'Phone', hiddenInMobile: true },
@@ -176,14 +180,28 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                     {ALL_CONTACT_FIELDS.map(({ key, hiddenInMobile }) => {
                                         const isCategory = key === 'category';
                                         const isNewsletter = key === 'sendTNSBNewsletter';
-                                        const isEditable = isAdmin && !isCategory;
+                                        const isId = key === 'id'; // ADDED: Check for ID field
+                                        
+                                        // FIX: Make ID field non-editable
+                                        const isEditable = isAdmin && !isCategory && !isId;
                                         
                                         // <-- FIX: Handle category array display
                                         let displayValue: string | React.ReactNode = '-';
                                         if (isCategory) {
                                             const categories = Array.isArray(contact.category) ? contact.category : [];
+                                            let catString = categories.join(', ');
+
+                                            // --- ADD: Logic to display otherCategory text ---
+                                            if (categories.includes(Category.OTHER) && contact.otherCategory) {
+                                                // Replace "Other" with "Other (specified text)"
+                                                catString = categories.map(c => 
+                                                    c === Category.OTHER ? `${Category.OTHER} (${contact.otherCategory})` : c
+                                                ).join(', ');
+                                            }
+                                            // --- END ADD ---
+
                                             if (categories.length > 0) {
-                                                displayValue = categories.join(', ');
+                                                displayValue = catString;
                                             }
                                        } else if (isNewsletter) {
                                             const subscribed = !!contact.sendTNSBNewsletter;

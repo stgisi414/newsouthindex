@@ -2,10 +2,10 @@ export enum Category {
     VENDOR = 'Vendor',
     CUSTOMER = 'Customer',
     MEDIA = 'Media',
-    PERSONAL = 'Personal',
+    STAFF = 'Staff', // Added this
+    // PERSONAL = 'Personal', // Removed this
     OTHER = 'Other'
 }
-
 export interface FirebaseTimestamp {
   seconds: number;
   nanoseconds: number;
@@ -30,6 +30,7 @@ export interface Contact {
   state?: string;
   zip?: string;
   notes?: string;
+  otherCategory?: string;
   sendTNSBNewsletter?: boolean;
   createdAt?: FirebaseTimestamp | Date | any;
   createdBy?: string;
@@ -40,16 +41,36 @@ export interface Contact {
 export enum UserRole {
     APPLICANT = 'applicant',
     VIEWER = 'viewer',
+    STAFF = 'staff', // <-- ADDED
     ADMIN = 'admin',
+    BOOKKEEPER = 'bookkeeper', // <-- ADDED
+    MASTER_ADMIN = 'master-admin', // <-- ADDED
 }
 
 export interface AppUser {
     id: string;
     email?: string;
     role: UserRole;
-    isAdmin: boolean;
-    isMasterAdmin?: boolean;
+    isAdmin: boolean; // This is now (role === UserRole.ADMIN || role === UserRole.BOOKKEEPER || role === UserRole.MASTER_ADMIN)
+    isMasterAdmin?: boolean; // (role === UserRole.MASTER_ADMIN)
     showAiChat?: boolean;
+    contactId?: string; // <-- ADDED: Links user to a Contact document
+}
+
+export interface ExpenseReport {
+    id: string;
+    staffContactId: string; 
+    staffName: string; 
+    expenseDate: any; // Firestore Timestamp
+    totalAmount: number;
+    notes?: string;
+    reportNumber?: number;
+    
+    // Metadata
+    createdAt?: FirebaseTimestamp | Date | any;
+    createdBy?: string;
+    lastModifiedAt?: FirebaseTimestamp | Date | any;
+    lastModifiedBy?: string;
 }
 
 export interface Book {

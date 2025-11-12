@@ -1,29 +1,28 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { AppUser, Contact, Book, Transaction, Event, Category } from '../types';
+// FIX: Make sure UserRole is imported
+import { AppUser, Contact, ExpenseReport, Category, UserRole } from '../types.ts'; 
 import { User } from 'firebase/auth';
 import { httpsCallable } from "firebase/functions";
-import { functions, auth, db } from "../src/firebaseConfig";
-import ContactTable from "./ContactTable";
-import ContactForm from "./ContactForm";
-import BookTable from "./BookTable";
-import BookForm from "./BookForm";
-import TransactionTable from "./TransactionTable";
-import TransactionForm from "./TransactionForm";
-import EventTable from "./EventTable";
-import EventForm from "./EventForm";
-import AIChat from "./AIChat";
-import LogoutIcon from "./icons/LogoutIcon";
-import PlusIcon from "./icons/PlusIcon";
-import UserCircleIcon from "./icons/UserCircleIcon";
-import BeakerIcon from "./icons/BeakerIcon";
-import UserPlusIcon from "./icons/UserPlusIcon";
-import BookOpenIcon from "./icons/BookOpenIcon";
-import AdminPanel from "./AdminPanel";
-import Reports from "./Reports";
-import AIAssistantTestSuite from "./AIAssistantTestSuite";
+import { functions, auth, db } from "../src/firebaseConfig.ts";
+import ContactTable from "./ContactTable.tsx";
+import ContactForm from "./ContactForm.tsx";
+// Removed Book/Transaction/Event components
+import ExpenseReportForm from "./ExpenseReportForm.tsx";
+import ExpenseReportTable from "./ExpenseReportTable.tsx";
+import AIChat from "./AIChat.tsx";
+import LogoutIcon from "./icons/LogoutIcon.tsx";
+import PlusIcon from "./icons/PlusIcon.tsx";
+import UserCircleIcon from "./icons/UserCircleIcon.tsx";
+import BeakerIcon from "./icons/BeakerIcon.tsx";
+// import UserPlusIcon from "./icons/UserPlusIcon"; // Not used
+import BookOpenIcon from "./icons/BookOpenIcon.tsx"; // Kept for Tutorial button
+import AdminPanel from "./AdminPanel.tsx";
+// import Reports from "./Reports"; // Removed old reports
+import AIAssistantTestSuite from "./AIAssistantTestSuite.tsx";
 import { collection, query, where, getDocs, limit } from 'firebase/firestore';
-import FilterIcon from './icons/FilterIcon';
-import AdvancedFilter from './AdvancedFilter';
+import FilterIcon from './icons/FilterIcon.tsx';
+import ClipboardIcon from './icons/ClipboardIcon.tsx'; 
+import AdvancedFilter, { FilterFieldConfig } from './AdvancedFilter.tsx';
 
 // A simple XIcon for the clear button
 const XIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
@@ -32,6 +31,8 @@ const XIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     </svg>
 );
 
+// --- Filter Configs ---
+// Kept contacts
 const contactFilterConfig: FilterFieldConfig[] = [
   { field: 'firstName', label: 'First Name', type: 'text' },
   { field: 'lastName', label: 'Last Name', type: 'text' },
@@ -41,88 +42,89 @@ const contactFilterConfig: FilterFieldConfig[] = [
   { field: 'zip', label: 'Zip Code', type: 'text' },
   { field: 'category', label: 'Category', type: 'select', options: Object.values(Category) },
   { field: 'sendTNSBNewsletter', label: 'Newsletter', type: 'boolean', }
-  // Add more fields as needed
 ];
 
-const bookFilterConfig: FilterFieldConfig[] = [
-  { field: 'title', label: 'Title', type: 'text' },
-  { field: 'author', label: 'Author', type: 'text' },
-  { field: 'isbn', label: 'ISBN', type: 'text' },
-  { field: 'genre', label: 'Genre', type: 'text' }, // Could be 'select' if you have predefined genres
-  { field: 'publisher', label: 'Publisher', type: 'text' },
-  { field: 'price', label: 'Price Range', type: 'numberRange' },
-  { field: 'stock', label: 'Stock Range', type: 'numberRange' },
-  { field: 'publicationYear', label: 'Pub. Year Range', type: 'numberRange'}, // Assuming year is just a number
-];
+// Removed book, event, transaction configs
 
-const eventFilterConfig: FilterFieldConfig[] = [
-    { field: 'name', label: 'Event Name', type: 'text'},
-    { field: 'author', label: 'Author', type: 'text'},
-    { field: 'location', label: 'Location', type: 'text'},
-    { field: 'date', label: 'Date Range', type: 'dateRange'},
-];
-
-const transactionFilterConfig: FilterFieldConfig[] = [
-    { field: 'contactName', label: 'Contact Name', type: 'text'},
-    { field: 'totalPrice', label: 'Total Price Range', type: 'numberRange'},
-    { field: 'transactionDate', label: 'Date Range', type: 'dateRange'},
-    // Maybe add filter by book title within transaction? More complex.
-];
-
+// --- Props Interface ---
 interface DashboardProps {
     contacts: Contact[];
     onAddContact: (contactData: Omit<Contact, 'id'>) => Promise<{ success: boolean; message?: string }>;
     onUpdateContact: (contact: Contact) => void;
-    onDeleteContact: (id: string) => void;
-    books: Book[];
-    onAddBook: (bookData: Omit<Book, 'id'>) => void;
-    onUpdateBook: (book: Book) => void;
-    onDeleteBook: (id: string) => void;
-    transactions: Transaction[];
-    onAddTransaction: (data: { contactId: string; booksWithQuantity: { book: Book, quantity: number }[] }) => void;
-    onUpdateTransaction: (transaction: Transaction, updatedData: Partial<Transaction>) => void; // NEW
-    onDeleteTransaction: (id: string) => void;
-    events: Event[];
-    onAddEvent: (eventData: Omit<Event, 'id'>) => void;
-    onUpdateEvent: (event: Event) => void;
-    onDeleteEvent: (id: string) => void;
-    onUpdateEventAttendees: (eventId: string, contactId: string, isAttending: boolean) => void;
+    onDeleteContact: (id: string) => Promise<{ success: boolean; message?: string }>; 
+
+    // Added Expense Report Props
+    expenseReports: ExpenseReport[];
+    onAddExpenseReport: (report: Omit<ExpenseReport, 'id'>) => void;
+    onUpdateExpenseReport: (report: ExpenseReport) => void;
+    onDeleteExpenseReport: (id: string) => void;
+    
     onProcessAiCommand: (intent: string, data: any) => Promise<{ success: boolean; payload?: any; message?: string; targetView?: View }>;
     onLogout: () => void;
-    onShowTutorial: () => void;
+    onShowTutorial: () => void; 
     isAiChatOpen: boolean;
     onToggleAiChat: () => void;
     isAdmin: boolean;
     users: AppUser[];
     currentUser: User;
+
+    // --- !! ADD THESE TWO PROPS !! ---
+    // These must be passed down from App.tsx
+    currentUserRole: UserRole | null;
+    currentUserContactId: string | null;
 }
 
 const makeMeAdmin = httpsCallable(functions, 'makeMeAdmin');
 
-type View = 'contacts' | 'books' | 'transactions' | 'reports' | 'events';
+// Updated View type
+type View = 'contacts' | 'expense-reports' | 'admin' | 'reports'; // 'reports' is unused but kept for type safety
 
-const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateContact, onDeleteContact, books, onAddBook, onUpdateBook, onDeleteBook, transactions, onAddTransaction, onUpdateTransaction, onDeleteTransaction, events, onAddEvent, onUpdateEvent, onDeleteEvent, onUpdateEventAttendees, onProcessAiCommand, onLogout, onShowTutorial, isAiChatOpen, onToggleAiChat, isAdmin, users, currentUser }) => {
+const Dashboard: React.FC<DashboardProps> = ({ 
+    contacts, 
+    onAddContact, 
+    onUpdateContact, 
+    onDeleteContact, 
+    expenseReports, 
+    onAddExpenseReport, 
+    onUpdateExpenseReport, 
+    onDeleteExpenseReport, 
+    onProcessAiCommand, 
+    onLogout, 
+    onShowTutorial, 
+    isAiChatOpen, 
+    onToggleAiChat, 
+    isAdmin, 
+    users, 
+    currentUser,
+    currentUserRole,
+    currentUserContactId
+}) => {
+    
+    // --- State ---
     const [currentView, setCurrentView] = useState<View>('contacts');
     const [searchQuery, setSearchQuery] = useState('');
-    const [isFormOpen, setIsFormOpen] = useState(false);
+    const [isFormOpen, setIsFormOpen] = useState(false); // For Contacts
     const [editingContact, setEditingContact] = useState<Contact | null>(null);
-    const [editingBook, setEditingBook] = useState<Book | null>(null);
-    const [isBookFormOpen, setIsBookFormOpen] = useState(false);
-    const [isTransactionFormOpen, setIsTransactionFormOpen] = useState(false);
-    const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null); // NEW STATE
-    const [isEventFormOpen, setIsEventFormOpen] = useState(false);
-    const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+    
+    // Added Expense Report State
+    const [isExpenseReportFormOpen, setIsExpenseReportFormOpen] = useState(false);
+    const [expenseReportToEdit, setExpenseReportToEdit] = useState<ExpenseReport | null>(null);
+
+    const [printMode, setPrintMode] = useState(false);
+
+    // Removed states for book, transaction, event forms
+    
     const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
     const [adminStatus, setAdminStatus] = useState<string | null>(null);
-    const hasAdmins = useMemo(() => users.some(user => user.isAdmin), [users]);
     const [aiSearchResults, setAiSearchResults] = useState<any[] | null>(null);
     const [isTestSuiteOpen, setIsTestSuiteOpen] = useState(false);
     const [shouldShowBecomeAdmin, setShouldShowBecomeAdmin] = useState(false);
+    
+    // State for filtered contacts
     const [filteredContacts, setFilteredContacts] = useState(contacts);
-    const [filteredBooks, setFilteredBooks] = useState(books);
-    const [filteredEvents, setFilteredEvents] = useState(events);
-    const [filteredTransactions, setFilteredTransactions] = useState(transactions);
+    // Removed filtered state for books, events, transactions
 
+    // --- AI & View Handlers ---
     const handleAiSearch = (results: any[], view: View) => {
       setAiSearchResults(results);
       setCurrentView(view);
@@ -145,116 +147,74 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
         }
     };
 
-    /* const filteredContacts = useMemo(() => {
-        if (aiSearchResults && currentView === 'contacts') {
-            return aiSearchResults as Contact[];
-        }
+    // --- Memos ---
+    // This memo now handles filtering for the manual search bar
+    const manuallyFilteredContacts = useMemo(() => {
+        // If contacts array isn't ready, return empty
+        if (!contacts) return [];
         return contacts.filter(contact =>
             `${contact.firstName} ${contact.lastName} ${contact.email} ${contact.category}`
             .toLowerCase()
             .includes(searchQuery.toLowerCase())
         );
-    }, [contacts, searchQuery, aiSearchResults, currentView]);
-
-    const filteredBooks = useMemo(() => {
-        if (aiSearchResults && currentView === 'books') {
-            return aiSearchResults as Book[];
+    }, [contacts, searchQuery]);
+    
+    // This determines what is *actually* shown in the table
+    const finalContactsList = useMemo(() => {
+        if (aiSearchResults && currentView === 'contacts') {
+            return aiSearchResults as Contact[];
         }
-        return books.filter(book =>
-            `${book.title} ${book.author} ${book.isbn}`
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase())
+        // If advanced filter is active (i.e. filteredContacts is different from original contacts)
+        // This check might be brittle if contacts load after filteredContacts is set.
+        // A better check might be needed if advanced filter state is managed inside that component.
+        // For now, assuming filteredContacts is the source of truth from AdvancedFilter.
+        if (filteredContacts) { 
+            return filteredContacts;
+        }
+        return manuallyFilteredContacts;
+    }, [aiSearchResults, currentView, contacts, filteredContacts, manuallyFilteredContacts]);
+
+    // --- !! ADD THIS 'useMemo' HOOK !! ---
+    // This is the fix for the "Unknown User" bug.
+    const staffContacts = useMemo(() => {
+        // Get all contact IDs from users who have a staff-level role
+        const staffUserContactIds = new Set(
+            users
+                .filter(user => 
+                    user.contactId && (
+                        user.role === UserRole.STAFF ||
+                        user.role === UserRole.ADMIN ||
+                        user.role === UserRole.BOOKKEEPER ||
+                        user.role === UserRole.MASTER_ADMIN
+                    )
+                )
+                .map(user => user.contactId)
         );
-    }, [books, searchQuery, aiSearchResults, currentView]);
+        
+        // Filter the main contacts list to get the full contact objects
+        return contacts.filter(contact => staffUserContactIds.has(contact.id));
 
-    const filteredTransactions = useMemo(() => {
-        if (aiSearchResults && currentView === 'transactions') {
-            return aiSearchResults as Transaction[];
-        }
-        return transactions.filter(transaction =>
-            transaction.contactName.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-    }, [transactions, searchQuery, aiSearchResults, currentView]);
+    }, [users, contacts]); // This recalculates only when users or contacts change
 
-    const filteredEvents = useMemo(() => {
-        if (aiSearchResults && currentView === 'events') {
-            return aiSearchResults as Event[];
-        }
-        return events;
-    }, [events, aiSearchResults, currentView]); */
+    // Removed memos for books, transactions, events
 
-    // Wrapper function to process the AI command and handle the view switch based on the result
+    // --- AI Command Processor ---
     const processAndHandleAiCommand = async (intent: string, data: any) => {
-        // 1. Process the command via the App.tsx function
         const result = await onProcessAiCommand(intent, data); 
-
-        // 2. Handle the view switch based on the result
         if (result.targetView) {
-            
-            // NEW, CORRECT LOGIC:
-            // If the result has a payload that is an array (like a list of contacts),
-            // then set it as the AI search result.
+            const targetView = result.targetView as View;
             if (result.payload && Array.isArray(result.payload)) {
                 setAiSearchResults(result.payload);
             } else {
-                // Otherwise (e.g., for "Add Contact" or "Count"), clear any previous AI search.
                 setAiSearchResults(null);
             }
-            
-            // Always clear the manual search query and switch to the target view.
             setSearchQuery('');
-            setCurrentView(result.targetView);
+            setCurrentView(targetView);
         }
         return result;
     };
 
-    const handleNewTransaction = () => {
-        setEditingTransaction(null);
-        setIsTransactionFormOpen(true);
-    };
-
-    const handleEditTransaction = (transaction: Transaction) => {
-        setEditingTransaction(transaction);
-        setIsTransactionFormOpen(true);
-    };
-    
-    // Updated handler to accept the transaction to edit/null
-    const handleSaveTransaction = (data: { transactionToEdit?: Transaction | null; contactId: string; booksWithQuantity: { book: Book, quantity: number }[] }) => {
-        const { transactionToEdit, ...rest } = data;
-        if (transactionToEdit) {
-            // Note: Since TransactionForm handles the diff logic for updating stock correctly,
-            // we will create a new transaction on edit in Firestore, and let App.tsx handle
-            // the compensation logic for stock/original transaction deletion.
-            onDeleteTransaction(transactionToEdit.id); // Delete the old one (which refunds stock)
-            onAddTransaction(rest); // Add the new one (which deducts new stock)
-            // This simplifies the UI logic but requires the atomic transaction logic in App.tsx
-        } else {
-            onAddTransaction(rest);
-        }
-        setIsTransactionFormOpen(false);
-        setEditingTransaction(null); // Clear editing state
-    };
-
-
-    const handleNewBook = () => {
-        setEditingBook(null);
-        setIsBookFormOpen(true);
-    };
-
-    const handleEditBook = (book: Book) => {
-        setEditingBook(book);
-        setIsBookFormOpen(true);
-    };
-
-    const handleSaveBook = (bookData: Omit<Book, 'id'> | Book) => {
-        if ('id' in bookData) {
-            onUpdateBook(bookData);
-        } else {
-            onAddBook(bookData);
-        }
-        setIsBookFormOpen(false);
-    };
-    
+    // --- Contact Handlers ---
     const handleNewContact = () => {
         setEditingContact(null);
         setIsFormOpen(true);
@@ -266,6 +226,7 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
     };
 
     const handleDeleteContact = (id: string) => {
+        // Use custom modal later
         if (window.confirm('Are you sure you want to delete this contact?')) {
             onDeleteContact(id);
         }
@@ -280,35 +241,52 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
         setIsFormOpen(false);
     }
 
-    const handleNewEvent = () => {
-        setEditingEvent(null);
-        setIsEventFormOpen(true);
+    // --- Expense Report Handlers (Modified) ---
+    const handleNewExpenseReport = () => {
+        setExpenseReportToEdit(null);
+        setIsExpenseReportFormOpen(true);
+        setPrintMode(false); // --- ADD THIS ---
     };
 
-    const handleEditEvent = (event: Event) => {
-        setEditingEvent(event);
-        setIsEventFormOpen(true);
+    // --- !! MODIFY THIS HANDLER !! ---
+    const handleEditExpenseReport = (report: ExpenseReport, options: { isPrinting: boolean } = { isPrinting: false }) => {
+        setExpenseReportToEdit(report);
+        setIsExpenseReportFormOpen(true);
+        setPrintMode(options.isPrinting); // --- MODIFY THIS ---
     };
 
-    const handleSaveEvent = (eventData: Omit<Event, 'id'> | Event) => {
-        if ('id' in eventData) {
-            onUpdateEvent(eventData);
+    const handleSaveExpenseReport = (reportData: Omit<ExpenseReport, 'id'> | ExpenseReport) => {
+        if ('id' in reportData) {
+            onUpdateExpenseReport(reportData as ExpenseReport);
         } else {
-            onAddEvent(eventData);
+            onAddExpenseReport(reportData);
         }
-        setIsEventFormOpen(false);
+        setIsExpenseReportFormOpen(false);
+        setPrintMode(false); // --- ADD THIS ---
     };
 
+    const handleDeleteExpenseReport = (id: string) => {
+        if (window.confirm("Are you sure you want to delete this expense report?")) {
+            onDeleteExpenseReport(id);
+        }
+    };
+
+    // Calculate next report number
+    const nextReportNumber = useMemo(() => {
+        if (!expenseReports || expenseReports.length === 0) return 1001;
+        const max = Math.max(...expenseReports.map(r => r.reportNumber || 0));
+        return max + 1;
+    }, [expenseReports]);
+
+    // Removed all handlers for Book, Transaction, Event
+
+    // --- Admin Handlers ---
     useEffect(() => {
         const checkAdminExists = async () => {
-            // This query is very efficient and checks if at least one admin document exists in the entire collection.
             const q = query(collection(db, "users"), where("role", "==", "admin"), limit(1));
             const querySnapshot = await getDocs(q);
-            // If the query result is empty, no admins exist, so we should show the button.
             setShouldShowBecomeAdmin(querySnapshot.empty);
         };
-
-        // Only run this check if the current user is NOT an admin.
         if (!isAdmin) {
             checkAdminExists();
         }
@@ -317,272 +295,274 @@ const Dashboard: React.FC<DashboardProps> = ({ contacts, onAddContact, onUpdateC
     const handleMakeAdmin = async () => {
         setAdminStatus("Attempting to sync admin permissions...");
         try {
-          // Use httpsCallable again
-          const result: any = await makeMeAdmin();
-          setAdminStatus("Success! Forcing a permissions refresh...");
-
-          if (auth.currentUser) {
-            await auth.currentUser.getIdToken(true); // Force refresh token
-          }
-          window.location.reload(); // Reload page
-
+            await makeMeAdmin();
+            setAdminStatus("Success! Forcing a permissions refresh...");
+            if (auth.currentUser) {
+                await auth.currentUser.getIdToken(true); // Force refresh token
+            }
+            window.location.reload(); // Reload page
         } catch (error: any) {
-          console.error("Make admin error (callable):", error);
-          setAdminStatus(`Error: ${error.message}`);
+            console.error("Make admin error (callable):", error);
+            setAdminStatus(`Error: ${error.message}`);
         }
     };
 
-      // Update filtered state when the original data changes
-      useEffect(() => setFilteredContacts(contacts), [contacts]);
-      useEffect(() => setFilteredBooks(books), [books]);
-      useEffect(() => setFilteredEvents(events), [events]);
-      useEffect(() => setFilteredTransactions(transactions), [transactions]);
+     // Update filtered state when the original data changes
+     useEffect(() => setFilteredContacts(contacts), [contacts]);
+     // Removed useEffects for books, events, transactions
 
+     // Determine which filter config and data to use
+     let currentFilterConfig: FilterFieldConfig[] = [];
+     let currentData: any[] = [];
+     let currentSetFilteredData: React.Dispatch<React.SetStateAction<any[]>> = () => {};
 
-      // Determine which filter config and data to use
-      let currentFilterConfig: FilterFieldConfig[] = [];
-      let currentData: any[] = [];
-      let currentSetFilteredData: React.Dispatch<React.SetStateAction<any[]>> = () => {};
-
-      switch (currentView) {
-        case 'contacts':
-          currentFilterConfig = contactFilterConfig;
-          currentData = contacts; // Pass original data to filter component
-          currentSetFilteredData = setFilteredContacts; // Callback updates filtered contacts
-          break;
-        case 'books':
-          currentFilterConfig = bookFilterConfig;
-          currentData = books;
-          currentSetFilteredData = setFilteredBooks;
-          break;
-        case 'events':
-            currentFilterConfig = eventFilterConfig;
-            currentData = events;
-            currentSetFilteredData = setFilteredEvents;
-            break;
-        case 'transactions':
-            currentFilterConfig = transactionFilterConfig;
-            currentData = transactions;
-            currentSetFilteredData = setFilteredTransactions;
-            break;
-        // Add cases for events, transactions
-      }
+     // This switch only selects the config for the AdvancedFilter component
+     switch (currentView) {
+       case 'contacts':
+         currentFilterConfig = contactFilterConfig;
+         currentData = contacts; // Pass original data to filter component
+         currentSetFilteredData = setFilteredContacts; // Callback updates filtered contacts
+         break;
+       case 'expense-reports':
+         // No filter config for expense reports yet
+         break;
+       // Removed cases for books, events, transactions
+     }
 
     return (
         <div className="min-h-screen bg-gray-50 text-gray-800">
-          <header className="bg-white shadow-sm">
-            <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <img src="/newsouthbookslogo.jpg" alt="NewSouth Books Logo" className="h-12 w-auto" />
-                  <h1 className="text-3xl font-bold leading-tight text-gray-900">NewSouth Index</h1>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={onShowTutorial}
-                    className="flex items-center px-3 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors text-sm"
-                  >
-                    <BookOpenIcon className="h-5 w-5 sm:mr-2" />
-                    <span className="hidden sm:inline">Help & Tutorial</span>
-                  </button>
-                  <button
-                    onClick={onLogout}
-                    className="flex items-center px-3 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors text-sm"
-                  >
-                    <LogoutIcon className="h-5 w-5 sm:mr-2" />
-                    <span className="hidden sm:inline">Logout</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </header>
-          <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-0">
-            <div className="mb-6 border-b border-gray-200">
-              <nav className="-mb-px flex space-x-4 overflow-x-auto scrollbar-hidden" aria-label="Tabs">
-                <button onClick={() => handleViewChange('contacts')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'contacts' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Contacts</button>
-                <button onClick={() => handleViewChange('books')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'books' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Book Inventory</button>
-                <button onClick={() => handleViewChange('transactions')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'transactions' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Transactions</button>
-                <button onClick={() => handleViewChange('events')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'events' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Events</button>
-                <button onClick={() => handleViewChange('reports')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'reports' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Reports</button>
-              </nav>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              
-              {/* --- FIX: Main content column is now dynamic --- */}
-              <div className={isAiChatOpen ? "lg:col-span-2 space-y-6" : "lg:col-span-3 space-y-6"}>
-                {adminStatus && <p className="text-sm text-center text-gray-600 p-2 bg-gray-100 rounded-md">{adminStatus}</p>}
-
-                {isAdmin && isAdminPanelOpen && <AdminPanel users={users} currentUser={currentUser} />}
-
-                {import.meta.env.DEV && isTestSuiteOpen && <AIAssistantTestSuite onProcessAiCommand={onProcessAiCommand} />}
-
-                <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                  <div className="flex-1">
-                    {isAdmin ? (
-                      <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
-                        <button
-                          onClick={() => setIsAdminPanelOpen(prev => !prev)}
-                          className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition-colors"
-                        >
-                          <UserCircleIcon className="h-5 w-5 sm:mr-2" />
-                          <span className="hidden sm:inline">{isAdminPanelOpen ? 'Hide Admin' : 'Show Admin'}</span>
-                        </button>
-
-                        {/* --- FIX: Moved AI Toggle Button Here --- */}
-                        <button
-                          onClick={onToggleAiChat}
-                          className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition-colors"
-                        >
-                          {/* You could add an icon here if one was imported */}
-                          <span className="hidden sm:inline">{isAiChatOpen ? 'Hide AI' : 'Show AI'}</span>
-                          <span className="sm:hidden">{isAiChatOpen ? 'Hide' : 'Show'} AI</span>
-                        </button>
-
-                        {import.meta.env.DEV && (
-                          <button
-                            onClick={() => setIsTestSuiteOpen(prev => !prev)}
-                            className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-yellow-400 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-yellow-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-300 transition-colors"
-                          >
-                            <BeakerIcon className="h-5 w-5 sm:mr-2 md:hidden" />
-                            <span className="hidden sm:inline">{isTestSuiteOpen ? 'Hide Test Suite' : 'Show Test Suite'}</span>
-                          </button>
-                        )}
-
-                        {currentView === 'contacts' && (
-                          <button onClick={handleNewContact} className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700">
-                            <PlusIcon className="h-5 w-5 sm:mr-2 md:hidden" />
-                            <span className="hidden sm:inline">New Contact</span>
-                          </button>
-                        )}
-                        {currentView === 'books' && (
-                          <button onClick={handleNewBook} className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700">
-                            <PlusIcon className="h-5 w-5 sm:mr-2 md:hidden" />
-                            <span className="hidden sm:inline">New Book</span>
-                          </button>
-                        )}
-                        {currentView === 'transactions' && (
-                          <button onClick={handleNewTransaction} className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700">
-                            <PlusIcon className="h-5 w-5 sm:mr-2 md:hidden" />
-                            <span className="hidden sm:inline">New Transaction</span>
-                          </button>
-                        )}
-                        {currentView === 'events' && (
-                          <button onClick={handleNewEvent} className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700">
-                            <PlusIcon className="h-5 w-5 sm:mr-2 md:hidden" />
-                            <span className="hidden sm:inline">New Event</span>
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      shouldShowBecomeAdmin && (
+            {/* Header */}
+            <header className="bg-white shadow-sm">
+                <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+                    <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                          <p className="text-gray-600">No admin account detected.</p>
-                          <button
-                            onClick={handleMakeAdmin}
-                            className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 transition-colors"
-                          >
-                            Become First Admin
-                          </button>
+                            <img src="/newsouthbookslogo.jpg" alt="NewSouth Books Logo" className="h-12 w-auto" />
+                            <h1 className="text-3xl font-bold leading-tight text-gray-900">NewSouth Index</h1>
                         </div>
-                      )
-                    )}
-                  </div>
-                  {/* --- REMOVED old simple search input --- */}
-                  {/* {currentView !== 'reports' && (
-                    <input
-                      type="text"
-                      placeholder={`Search ${currentView}...`}
-                      value={searchQuery}
-                      onChange={handleSearchChange}
-                      className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                  )} */}
-                </div>
-
-                {/* --- NEW: Render Advanced Filter --- */}
-                {currentView !== 'reports' && currentFilterConfig.length > 0 && (
-                  <AdvancedFilter
-                    data={currentData}
-                    filterConfig={currentFilterConfig}
-                    onFilterChange={currentSetFilteredData}
-                    initialOpen={false}
-                  />
-                )}
-                {/* --- END NEW --- */}
-
-
-                {aiSearchResults && currentView !== 'reports' && (
-                  <div className="flex items-center justify-between p-3 my-4 bg-blue-100 border border-blue-300 text-blue-800 rounded-lg shadow-sm">
-                    <div className="flex items-center">
-                      <FilterIcon className="h-5 w-5 mr-2" />
-                      <span className="font-medium text-sm">
-                        {`Showing ${aiSearchResults.length} result(s) from AI search.`}
-                      </span>
+                        <div className="flex items-center space-x-2">
+                            <button
+                                onClick={onShowTutorial}
+                                className="flex items-center px-3 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors text-sm"
+                            >
+                                <BookOpenIcon className="h-5 w-5 sm:mr-2" />
+                                <span className="hidden sm:inline">Help & Tutorial</span>
+                            </button>
+                            <button
+                                onClick={onLogout}
+                                className="flex items-center px-3 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors text-sm"
+                            >
+                                <LogoutIcon className="h-5 w-5 sm:mr-2" />
+                                <span className="hidden sm:inline">Logout</span>
+                            </button>
+                        </div>
                     </div>
-                    <button
-                      onClick={handleClearAiFilter}
-                      className="flex items-center px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded-md shadow hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-                    >
-                      <XIcon className="h-4 w-4 mr-1" />
-                      Clear Filter
-                    </button>
-                  </div>
-                )}
-
-                {/* --- UPDATED: Render Tables using FILTERED data --- */}
-                {currentView === 'contacts' && <ContactTable contacts={aiSearchResults ? aiSearchResults as Contact[] : filteredContacts} onEdit={handleEditContact} onDelete={handleDeleteContact} isAdmin={isAdmin} onUpdateContact={onUpdateContact} />}
-                {currentView === 'books' && <BookTable books={aiSearchResults ? aiSearchResults as Book[] : filteredBooks} onEdit={handleEditBook} onDelete={onDeleteBook} isAdmin={isAdmin} onUpdateBook={onUpdateBook} />}
-                {currentView === 'transactions' && <TransactionTable transactions={aiSearchResults ? aiSearchResults as Transaction[] : filteredTransactions} onEdit={handleEditTransaction} onDelete={onDeleteTransaction} isAdmin={isAdmin} onUpdateTransaction={onUpdateTransaction} />}
-                {currentView === 'events' && <EventTable events={aiSearchResults ? aiSearchResults as Event[] : filteredEvents} contacts={contacts} onEdit={handleEditEvent} onDelete={onDeleteEvent} onUpdateAttendees={onUpdateEventAttendees} isAdmin={isAdmin} onUpdateEvent={onUpdateEvent} />}
-                {currentView === 'reports' && <Reports contacts={contacts} transactions={transactions} books={books} />}
-                {/* --- END UPDATED --- */}
-              </div>
-
-              {/* --- FIX: This entire column is now conditional --- */}
-              {isAiChatOpen && (
-                <div className="lg:col-span-1 space-y-4">
-                  {/* --- FIX: The toggle button was removed from here --- */}
-                  <div className="h-[calc(85vh-4rem)]"> {/* Adjust height as needed */}
-                    <AIChat
-                      onCommandProcessed={processAndHandleAiCommand}
-                      isAdmin={isAdmin}
-                      currentUser={currentUser}
-                      onAiSearch={handleAiSearch}
-                    />
-                  </div>
                 </div>
-              )}
-            </div>
-          </main>
-          <ContactForm
-            isOpen={isFormOpen}
-            onClose={() => setIsFormOpen(false)}
-            onSave={handleSaveContact}
-            contactToEdit={editingContact}
-          />
-          <BookForm
-            isOpen={isBookFormOpen}
-            onClose={() => setIsBookFormOpen(false)}
-            onSave={handleSaveBook}
-            bookToEdit={editingBook}
-          />
-          <TransactionForm
-            isOpen={isTransactionFormOpen}
-            onClose={() => setIsTransactionFormOpen(false)}
-            onSave={handleSaveTransaction}
-            contacts={contacts} // Pass original contacts for dropdown
-            books={books}       // Pass original books for dropdown
-            transactionToEdit={editingTransaction}
-          />
-          <EventForm
-            isOpen={isEventFormOpen}
-            onClose={() => setIsEventFormOpen(false)}
-            onSave={handleSaveEvent}
-            eventToEdit={editingEvent}
-            contacts={contacts} 
-            onAddAttendee={onUpdateEventAttendees}
-            onRemoveAttendee={onUpdateEventAttendees}
-          />
+            </header>
+            
+            {/* Main Content Area */}
+            <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-0">
+                {/* Top Tab Navigation */}
+                <div className="mb-6 border-b border-gray-200">
+                    <nav className="-mb-px flex space-x-4 overflow-x-auto scrollbar-hidden" aria-label="Tabs">
+                        <button onClick={() => handleViewChange('contacts')} className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm ${currentView === 'contacts' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Contacts</button>
+                        
+                        <button
+                            onClick={() => handleViewChange('expense-reports')}
+                            className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm flex items-center ${currentView === 'expense-reports' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+                        >
+                            <ClipboardIcon className="h-5 w-5 mr-2" />
+                            Expense Reports
+                        </button>
+                        
+                        {/* Removed Book, Transaction, Event, Report tabs */}
+                    </nav>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    
+                    {/* Main content column */}
+                    <div className={isAiChatOpen ? "lg:col-span-2 space-y-6" : "lg:col-span-3 space-y-6"}>
+                        
+                        {/* Admin Status Messages */}
+                        {adminStatus && <p className="text-sm text-center text-gray-600 p-2 bg-gray-100 rounded-md">{adminStatus}</p>}
+                        
+                        {/* Admin Panel (inline) */}
+                        {isAdmin && currentView === 'admin' && <AdminPanel users={users} currentUser={currentUser} />}
+                        
+                        {/* Test Suite (inline) */}
+                        {process.env.NODE_ENV !== 'production' && isTestSuiteOpen && <AIAssistantTestSuite onProcessAiCommand={onProcessAiCommand} />}
+
+                        {/* Top Button Bar */}
+                        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <div className="flex-1">
+                                <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
+                                    {isAdmin && (
+                                        <button
+                                            onClick={() => handleViewChange('admin')}
+                                            className={`flex items-center justify-center p-2 sm:px-4 sm:py-2 font-semibold rounded-lg shadow-md transition-colors ${currentView === 'admin' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                                        >
+                                            <UserCircleIcon className="h-5 w-5 sm:mr-2" />
+                                            <span className="hidden sm:inline">Admin Panel</span>
+                                        </button>
+                                    )}
+
+                                    <button
+                                        onClick={onToggleAiChat}
+                                        className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition-colors"
+                                    >
+                                        <span className="hidden sm:inline">{isAiChatOpen ? 'Hide AI' : 'Show AI'}</span>
+                                        <span className="sm:hidden">{isAiChatOpen ? 'Hide' : 'Show'} AI</span>
+                                    </button>
+
+                                    {process.env.NODE_ENV !== 'production' && (
+                                        <button
+                                            onClick={() => setIsTestSuiteOpen(prev => !prev)}
+                                            className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-yellow-400 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-yellow-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-300 transition-colors"
+                                        >
+                                            <BeakerIcon className="h-5 w-5 sm:mr-2 md:hidden" />
+                                            <span className="hidden sm:inline">{isTestSuiteOpen ? 'Hide Test Suite' : 'Show Test Suite'}</span>
+                                        </button>
+                                    )}
+
+                                    {/* "New" Buttons */}
+                                    {isAdmin && currentView === 'contacts' && (
+                                        <button onClick={handleNewContact} className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700">
+                                            <PlusIcon className="h-5 w-5 sm:mr-2 md:hidden" />
+                                            <span className="hidden sm:inline">New Contact</span>
+                                        </button>
+                                    )}
+                                    {currentView === 'expense-reports' && (
+                                        <button onClick={handleNewExpenseReport} className="flex items-center justify-center p-2 sm:px-4 sm:py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700">
+                                            <PlusIcon className="h-5 w-5 sm:mr-2 md:hidden" />
+                                            <span className="hidden sm:inline">New Report</span>
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            {/* "Become Admin" Button */}
+                            {!isAdmin && shouldShowBecomeAdmin && (
+                                <div className="flex items-center gap-4">
+                                    <p className="text-gray-600">No admin account detected.</p>
+                                    <button
+                                        onClick={handleMakeAdmin}
+                                        className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 transition-colors"
+                                    >
+                                        Become First Admin
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Advanced Filter */}
+                        {currentView === 'contacts' && currentFilterConfig.length > 0 && (
+                            <AdvancedFilter
+                                data={currentData}
+                                filterConfig={currentFilterConfig}
+                                onFilterChange={currentSetFilteredData}
+                                initialOpen={false}
+                            />
+                        )}
+
+                        {/* AI Search Result Banner */}
+                        {aiSearchResults && currentView !== 'reports' && (
+                            <div className="flex items-center justify-between p-3 my-4 bg-blue-100 border border-blue-300 text-blue-800 rounded-lg shadow-sm">
+                                <div className="flex items-center">
+                                    <FilterIcon className="h-5 w-5 mr-2" />
+                                    <span className="font-medium text-sm">
+                                        {`Showing ${aiSearchResults.length} result(s) from AI search.`}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={handleClearAiFilter}
+                                    className="flex items-center px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded-md shadow hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+                                >
+                                    <XIcon className="h-4 w-4 mr-1" />
+                                    Clear Filter
+                                </button>
+                            </div>
+                        )}
+
+                        {/* --- Main View Content --- */}
+                        {currentView === 'contacts' && (
+                            <ContactTable 
+                                contacts={finalContactsList} // Use the final list
+                                onEdit={handleEditContact} 
+                                onDelete={handleDeleteContact} 
+                                isAdmin={isAdmin} 
+                                onUpdateContact={onUpdateContact} 
+                            />
+                        )}
+                        
+                        {/* --- !! MODIFY THIS !! --- */}
+                        {currentView === 'expense-reports' && (
+                             <ExpenseReportTable
+                                reports={expenseReports}
+                                onEdit={handleEditExpenseReport} // Now matches new signature
+                                onDelete={handleDeleteExpenseReport}
+                                isAdmin={isAdmin}
+                                currentUserRole={currentUserRole} // Pass this prop
+                            />
+                        )}
+                        {/* Admin view is now inline, so no table here */}
+                    </div>
+
+                    {/* AI Chat Column */}
+                    {isAiChatOpen && (
+                        <div className="lg:col-span-1 space-y-4">
+                            <div className="h-[calc(85vh-4rem)]"> {/* Adjust height as needed */}
+                                <AIChat
+                                    onProcessCommand={processAndHandleAiCommand}
+                                    isAdmin={isAdmin}
+                                    currentUser={currentUser}
+                                    onAiSearch={handleAiSearch} // This prop might not be used anymore
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </main>
+
+            {/* Modals */}
+            {isFormOpen && (
+                <ContactForm
+                    isOpen={isFormOpen}
+                    onClose={() => setIsFormOpen(false)}
+                    onSave={handleSaveContact}
+                    contactToEdit={editingContact}
+                />
+            )}
+            
+            {/* --- !! THIS IS THE FINAL FIX !! --- */}
+            {isExpenseReportFormOpen && (
+                <ExpenseReportForm
+                    isOpen={isExpenseReportFormOpen}
+                    onClose={() => {
+                        setIsExpenseReportFormOpen(false);
+                        setPrintMode(false); // Add this
+                    }}
+                    onSave={handleSaveExpenseReport}
+                    reportToEdit={expenseReportToEdit}
+                    
+                    // FIX: Pass the correct, filtered list
+                    staffContacts={staffContacts} 
+                    
+                    // FIX: Pass the new props from App.tsx
+                    currentUserContactId={currentUserContactId}
+                    currentUserRole={currentUserRole}
+                    isPrintMode={printMode}
+
+                    // Pass these props from Dashboard state/props
+                    nextReportNumber={nextReportNumber}
+                    currentUserEmail={currentUser?.email || ''}
+
+                    // REMOVE these old props
+                    // contacts={contacts} 
+                    // users={users}
+                />
+            )}
+            
+            {/* Removed BookForm, TransactionForm, EventForm modals */}
         </div>
     );
 };

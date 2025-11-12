@@ -3,7 +3,7 @@ import {Timestamp} from "firebase-admin/firestore";
 // Enum for Contact Categories
 export enum Category {
   CUSTOMER = 'Customer',
-  EMPLOYEE = 'Employee',
+  STAFF = 'Staff',
   VENDOR = 'Vendor',
   MEDIA = 'Media',
   OTHER = 'Other',
@@ -13,6 +13,7 @@ export enum Category {
 export enum Role {
   MASTER_ADMIN = 'master-admin',
   ADMIN = 'admin',
+  BOOKKEEPER = 'bookkeeper',
   VIEWER = 'viewer',
   APPLICANT = 'applicant',
 }
@@ -25,6 +26,8 @@ export interface AppUser {
   displayName?: string;
   createdAt: Timestamp;
   showAiChat?: boolean;
+  isMasterAdmin?: boolean;
+  contactId?: string; // <-- ADD THIS: Links Auth User to Contact doc
 }
 
 export interface FirebaseTimestamp {
@@ -51,6 +54,7 @@ export interface Contact {
   state?: string;
   zip?: string;
   notes?: string;
+  otherCategory?: string;
   sendTNSBNewsletter?: boolean;
   createdAt?: FirebaseTimestamp | Date | any;
   createdBy?: string;

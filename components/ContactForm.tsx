@@ -24,10 +24,10 @@ declare global {
 
 // API Loader Function (no changes)
 const loadGoogleMapsScript = () => {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  const apiKey = (import.meta as any).env.VITE_GOOGLE_MAPS_API_KEY;
   const scriptId = 'google-maps-script';
   return new Promise<void>((resolve, reject) => {
-    if (document.getElementById(scriptId) || window.google?.maps?.places) {
+    if (document.getElementById(scriptId) || (window.google?.maps?.places)) {
       resolve();
       return;
     }
@@ -57,6 +57,13 @@ const formatTimestamp = (timestamp: any): string => {
     }
 };
 
+// --- FIX: Added capitalize helper function ---
+const capitalize = (s: string) => {
+    if (!s) return s;
+    // Capitalizes the first letter of each word
+    return s.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+};
+
 interface ContactFormProps {
     isOpen: boolean;
     onClose: () => void;
@@ -68,9 +75,10 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
     // --- State Hooks ---
     const initialFormState = {
         honorific: '', firstName: '', middleName: '', lastName: '', suffix: '',
-        category: [] as Category[], // <-- FIX: Changed to empty array
+        category: [] as Category[],
         phone: '', email: '', url: '',
         address1: '', address2: '', city: '', state: '', zip: '', notes: '',
+        otherCategory: '', // Added for 'Other' category
         sendTNSBNewsletter: false,
     };
     const [formState, setFormState] = useState<Omit<Contact, 'id' | 'createdAt' | 'createdBy' | 'lastModifiedAt' | 'lastModifiedBy'>>(initialFormState);
@@ -94,24 +102,20 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
         if (!isOpen) return;
         setErrors({});
 
-        let initialState = contactToEdit 
+        let initialState: any = contactToEdit 
             ? { ...initialFormState, ...contactToEdit } 
             : initialFormState;
 
-        // --- FIX: Handle Category conversion for old data ---
+        // Handle Category conversion for old data
         if (contactToEdit) {
             if (typeof contactToEdit.category === 'string') {
-                // If it's old string data, convert to array
                 initialState.category = [contactToEdit.category as Category];
             } else if (Array.isArray(contactToEdit.category)) {
-                // If it's already an array, use it
                 initialState.category = contactToEdit.category;
             } else {
-                // Otherwise, default to empty array
                 initialState.category = [];
             }
         }
-        // --- End Category Fix ---
 
         // Handle mapping if 'middleInitial' still exists on old data
         if (contactToEdit && (contactToEdit as any).middleInitial && !contactToEdit.middleName) {
@@ -127,7 +131,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
     }, [isOpen, contactToEdit]);
 
 
-    // FIX: useEffect adjusted to destructure the event object directly
+    // Google Maps Autocomplete listener
     useEffect(() => {
         if (!isOpen || !mapsApiLoaded || !autocompleteRef.current) {
             return;
@@ -137,29 +141,17 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
         console.log('Attaching gmp-select listener...');
 
         const handlePlaceSelect = async (event: any) => {
-            console.log('>>> gmp-select event FIRED! <<<');
-
-            // The key change: Destructure placePrediction directly from the event object
             const { placePrediction } = event;
-            console.log('Destructured placePrediction:', placePrediction);
-
              if (!placePrediction) {
-                 console.warn('placePrediction not found on the event object.');
                  setPlaceDetails(null);
                  return;
              }
-
              try {
                 const place = placePrediction.toPlace();
-                console.log('Fetching place fields...');
                 await place.fetchFields({ fields: ['addressComponents', 'formattedAddress'] });
-                console.log('Place fields fetched:', place);
-
                  if (place.addressComponents) {
                      setPlaceDetails(place as FetchedPlace);
-                     console.log('placeDetails state UPDATED successfully.');
                  } else {
-                     console.warn('Fetched place data is missing addressComponents.');
                      setPlaceDetails(null);
                  }
              } catch (error) {
@@ -173,16 +165,13 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
         return () => {
              if (autocompleteElement) {
                 autocompleteElement.removeEventListener('gmp-select', handlePlaceSelect);
-                console.log('gmp-select listener REMOVED.');
             }
         };
     }, [isOpen, mapsApiLoaded]);
 
-    console.log('Component rendered. placeDetails is:', placeDetails);
 
     // --- Event Handlers ---
     const handleFillAddress = () => {
-        console.log("Fill Address button clicked. Current placeDetails:", placeDetails);
         if (placeDetails?.addressComponents) {
             const getAddressComponent = (type: string, useShortName = false): string => {
                 const component = placeDetails.addressComponents?.find((c) => c.types.includes(type));
@@ -199,15 +188,20 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                 state: getAddressComponent('administrative_area_level_1', true),
                 zip: getAddressComponent('postal_code'),
             }));
-            console.log("Form state updated.");
-        } else {
-             console.warn('Fill address failed: `placeDetails` is missing addressComponents.');
         }
     };
 
+    // --- FIX: Updated handleChange to include capitalization ---
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        setFormState(prev => ({ ...prev, [name]: value }));
+        
+        let finalValue = value;
+        // Apply capitalization logic to specific fields
+        if (name === 'firstName' || name === 'lastName' || name === 'city') {
+            finalValue = capitalize(value);
+        }
+        
+        setFormState(prev => ({ ...prev, [name]: finalValue }));
     };
 
     const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -215,7 +209,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
         setFormState(prev => ({ ...prev, [name]: checked }));
     };
     
-    // --- FIX: New handler for category checkboxes ---
+    // Handler for category checkboxes
     const handleCategoryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { value, checked } = e.target;
         const category = value as Category;
@@ -223,15 +217,13 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
         setFormState(prev => {
             const currentCategories = prev.category || [];
             if (checked) {
-                // Add category if it's not already included
                 if (!currentCategories.includes(category)) {
                     return { ...prev, category: [...currentCategories, category] };
                 }
             } else {
-                // Remove category
                 return { ...prev, category: currentCategories.filter(cat => cat !== category) };
             }
-            return prev; // Return previous state if no change
+            return prev;
         });
     };
     
@@ -252,18 +244,29 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
         return Object.keys(newErrors).length === 0;
     }
 
+    // --- FIX: Corrected handleSubmit logic for 'otherCategory' ---
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (validate()) {
+            // This line defines cleanedState
             const cleanedState = Object.fromEntries(
                 Object.entries(formState).filter(([, value]) => value !== '' && value !== null)
             );
 
             // Ensure category is an array, even if empty
-            const finalState = {
-                ...cleanedState,
-                category: formState.category || []
+            let finalState: Omit<Contact, 'id' | 'createdAt' | 'createdBy' | 'lastModifiedAt' | 'lastModifiedBy'> | Contact = {
+                ...cleanedState, // This line was causing the error
+                category: formState.category || [],
             };
+            
+            // Conditionally add otherCategory ONLY if 'Other' is selected
+            if (formState.category.includes(Category.OTHER)) {
+                finalState.otherCategory = formState.otherCategory || ''; // Use empty string if "Other" is checked but field is blank
+            } else {
+                // Explicitly delete otherCategory if 'Other' is NOT selected
+                // This prevents 'undefined' from being sent to Firestore
+                delete (finalState as Partial<Contact>).otherCategory; 
+            }
             
             onSave(contactToEdit ? { ...finalState, id: contactToEdit.id } as Contact : finalState as Omit<Contact, 'id'>);
             onClose();
@@ -275,9 +278,9 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
     
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center">
-            <div className="bg-white rounded-lg shadow-2xl p-8 m-4 max-w-3xl w-full max-h-[90vh] flex flex-col"> {/* Added flex flex-col */}
+            <div className="bg-white rounded-lg shadow-2xl p-8 m-4 max-w-3xl w-full max-h-[90vh] flex flex-col">
                 <h2 className="text-2xl font-bold text-gray-800 mb-6 flex-shrink-0">{contactToEdit ? 'Edit Contact' : 'New Contact'}</h2>
-                <form onSubmit={handleSubmit} className="flex-grow overflow-y-auto pr-2"> {/* Added overflow */}
+                <form onSubmit={handleSubmit} className="flex-grow overflow-y-auto pr-2">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                         {/* Name Fields */}
                         <div className="md:col-span-1">
@@ -328,6 +331,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                             <input type="email" id="email" name="email" value={formState.email} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.email ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} />
                             {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
                         </div>
+                        
                         {/* Address Search Section */}
                         <div className="md:col-span-4">
                             <label className="block text-sm font-medium text-gray-700">Address Search</label>
@@ -383,11 +387,18 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                             {errors.zip && <p className="text-red-500 text-xs mt-1">{errors.zip}</p>}
                         </div>
 
-                        {/* --- FIX: Category Checkboxes --- */}
+                        {/* Category Checkboxes */}
                          <div className="md:col-span-4">
                              <label className="block text-sm font-medium text-gray-700">Category</label>
                              <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
-                                {Object.values(Category).map(cat => (
+                                {/* Sorted Category List */}
+                                {[
+                                    Category.CUSTOMER,
+                                    Category.MEDIA,
+                                    Category.STAFF,
+                                    Category.VENDOR,
+                                    Category.OTHER
+                                ].map(cat => (
                                     <div key={cat} className="flex items-center">
                                         <input
                                             id={`category-${cat}`}
@@ -405,16 +416,30 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                                 ))}
                             </div>
                         </div>
-                        {/* --- End Category Fix --- */}
 
-                        {/* --- ADD: Newsletter Toggle --- */}
+                        {/* Other Category Textbox */}
+                        {formState.category.includes(Category.OTHER) && (
+                            <div className="md:col-span-4">
+                                <label htmlFor="otherCategory" className="block text-sm font-medium text-gray-700">Other Category (Please specify)</label>
+                                <input
+                                    type="text"
+                                    id="otherCategory"
+                                    name="otherCategory"
+                                    value={(formState as any).otherCategory || ''}
+                                    onChange={handleChange}
+                                    className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                />
+                            </div>
+                        )}
+
+                        {/* Newsletter Toggle */}
                         <div className="md:col-span-4">
                             <div className="flex items-center">
                                 <input
                                     id="sendTNSBNewsletter"
                                     name="sendTNSBNewsletter"
                                     type="checkbox"
-                                    checked={!!formState.sendTNSBNewsletter} // Use !! to ensure it's a boolean
+                                    checked={!!formState.sendTNSBNewsletter}
                                     onChange={handleCheckboxChange}
                                     className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
                                 />
@@ -423,8 +448,8 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                                 </label>
                             </div>
                         </div>
-                        {/* --- End Newsletter Toggle --- */}
 
+                        {/* Notes */}
                         <div className="md:col-span-4">
                             <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Notes</label>
                             <textarea
@@ -438,10 +463,12 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                         </div>
                     </div>
 
+                    {/* Metadata */}
                     {contactToEdit && (
                         <div className="md:col-span-4 mt-6 pt-4 border-t border-gray-200">
                             <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Metadata</h3>
                             <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-600">
+                                <p><strong>Contact ID:</strong> {contactToEdit.id}</p>
                                 <p><strong>Created By:</strong> {contactToEdit.createdBy || 'Unknown'}</p>
                                 <p><strong>Created At:</strong> {formatTimestamp(contactToEdit.createdAt)}</p>
                                 <p><strong>Last Editor:</strong> {contactToEdit.lastModifiedBy || 'Unknown'}</p>
@@ -451,7 +478,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                     )}
 
                     {/* Form Buttons */}
-                    <div className="mt-8 flex justify-end space-x-4 flex-shrink-0"> {/* Added flex-shrink-0 */}
+                    <div className="mt-8 flex justify-end space-x-4 flex-shrink-0">
                         <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
                             Cancel
                         </button>

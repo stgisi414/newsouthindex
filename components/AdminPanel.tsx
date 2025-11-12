@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { httpsCallable } from "firebase/functions";
-import { functions, db } from "../src/firebaseConfig";
-import { AppUser, UserRole } from "../types";
+import { functions, db } from "../src/firebaseConfig"; // Assumed path
+import { AppUser, UserRole } from "../types"; // Assumed path
 import { doc, getDoc } from "firebase/firestore";
-import { User } from "firebase/auth"; // Import User type
+import { User } from "firebase/auth";
 
 // Define the function types
 const setUserRole = httpsCallable<
@@ -24,11 +24,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser }) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // --- NEW PERMISSIONS LOGIC ---
-  // 1. Find the full AppUser object for the person VIEWING the panel
   const currentUserAppUser = users.find((u) => u.id === currentUser.uid);
   const isMasterAdmin = currentUserAppUser?.isMasterAdmin === true;
-  // --- END NEW PERMISSIONS LOGIC ---
 
   const handleRoleChange = async (uid: string, newRole: UserRole) => {
     setError(null);
@@ -45,6 +42,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser }) => {
         setError("Master Admins cannot be modified.");
         return;
       }
+
+      // --- NEW LOGIC ---
+      // Prevent non-Master Admins from promoting to Bookkeeper or Admin
+      if (!isMasterAdmin && (newRole === UserRole.ADMIN || newRole === UserRole.BOOKKEEPER)) {
+        setError("Only a Master Admin can assign Admin or Bookkeeper roles.");
+        return;
+      }
+
       const result = await setUserRole({ userId: uid, role: newRole });
       setSuccess(result.data.message);
     } catch (err: any) {
@@ -105,6 +110,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser }) => {
               // --- NEW PERMISSIONS LOGIC ---
               const isTargetMaster = user.isMasterAdmin === true;
               const isTargetAdmin = user.role === UserRole.ADMIN;
+              const isTargetBookkeeper = user.role === UserRole.BOOKKEEPER;
 
               // A regular admin cannot modify a Master Admin OR another Regular Admin
               const canRegularAdminModify =
@@ -147,6 +153,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser }) => {
                     >
                       <option value={UserRole.APPLICANT}>Applicant</option>
                       <option value={UserRole.VIEWER}>Viewer</option>
+                      <option
+                        value={UserRole.BOOKKEEPER}
+                        disabled={!isMasterAdmin}
+                        title={
+                          !isMasterAdmin
+                            ? "Only Master Admins can promote to Bookkeeper"
+                            : ""
+                        }
+                      >
+                        Bookkeeper
+                      </option>
                       {/* Only show "Admin" option if the current user is a Master Admin */}
                       <option
                         value={UserRole.ADMIN}
