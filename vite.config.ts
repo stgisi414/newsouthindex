@@ -41,7 +41,7 @@ export default defineConfig(({ mode }) => {
         },
         // You could add proxies for Auth/Firestore here too if needed, but let's focus on Functions first
         // '/__/firebase_auth_proxy': { target: `http://${localIp}:9099`, ... },
-        // '/__/firebase_firestore_proxy': { target: `http://${localIp}:8080`, ... },
+        // '/__/firebase_firestore_proxy': { target: `http://${localIp}:8081`, ... },
       }
       // --- END PROXY CONFIGURATION ---
     },

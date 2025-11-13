@@ -131,7 +131,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser, onForceSync
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <select
-                      value={user.role}
+                      value={isTargetMaster ? UserRole.ADMIN : user.role}
                       onChange={(e) =>
                         handleRoleChange(user.id, e.target.value as UserRole)
                       }

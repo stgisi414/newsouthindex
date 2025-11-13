@@ -5,9 +5,10 @@ import {
   connectAuthEmulator 
 } from "firebase/auth";
 import { 
-  initializeFirestore, 
+  getFirestore, // <-- CHANGED
   Firestore, 
-  connectFirestoreEmulator 
+  connectFirestoreEmulator,
+  initializeFirestore // <-- We still need this for your tunnel logic
 } from "firebase/firestore";
 import { 
   getFunctions, 
@@ -45,19 +46,15 @@ if (import.meta.env.DEV) {
 const app = initializeApp(effectiveFirebaseConfig);
 
 // --- DECLARE EXPORTED SERVICES ---
-// We initialize them inside the conditional blocks
-export let auth: Auth;
-export let functions: FirebaseFunctions;
-export let db: Firestore;
+// We initialize them once, then conditionally connect emulators
+export let auth: Auth = getAuth(app);
+export let functions: FirebaseFunctions = getFunctions(app, 'us-central1'); // Specify region
+export let db: Firestore = getFirestore(app); // <-- INITIALIZE ONCE
 
 if (import.meta.env.DEV) {
   console.log(`[firebaseConfig] Development mode detected. isTunnel: ${isTunnel}`);
 
-  // --- Use tunnel domains OR localhost for Auth/Firestore ---
-  // --- Use Vite Proxy for Functions ---
-
-  // 1. Auth: Connect to tunnel URL or localhost:9099
-  auth = getAuth(app);
+  // 1. Auth: (Your logic is correct)
   const devAuthDomain = currentPort ? `${currentHost}:${currentPort}` : currentHost;
   effectiveFirebaseConfig.authDomain = devAuthDomain;
   console.log(`[firebaseConfig] Overriding authDomain for popups: ${devAuthDomain}`);
@@ -68,38 +65,39 @@ if (import.meta.env.DEV) {
   console.log(`[firebaseConfig] Auth Emulator: ${authUrl}`);
   connectAuthEmulator(auth, authUrl, { disableWarnings: true });
 
-  // 2. Functions
-  functions = getFunctions(app, 'us-central1'); // Specify region
-
+  // 2. Functions: (Your logic is correct)
   if (isTunnel) {
-     console.log('[firebaseConfig] Functions: Using customDomain for HTTPS tunnel (app.projectgrid.tech)');
-     // SDK will append /projectId/region/functionName to this:
-     functions.customDomain = "https://app.projectgrid.tech";
+      console.log('[firebaseConfig] Functions: Using customDomain for HTTPS tunnel (app.projectgrid.tech)');
+      functions.customDomain = "https://app.projectgrid.tech";
   } else {
-     // Localhost: Connect directly to the emulator port
-     console.log('[firebaseConfig] Functions Emulator: Connecting via localhost:5003');
-     connectFunctionsEmulator(functions, 'localhost', 5003); // Use correct emulator port
+      console.log('[firebaseConfig] Functions Emulator: Connecting via localhost:5003');
+      connectFunctionsEmulator(functions, 'localhost', 5003);
   }
 
-  // 3. Firestore: Connect to tunnel URL or localhost:8080
-  const firestoreHost = isTunnel ? 'firestore.projectgrid.tech' : 'localhost';
-  const firestorePort = isTunnel ? 443 : 8080;
-  const useSsl = isTunnel;
-
-  console.log(`[firebaseConfig] Initializing Firestore DIRECTLY: host=${firestoreHost}, port=${firestorePort}, ssl=${useSsl}`);
-
-  db = initializeFirestore(app, {
-    host: `${firestoreHost}:${firestorePort}`,
-    ssl: useSsl,
-    // experimentalForceLongPolling: true, // Ensure this is removed or commented out
-  });
-  console.log('[firebaseConfig] Firestore initialized directly. connectFirestoreEmulator NOT called.');
-  // [END] FIRESTORE - DIRECT INITIALIZATION, NO LONG POLLING
+  // 3. Firestore: --- THIS IS THE FIX ---
+  if (isTunnel) {
+    // Your tunnel logic requires re-initializing with specific settings
+    const firestoreHost = 'firestore.projectgrid.tech';
+    const firestorePort = 443;
+    const useSsl = true;
+    console.log(`[firebaseConfig] Re-initializing Firestore DIRECTLY for TUNNEL: host=${firestoreHost}, port=${firestorePort}, ssl=${useSsl}`);
+    db = initializeFirestore(app, {
+      host: `${firestoreHost}:${firestorePort}`,
+      ssl: useSsl,
+    });
+    console.log('[firebaseConfig] Firestore initialized directly for TUNNEL.');
+  } else {
+    // Localhost: 'db' is already initialized, just connect it.
+    // This is the V9 SDK-compatible way.
+    console.log('[firebaseConfig] Connecting to Firestore Emulator on localhost:8081');
+    connectFirestoreEmulator(db, 'localhost', 8081);
+  }
+  // --- END FIX ---
 
 } else {
   // --- PRODUCTION CONFIGURATION ---
   console.log("[firebaseConfig] Production mode detected.");
-  auth = getAuth(app);
-  functions = getFunctions(app); // Consider specifying region
-  db = initializeFirestore(app, {});
+  // All services (auth, functions, db) were already initialized 
+  // above and are pointing to production. No extra work needed.
+  console.log("[firebaseConfig] auth, functions, and db are using production endpoints.");
 }

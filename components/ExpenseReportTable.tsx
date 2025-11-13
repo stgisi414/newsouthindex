@@ -64,7 +64,7 @@ const ExpenseReportTable: React.FC<ExpenseReportTableProps> = ({ reports, onEdit
                             <tr key={report.id} className="hover:bg-gray-50">
                                 <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{report.reportNumber}</td>
                                 <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{report.staffName}</td>
-                                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(report.expenseDate)}</td>
+                                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(report.reportDate)}</td>
                                 <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(report.totalAmount)}</td>
                                 <td className="px-4 py-4 whitespace-nowop text-sm text-gray-500 truncate max-w-xs">{report.notes}</td>
                                 {/* REMOVED: Status TD */}

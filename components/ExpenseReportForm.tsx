@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
-// FIX: Added .ts and .tsx extensions to local imports
-import { ExpenseReport, ExpenseReportItem, Contact, Category, AppUser, UserRole } from '../types.ts';
+import { ExpenseReport, ExpenseReportItem, Contact, UserRole } from '../types.ts';
 import { serverTimestamp } from 'firebase/firestore';
 import DeleteIcon from './icons/DeleteIcon.tsx';
 import PlusIcon from './icons/PlusIcon.tsx';
+import PrinterIcon from './icons/PrinterIcon.tsx'; // Import PrinterIcon
 
+// --- NEW PROPS INTERFACE ---
 interface ExpenseReportFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (report: Omit<ExpenseReport, 'id'> | ExpenseReport) => void;
   reportToEdit?: ExpenseReport | null;
-  contacts: Contact[];
-  nextReportNumber: number;
-  currentUserEmail: string; // The email of the logged-in user
-  users: AppUser[]; // Prop to get admin/bookkeeper roles
+  staffContacts: Contact[]; // <-- RECEIVES THE ALREADY-FILTERED LIST
+  currentUserContactId: string | null; // <-- NEW PROP
+  currentUserRole: UserRole | null;  // <-- NEW PROP
+  isPrintMode: boolean; // <-- NEW PROP
 }
 
 // Helper to convert Firestore Timestamp to YYYY-MM-DD string
@@ -33,12 +34,12 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
   onClose,
   onSave,
   reportToEdit,
-  contacts,
-  nextReportNumber,
-  currentUserEmail,
-  users, // Receive users prop
+  staffContacts, // <-- USE THE PROP
+  currentUserContactId, // <-- USE THE PROP
+  currentUserRole,  // <-- USE THE PROP
+  isPrintMode,      // <-- USE THE PROP
 }) => {
-  const [reportNumber, setReportNumber] = useState(nextReportNumber);
+  const [reportNumber, setReportNumber] = useState(0);
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
   const [contactName, setContactName] = useState('');
   const [contactId, setContactId] = useState('');
@@ -46,104 +47,59 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
     { itemDate: new Date().toISOString().split('T')[0], description: '', cashAmount: 0 },
   ]);
   const [dateSubmitted, setDateSubmitted] = useState('');
-  const [errors, setErrors] = useState<{ staff?: string }>({}); // <-- ADD: Error state
+  const [errors, setErrors] = useState<{ staff?: string }>({});
 
-  // Find the contact associated with the logged-in user's email
-  const loggedInContact = useMemo(() => {
-    if (!contacts || !currentUserEmail) return undefined;
-    return contacts.find(c => c.email && c.email.toLowerCase() === currentUserEmail.toLowerCase());
-  }, [contacts, currentUserEmail]);
+  // --- BUGGY useMemo HOOKS (loggedInContact, staffContacts) ARE REMOVED ---
 
-  // --- FIX: Updated staff filter logic ---
-  const staffContacts = useMemo(() => {
-    // --- ADD DEBUG LOGS ---
-    console.log("--- DEBUGGING STAFF DROPDOWN ---");
-    console.log("Users prop (Admins, etc.):", users);
-    console.log("Contacts prop (All contacts):", contacts);
-    // --- END DEBUG LOGS ---
-
-    if (!contacts || !users) return [];
-    
-    // Get emails of all admins and bookkeepers from the *users* list
-    const internalUserEmails = new Set(
-      users
-        // --- FIX: Added check for isMasterAdmin ---
-        .filter(u => 
-          (
-            u.role === UserRole.ADMIN || 
-            u.role === UserRole.BOOKKEEPER ||
-            u.isMasterAdmin === true // <-- THIS IS THE FIX
-          ) &&
-          u.email 
-        )
-        .map(u => u.email.toLowerCase())
+  // Check if current user is admin/bookkeeper
+  const isPrivilegedUser = useMemo(() => {
+    return (
+      currentUserRole === UserRole.MASTER_ADMIN ||
+      currentUserRole === UserRole.ADMIN ||
+      currentUserRole === UserRole.BOOKKEEPER
     );
-
-    // --- ADD DEBUG LOG ---
-    console.log("Found Admin/Bookkeeper Emails:", internalUserEmails);
-    // --- END DEBUG LOG ---
-
-    // Filter the *contacts* list
-    const filtered = contacts.filter(c => 
-      // Condition 1: Contact is in "Staff" category
-      (c.category && c.category.includes(Category.STAFF)) || 
-      // Condition 2: Contact's email is in the list of internal users
-      (c.email && internalUserEmails.has(c.email.toLowerCase()))
-    );
-
-    // --- ADD DEBUG LOG ---
-    console.log("Filtered Contacts (Result):", filtered);
-    // --- END DEBUG LOG ---
-
-    // Remove duplicates (just in case)
-    const uniqueContacts = Array.from(new Map(filtered.map(c => [c.id, c])).values());
-    
-    // Sort them alphabetically
-    return uniqueContacts.sort((a, b) => 
-      a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName)
-    );
-  }, [contacts, users]); // Added users dependency
-  // --- END FIX ---
+  }, [currentUserRole]);
 
   useEffect(() => {
     if (isOpen) {
-      setErrors({}); // <-- ADD: Clear errors when form opens
+      setErrors({});
       if (reportToEdit) {
-        // Editing existing report
+        // --- EDITING ---
         setReportNumber(reportToEdit.reportNumber || 1000);
         setReportDate(formatTimestampToInputDate(reportToEdit.reportDate));
-        
-        // --- FIX: Use staffContactId and staffName ---
         setContactId(reportToEdit.staffContactId || '');
         setContactName(reportToEdit.staffName || '');
-        
-        // Ensure items is an array, provide default if not
         setItems(reportToEdit.items && reportToEdit.items.length > 0 ? reportToEdit.items.map(item => ({
           ...item,
-          itemDate: formatTimestampToInputDate(item.itemDate) // Ensure itemDate is string
+          itemDate: formatTimestampToInputDate(item.itemDate)
         })) : [{ itemDate: new Date().toISOString().split('T')[0], description: '', cashAmount: 0 }]);
         setDateSubmitted(formatTimestampToInputDate(reportToEdit.dateSubmitted));
       } else {
-        // Creating new report
-        setReportNumber(nextReportNumber);
+        // --- CREATING NEW ---
+        setReportNumber(0);
         setReportDate(new Date().toISOString().split('T')[0]);
-        
-        // Pre-fill user's name if found
-        if (loggedInContact) {
-          setContactName(`${loggedInContact.firstName} ${loggedInContact.lastName}`);
-          setContactId(loggedInContact.id);
-        } else {
-          // --- FIX: Default to an empty selection ---
-          setContactName(''); 
-          setContactId('');
-        }
         setItems([{ itemDate: new Date().toISOString().split('T')[0], description: '', cashAmount: 0 }]);
         setDateSubmitted('');
+
+        // Pre-fill user's name IF they are not an admin/bookkeeper
+        // If they are an admin, force them to select from the list.
+        if (!isPrivilegedUser && currentUserContactId) {
+          const loggedInStaffContact = staffContacts.find(c => c.id === currentUserContactId);
+          if (loggedInStaffContact) {
+            setContactId(loggedInStaffContact.id);
+            setContactName(`${loggedInStaffContact.firstName} ${loggedInStaffContact.lastName}`);
+          }
+        } else {
+          // Admin/Bookkeeper or unlinked user starts blank
+          setContactId('');
+          setContactName('');
+        }
       }
     }
-  }, [isOpen, reportToEdit, nextReportNumber, loggedInContact, staffContacts]); // Added staffContacts dependency
+  }, [isOpen, reportToEdit, staffContacts, currentUserContactId, isPrivilegedUser]);
 
   const handleItemChange = (index: number, field: keyof ExpenseReportItem, value: string | number) => {
+    if (isPrintMode) return; // Don't allow edits in print mode
     const newItems = [...items];
     const item = newItems[index];
     
@@ -155,29 +111,29 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
     setItems(newItems);
   };
 
-  // --- ADD: Handle staff dropdown change ---
   const handleStaffChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (isPrintMode) return; // Don't allow edits in print mode
     const selectedId = e.target.value;
     const selectedContact = staffContacts.find(c => c.id === selectedId);
     if (selectedContact) {
       setContactId(selectedContact.id);
       setContactName(`${selectedContact.firstName} ${selectedContact.lastName}`);
       if (errors.staff) {
-        setErrors(prev => ({ ...prev, staff: undefined })); // Clear error on selection
+        setErrors(prev => ({ ...prev, staff: undefined }));
       }
     } else {
-      // --- ADD: Handle deselecting (if they choose the disabled option) ---
       setContactId('');
       setContactName('');
     }
   };
 
   const addNewItemRow = () => {
+    if (isPrintMode) return;
     setItems([...items, { itemDate: new Date().toISOString().split('T')[0], description: '', cashAmount: 0 }]);
   };
 
   const removeItemRow = (index: number) => {
-    if (items.length <= 1) return; // Don't remove the last row
+    if (isPrintMode || items.length <= 1) return;
     const newItems = items.filter((_, i) => i !== index);
     setItems(newItems);
   };
@@ -186,8 +142,8 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
     return items.reduce((sum, item) => sum + (Number(item.cashAmount) || 0), 0);
   }, [items]);
 
-  // --- ADD: Validation function ---
   const validateForm = (): boolean => {
+    if (isPrintMode) return true; // Don't validate in print mode
     const newErrors: { staff?: string } = {};
     if (!contactId || contactId === '') {
       newErrors.staff = 'A staff member must be selected.';
@@ -198,44 +154,126 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPrintMode) return; // Don't save in print mode
 
     if (!validateForm()) {
-      return; // Stop submission if validation fails
+      return;
     }
 
     const reportData = {
-      reportNumber: reportNumber,
-      reportDate: reportToEdit ? reportToEdit.reportDate : serverTimestamp(), // Keep original creation date
+      // FIX: Use the date from state, not the original reportToEdit date
+      reportDate: new Date(reportDate),
       
-      // --- FIX: Use staffContactId and staffName ---
       staffContactId: contactId,
       staffName: contactName,
       
       items: items.map(item => ({
         ...item,
-        itemDate: item.itemDate ? new Date(item.itemDate) : new Date(), // Convert string to Date for Firestore
+        itemDate: item.itemDate ? new Date(item.itemDate) : new Date(),
         cashAmount: Number(item.cashAmount) || 0
       })),
-      totalAmount: totalAmount, // Use totalAmount to match type
+      totalAmount: totalAmount,
       dateSubmitted: dateSubmitted ? new Date(dateSubmitted) : null,
       status: dateSubmitted ? 'Submitted' : 'Draft',
     };
 
     if (reportToEdit) {
-      onSave({ ...reportToEdit, ...reportData });
+      onSave({ 
+        ...reportToEdit, 
+        ...reportData,
+        // Make sure 'createdAt' and 'createdBy' are preserved
+        createdAt: reportToEdit.createdAt, 
+        createdBy: reportToEdit.createdBy,
+      });
     } else {
       onSave(reportData as Omit<ExpenseReport, 'id'>);
     }
     onClose();
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   if (!isOpen) return null;
 
+  // --- PRINT MODE STYLES ---
+  // These styles will hide UI elements and format for printing
+  const printStyles = `
+    @media print {
+      body {
+        background-color: #fff;
+      }
+      .modal-container {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        max-width: 100%;
+        height: auto;
+        max-height: none;
+        box-shadow: none;
+        border: none;
+        margin: 0;
+        padding: 0;
+      }
+      .modal-content {
+        box-shadow: none;
+        border: none;
+        max-height: none;
+        overflow: visible;
+        padding: 1rem;
+      }
+      .no-print {
+        display: none !important;
+      }
+      input, select, textarea {
+        border: none !important;
+        box-shadow: none !important;
+        background-color: #fff !important;
+        padding-left: 0.1rem;
+        padding-right: 0.1rem;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+      }
+      input[type="date"]::-webkit-calendar-picker-indicator {
+        display: none;
+      }
+      select {
+        pointer-events: none;
+      }
+      input[disabled], select[disabled] {
+        color: #000;
+        -webkit-text-fill-color: #000;
+      }
+      .print-only-text {
+        display: block;
+        padding: 0.25rem 0.75rem;
+      }
+      .print-hidden-select {
+        display: none;
+      }
+      .print-header {
+        margin-bottom: 2rem;
+      }
+      .print-table {
+        margin-top: 1rem;
+        margin-bottom: 2rem;
+      }
+      .print-totals {
+        margin-top: 2rem;
+      }
+    }
+  `;
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 z-40 flex justify-center items-center p-4">
-      <div className="bg-white rounded-lg shadow-2xl p-6 m-4 max-w-4xl w-full max-h-[90vh] flex flex-col font-serif">
+    <div className="fixed inset-0 bg-black bg-opacity-60 z-40 flex justify-center items-center p-4 modal-container">
+      <style>{printStyles}</style>
+      <div className="bg-white rounded-lg shadow-2xl p-6 m-4 max-w-4xl w-full max-h-[90vh] flex flex-col font-serif modal-content">
+        
         {/* --- Header --- */}
-        <div className="text-center border-b pb-4 mb-4 border-gray-300">
+        <div className="text-center border-b pb-4 mb-4 border-gray-300 print-header">
           <h2 className="text-4xl font-bold text-gray-800">NewSouth Books</h2>
           <p className="text-sm text-gray-600">
             P.O. Box 1588, Montgomery, AL 36102 • Tel 334-834-3556 • Fax 334-834-3557 • www.newsouthbooks.com
@@ -248,34 +286,54 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
             <div className="flex-1 space-y-2">
               <div className="flex items-center">
                 <span className="font-bold w-32">Expense Report #</span>
-                <span className="px-3 py-1 bg-gray-100 rounded-md">{reportNumber}</span>
+                <span className="px-3 py-1 bg-gray-100 rounded-md">
+                  {reportNumber ? reportNumber : "N/A (Pending Save)"}
+                </span>
               </div>
               <div className="flex items-center">
                 <span className="font-bold w-32">Staff Member:</span>
-                 {/* --- FIX: Changed to select, NOT disabled --- */}
-                <select
-                  value={contactId}
-                  onChange={handleStaffChange}
-                  className={`px-3 py-1 bg-white border ${errors.staff ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`}
-                >
-                  <option value="" disabled>-- Select Staff --</option>
-                  {staffContacts.map(staff => (
-                    <option key={staff.id} value={staff.id}>
-                      {staff.firstName} {staff.lastName}
-                    </option>
-                  ))}
-                </select>
+                
+                {/* --- THIS IS THE KEY FIX --- */}
+                {/* Show text in print mode, dropdown otherwise */}
+                {isPrintMode ? (
+                  <span className="px-3 py-1 print-only-text">{contactName || 'N/A'}</span>
+                ) : (
+                  <select
+                    value={contactId}
+                    onChange={handleStaffChange}
+                    // Disable if not a privileged user AND they are assigned a contact
+                    disabled={!isPrivilegedUser && !!currentUserContactId} 
+                    className={`px-3 py-1 bg-white border ${errors.staff ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm ${(!isPrivilegedUser && !!currentUserContactId) ? 'bg-gray-100' : ''}`}
+                  >
+                    <option value="" disabled>-- Select Staff --</option>
+                    {/* THIS NOW USES THE 'staffContacts' PROP */}
+                    {staffContacts.map(staff => (
+                      <option key={staff.id} value={staff.id}>
+                        {staff.firstName} {staff.lastName}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
-              {errors.staff && (
+              {errors.staff && !isPrintMode && (
                 <p className="text-red-600 text-sm ml-32">{errors.staff}</p>
               )}
             </div>
             <div className="flex-1 space-y-2 text-right">
               <div className="flex items-center justify-end">
                 <span className="font-bold w-32 text-left">Report Date:</span>
-                <span className="px-3 py-1 bg-gray-100 rounded-md">{reportDate}</span>
+                {isPrintMode ? (
+                   <span className="px-3 py-1 print-only-text">{reportDate}</span>
+                ) : (
+                  <input
+                    type="date"
+                    value={reportDate}
+                    onChange={(e) => setReportDate(e.target.value)}
+                    className="w-36 border-gray-300 rounded-md shadow-sm text-sm"
+                  />
+                )}
               </div>
-              <p className="text-xs text-gray-500 italic ml-auto max-w-xs">
+              <p className="text-xs text-gray-500 italic ml-auto max-w-xs no-print">
                 Instructions: Staple receipts to back of form. Submit form within 10 days of expense.
               </p>
             </div>
@@ -283,14 +341,14 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
 
           {/* --- Line Items Table --- */}
           <h3 className="text-center font-bold text-lg my-4">CASH EXPENSES</h3>
-          <div className="w-full">
+          <div className="w-full print-table">
             <table className="min-w-full">
               <thead className="border-b-2 border-gray-400">
                 <tr>
                   <th className="py-2 px-2 text-left text-sm font-bold text-gray-700">Item Date</th>
                   <th className="py-2 px-2 text-left text-sm font-bold text-gray-700 w-full">Item Description</th>
                   <th className="py-2 px-2 text-left text-sm font-bold text-gray-700">Cash Amount</th>
-                  <th className="py-2 px-1 text-right text-sm font-bold text-gray-700"></th>
+                  <th className="py-2 px-1 text-right text-sm font-bold text-gray-700 no-print"></th>
                 </tr>
               </thead>
               <tbody>
@@ -302,6 +360,7 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
                         value={item.itemDate}
                         onChange={(e) => handleItemChange(index, 'itemDate', e.target.value)}
                         className="w-36 border-gray-300 rounded-md shadow-sm text-sm"
+                        disabled={isPrintMode}
                       />
                     </td>
                     <td className="py-2 px-2">
@@ -311,6 +370,7 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
                         value={item.description}
                         onChange={(e) => handleItemChange(index, 'description', e.target.value)}
                         className="w-full border-gray-300 rounded-md shadow-sm text-sm"
+                        disabled={isPrintMode}
                       />
                     </td>
                     <td className="py-2 px-2">
@@ -322,9 +382,10 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
                         value={item.cashAmount || ''}
                         onChange={(e) => handleItemChange(index, 'cashAmount', e.target.value)}
                         className="w-32 border-gray-300 rounded-md shadow-sm text-sm"
+                        disabled={isPrintMode}
                       />
                     </td>
-                    <td className="py-2 px-1 text-right">
+                    <td className="py-2 px-1 text-right no-print">
                       {items.length > 1 && (
                         <button
                           type="button"
@@ -342,7 +403,7 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
             <button
               type="button"
               onClick={addNewItemRow}
-              className="mt-2 flex items-center px-3 py-1 bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-md hover:bg-blue-600"
+              className="mt-2 flex items-center px-3 py-1 bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-md hover:bg-blue-600 no-print"
             >
               <PlusIcon className="h-4 w-4 mr-1" />
               Add Item
@@ -350,17 +411,18 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
           </div>
 
           {/* --- Totals & Footer --- */}
-          <div className="mt-8 pt-4 border-t-2 border-gray-400 flex justify-between">
+          <div className="mt-8 pt-4 border-t-2 border-gray-400 flex justify-between print-totals">
             <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Date Submitted (MM/DD/YYYY)
-                </label>
-                <input
-                  type="date"
-                  value={dateSubmitted}
-                  onChange={(e) => setDateSubmitted(e.target.value)}
-                  className="w-36 border-gray-300 rounded-md shadow-sm text-sm"
-                />
+              <label className="block text-sm font-medium text-gray-700">
+                Date Submitted (MM/DD/YYYY)
+              </label>
+              <input
+                type="date"
+                value={dateSubmitted}
+                onChange={(e) => setDateSubmitted(e.target.value)}
+                className="w-36 border-gray-300 rounded-md shadow-sm text-sm"
+                disabled={isPrintMode}
+              />
             </div>
             
             <div className="space-y-2 text-right">
@@ -385,21 +447,31 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
         </form>
 
         {/* --- Form Buttons --- */}
-        <div className="mt-6 pt-4 border-t flex justify-end space-x-4 flex-shrink-0">
+        <div className="mt-6 pt-4 border-t flex justify-between items-center flex-shrink-0 no-print">
           <button
             type="button"
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+            onClick={handlePrint}
+            className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
           >
-            Cancel
+            <PrinterIcon className="h-5 w-5 mr-2" />
+            Print
           </button>
-          <button
-            type="submit"
-            onClick={handleSubmit} // This will trigger the form's onSubmit
-            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-          >
-            {reportToEdit ? 'Save Changes' : 'Save Report'}
-          </button>
+          <div className="space-x-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              onClick={handleSubmit} // This will trigger the form's onSubmit
+              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+            >
+              {reportToEdit ? 'Save Changes' : 'Save Report'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

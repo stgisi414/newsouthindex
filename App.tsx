@@ -193,9 +193,26 @@
   }, []); // Empty array is correct
 
     useEffect(() => {
-      
       let unsubscribeContacts = () => {};
-      let unsubscribeReports = () => {};
+      // --- FIX: We now need multiple report listeners ---
+      let unsubscribeReports1 = () => {};
+      let unsubscribeReports2 = () => {};
+
+      // Local state to hold results from two queries
+      let reportsByStaffId: ExpenseReport[] = [];
+      let reportsByCreatedBy: ExpenseReport[] = [];
+
+      // Function to merge and set the final state
+      const mergeReports = () => {
+        const allReports = new Map<string, ExpenseReport>();
+        // Add all from query 1
+        reportsByStaffId.forEach(report => allReports.set(report.id, report));
+        // Add all from query 2 (duplicates are automatically handled by the Map)
+        reportsByCreatedBy.forEach(report => allReports.set(report.id, report));
+        
+        // Convert Map back to array and set state
+        setExpenseReports(Array.from(allReports.values()));
+      };
 
       if (user && userRole !== UserRole.APPLICANT) {
         
@@ -237,62 +254,71 @@
 
         // --- FIX: Contacts query is now in the main block ---
         // Anyone who is not an APPLICANT can see contacts
+        // --- Contacts Query (Unchanged) ---
         const contactsQuery = query(collection(db, "contacts"), orderBy("lastName", "asc"));
         unsubscribeContacts = onSnapshot(contactsQuery, (snapshot) => {
           setContacts(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as Contact)));
         });
 
-        // --- DISABLED: BOOKS, TRANSACTIONS, ETC. --- (Your code, unchanged)
-        // ... (your commented-out code remains here) ...
-        // -----------------------------------------------------------
-
-        // --- UPDATED: Expense Reports Logic ---
+        // --- NEW EXPENSE REPORT LOGIC ---
         
-        // 1. Determine if ready (this now ONLY uses token data for permission)
-        const isReadyToFetchReports = 
-          userRole === UserRole.MASTER_ADMIN || 
-          userRole === UserRole.BOOKKEEPER ||
-          (userRole === UserRole.ADMIN && userContactId) || // userContactId from doc is fine
-          (userRole === UserRole.VIEWER && userContactId);
-
-        // 2. Only run the reports query IF we are ready
-        if (isReadyToFetchReports) {
-            let reportsQuery;
-            
-            // Check if the user is Master Admin OR Bookkeeper (from TOKEN)
-            if (userRole === UserRole.MASTER_ADMIN || userRole === UserRole.BOOKKEEPER) {
-                 reportsQuery = query(collection(db, "expenseReports"), orderBy("reportNumber", "desc"));
-            } else {
-                 reportsQuery = query(
-                     collection(db, "expenseReports"), 
-                     where("staffContactId", "==", userContactId),
-                     orderBy("reportNumber", "desc")
-                 );
-            }
-
-            unsubscribeReports = onSnapshot(reportsQuery, (snapshot) => {
+        // Check if the user is Master Admin OR Bookkeeper (from TOKEN)
+        if (userRole === UserRole.MASTER_ADMIN || userRole === UserRole.BOOKKEEPER) {
+            // 1. Privileged users: Get ALL reports with one query
+            const reportsQuery = query(collection(db, "expenseReports"), orderBy("reportNumber", "desc"));
+            unsubscribeReports1 = onSnapshot(reportsQuery, (snapshot) => {
+              // This is the only listener, so it can set the state directly
               setExpenseReports(snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as ExpenseReport)));
             }, (error) => {
-                console.error("Error fetching expense reports:", error);
+                console.error("Error fetching all expense reports:", error);
             });
         
         } else {
-           setExpenseReports([]);
+            // 2. Regular Admins / Viewers: Run TWO separate queries
+            
+            // Query 1: Reports where they are the staff member
+            if (userContactId) {
+              const query1 = query(
+                  collection(db, "expenseReports"), 
+                  where("staffContactId", "==", userContactId)
+              );
+              unsubscribeReports1 = onSnapshot(query1, (snapshot) => {
+                  reportsByStaffId = snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as ExpenseReport));
+                  mergeReports(); // Merge and update state
+              }, (error) => {
+                  console.error("Error fetching reports by staffContactId:", error);
+              });
+            } else {
+              // If user has no contactId, this query shouldn't run
+              reportsByStaffId = [];
+              mergeReports();
+            }
+
+            // Query 2: Reports they created
+            const query2 = query(
+                collection(db, "expenseReports"), 
+                where("createdBy", "==", user.uid)
+            );
+            unsubscribeReports2 = onSnapshot(query2, (snapshot) => {
+                reportsByCreatedBy = snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id } as ExpenseReport));
+                mergeReports(); // Merge and update state
+            }, (error) => {
+                console.error("Error fetching reports by createdBy:", error);
+            });
         }
 
-        // 4. Return the cleanup
+        // Return the cleanup function
         return () => {
           unsubscribeContacts();
-          unsubscribeReports();
+          unsubscribeReports1();
+          unsubscribeReports2();
         };
 
       } else {
         // Clear data if not logged in or applicant
         setContacts([]);
-        // ... (your commented-out lines)
         setExpenseReports([]);
         
-        // Return an empty cleanup
         return () => {};
       }
     }, [user, userRole, isAdmin, userContactId]); // Dependencies are correct
@@ -381,16 +407,20 @@
     };
 
     // --- Expense Report Functions ---
-      const addExpenseReport = async (reportData: Omit<ExpenseReport, 'id'>) => {
+      // --- NEW: Call backend function for addExpenseReport ---
+      const callAddExpenseReport = httpsCallable(functions, 'addExpenseReport');
+
+      const addExpenseReport = async (reportData: Omit<ExpenseReport, 'id'>): Promise<boolean> => {
           try {
-              await addDoc(collection(db, "expenseReports"), {
-                  ...reportData,
-                  createdAt: serverTimestamp(),
-                  createdBy: user?.uid, // Important for security rules
-                  lastModifiedAt: serverTimestamp(),
-              });
+              // The backend will add createdBy, createdAt, and reportNumber
+              await callAddExpenseReport(reportData);
+              return true; // <-- Return true on success
           } catch (error) {
               console.error("Error adding expense report:", error);
+              // --- ADD THESE LINES ---
+              alert("Save Failed: " + (error as Error).message); // Show the user the error
+              return false; // Return false on failure
+              // --- END ADD ---
           }
       };
 
@@ -594,6 +624,58 @@
       console.log('%c[App.tsx Received Intent/Data]', 'color: blue; font-weight: bold;', { intent, data });
       console.log('%c[FRONTEND LOG] Processing AI Command:', 'color: green; font-weight: bold;', { intent, data });
       switch (intent) {
+        case 'FIND_EXPENSE_REPORT': {
+            const { filters } = (data || {}) as { filters?: { staffName?: string, status?: string, reportNumber?: number } };
+            if (!filters || Object.keys(filters).length === 0) {
+                return { success: false, message: "Please specify a staff name, status, or report number to find." };
+            }
+
+            let foundReports = expenseReports;
+            let filterDescs: string[] = [];
+
+            if (filters.staffName) {
+                const nameLower = filters.staffName.toLowerCase();
+                foundReports = foundReports.filter(r => r.staffName?.toLowerCase().includes(nameLower));
+                filterDescs.push(`staff name "${filters.staffName}"`);
+            }
+            if (filters.status) {
+                const statusLower = filters.status.toLowerCase();
+                foundReports = foundReports.filter(r => r.status?.toLowerCase() === statusLower);
+                filterDescs.push(`status "${filters.status}"`);
+            }
+            if (filters.reportNumber) {
+                foundReports = foundReports.filter(r => r.reportNumber === filters.reportNumber);
+                filterDescs.push(`report #${filters.reportNumber}`);
+            }
+
+            const message = `Found ${foundReports.length} reports matching ${filterDescs.join(' and ')}.`;
+            return { success: true, message, payload: foundReports, targetView: 'expense-reports' };
+        }
+
+        case 'COUNT_EXPENSE_REPORTS': {
+            const { filters } = (data || {}) as { filters?: { staffName?: string, status?: string } };
+            if (!filters || Object.keys(filters).length === 0) {
+                return { success: false, message: "Please specify a staff name or status to count." };
+            }
+
+            let foundReports = expenseReports;
+            let filterDescs: string[] = [];
+
+            if (filters.staffName) {
+                const nameLower = filters.staffName.toLowerCase();
+                foundReports = foundReports.filter(r => r.staffName?.toLowerCase().includes(nameLower));
+                filterDescs.push(`staff name "${filters.staffName}"`);
+            }
+            if (filters.status) {
+                const statusLower = filters.status.toLowerCase();
+                foundReports = foundReports.filter(r => r.status?.toLowerCase() === statusLower);
+                filterDescs.push(`status "${filters.status}"`);
+            }
+
+            const message = `Found ${foundReports.length} reports matching ${filterDescs.join(' and ')}.`;
+            return { success: true, message, payload: foundReports, targetView: 'expense-reports' };
+        }
+
         case 'DELETE_TRANSACTION': {
           if (!isAdmin) return { success: false, message: "Sorry, only admins can delete transactions." };
           const { transactionIdentifier } = (data || {}) as { transactionIdentifier?: { contactName?: string, date?: string } };
@@ -1652,7 +1734,11 @@
             currentUser={user}
             currentUserRole={userRole}
             currentUserContactId={userContactId}
+
+            onForceSync={handleForceSync}
             // I have removed the 'books' and 'transactions' props that were here
+
+            onShowTutorial={() => setAppView('tutorial')}
           />
       );
     };

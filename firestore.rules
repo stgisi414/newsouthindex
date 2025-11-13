@@ -3,7 +3,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- HELPER FUNCTIONS (Reading from Auth Token) ---
+    // --- HELPER FUNCTIONS (Reading from Auth Token ONLY) ---
     function isUserRole(role) {
       return request.auth.token.role == role;
     }
@@ -20,21 +20,17 @@ service cloud.firestore {
        return isUserRole('bookkeeper');
     }
     function isUserViewer() {
-      return isUserRole('viewer') || isUserAdminOrHigher();
-    }
-    
-    // This helper function MUST read from the DB
-    // We make it safer by using .get()
-    function getUserContactId() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('contactId', null);
+      // A bookkeeper can see everything a viewer can
+      return isUserRole('viewer') || isUserAdminOrHigher() || isUserBookkeeper();
     }
     // ----------------------------
 
     match /users/{userId} {
-      allow list: if isUserAdminOrHigher() || request.auth != null;
+      // Admins, Master Admins, and Bookkeepers can list users
+      allow list: if isUserAdminOrHigher() || isUserBookkeeper();
       allow create: if request.auth.uid == userId;
       allow read: if request.auth.uid == userId || isUserAdminOrHigher();
-      allow update, delete: if isUserMasterAdmin();
+      allow update, delete: if isUserMasterAdmin(); 
 
       match /chat/{chatId} {
           allow read, write: if request.auth.uid == userId;
@@ -42,7 +38,7 @@ service cloud.firestore {
     }
 
     match /contacts/{contactId} {
-      allow read: if isUserViewer();
+      allow list, read: if isUserViewer();
       allow write: if isUserAdminOrHigher();
     }
 
@@ -53,24 +49,35 @@ service cloud.firestore {
     // --- UPDATED EXPENSE REPORT RULES ---
     match /expenseReports/{reportId} {
       
-      // Create: (Unchanged)
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.createdBy; 
-
-      // --- FIX: ADDED 'LIST' PERMISSION ---
-      // This rule allows queries on the collection
+      // Create:
+      allow create: if request.auth.uid == request.resource.data.createdBy;
+      
+      // List (Queries):
+      // This rule reads from the auth token.
       allow list: if 
         // Master Admins and Bookkeepers can query the whole collection
-        isUserMasterAdmin() || isUserBookkeeper() ||
-        // Other users can ONLY query if they are filtering by their own contactId
-        (getUserContactId() != null && request.query.where.staffContactId == getUserContactId());
-
-      // Read/Update/Delete: (For single documents)
-      // This rule allows getting/editing a specific document
-      allow read, update, delete: if 
-        isUserMasterAdmin() || 
+        isUserMasterAdmin() ||
         isUserBookkeeper() ||
-        // The staff member on the report can get/edit it
-        (getUserContactId() != null && resource.data.staffContactId == getUserContactId());
+        // Other users can query if they are filtering by their own contactId
+        (request.auth.token.contactId != null && request.query.where.staffContactId == request.auth.token.contactId) ||
+        // ...OR if they are filtering by their own user ID
+        (request.auth != null && request.query.where.createdBy == request.auth.uid);
+
+    // Read/Update/Delete: (For single documents)
+    // This rule also reads from the auth token.
+    allow read, update, delete: if
+        isUserMasterAdmin() ||
+        isUserBookkeeper() ||
+        // FIX: The staff member on the report can get/edit it
+        (request.auth.token.contactId != null && resource.data.staffContactId == request.auth.token.contactId) ||
+        // ...OR the user who created it can get/edit it
+        (request.auth != null && resource.data.createdBy == request.auth.uid);
+    }
+
+    // --- Rule for the counter ---
+    match /metadata/expenseReportCounter {
+      // Only backend functions (like addExpenseReport) can read/write this
+      allow read, write: if false; 
     }
   }
 }

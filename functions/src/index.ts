@@ -63,7 +63,7 @@ admin.initializeApp();
 
 // --- Function Declarations ---
 
-const findTransactionDeclaration: FunctionDeclaration = {
+/* const findTransactionDeclaration: FunctionDeclaration = {
     name: "findTransaction",
     description: "Finds transactions based on a contact's name or a date.",
     parameters: {
@@ -86,7 +86,7 @@ const deleteTransactionDeclaration: FunctionDeclaration = {
         },
         required: ["contactName"],
     },
-};
+}; */
 
 const countContactsDeclaration: FunctionDeclaration = {
     name: "countContacts",
@@ -109,7 +109,7 @@ const countContactsDeclaration: FunctionDeclaration = {
     },
 };
 
-const countBooksDeclaration: FunctionDeclaration = {
+/* const countBooksDeclaration: FunctionDeclaration = {
     name: "countBooks",
     description: "Counts the total number of books based on optional filters.",
     parameters: {
@@ -151,7 +151,7 @@ const getMetricsDeclaration: FunctionDeclaration = {
         },
         required: ["target", "metric"],
     },
-};
+};  */
 
 const logInteractionDeclaration: FunctionDeclaration = {
   name: "logInteraction",
@@ -197,6 +197,31 @@ const getCustomerSummaryDeclaration: FunctionDeclaration = {
     },
     required: ["contactIdentifier"]
   }
+};
+
+const findExpenseReportDeclaration: FunctionDeclaration = {
+  name: "findExpenseReport",
+  description: "Finds expense reports based on staff name, status, or report number.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      staffName: { type: Type.STRING, description: "The name of the staff member on the report (e.g., 'Test2 Contact2')." },
+      status: { type: Type.STRING, description: "The status of the report (e.g., 'Submitted', 'Draft')." },
+      reportNumber: { type: Type.NUMBER, description: "The report number (e.g., 1003)." },
+    },
+  },
+};
+
+const countExpenseReportsDeclaration: FunctionDeclaration = {
+  name: "countExpenseReports",
+  description: "Counts expense reports based on status or staff name.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      staffName: { type: Type.STRING, description: "The name of the staff member." },
+      status: { type: Type.STRING, description: "The status to filter by (e.g., 'Submitted', 'Draft')." },
+    },
+  },
 };
 
 const addContactDeclaration: FunctionDeclaration = {
@@ -316,7 +341,7 @@ const deleteContactDeclaration: FunctionDeclaration = {
   },
 };
 
-const addBookDeclaration: FunctionDeclaration = {
+/* const addBookDeclaration: FunctionDeclaration = {
   name: "addBook",
   description: "Adds a new book to the inventory.",
   parameters: {
@@ -511,50 +536,36 @@ const removeAttendeeDeclaration: FunctionDeclaration = {
     },
     required: ["eventIdentifier", "contactIdentifier"],
   },
-};
-
-
+}; */
 
 // --- AI Tools Configuration ---
 const aiTools: GeminiTool[] = [{
   functionDeclarations: [
     // Counts
     countContactsDeclaration,
-    countBooksDeclaration,
-    countEventsDeclaration,
+    countExpenseReportsDeclaration, // <-- ADD THIS
 
     // Metrics
-    getMetricsDeclaration,
+    //getMetricsDeclaration,
 
-    // Transactions
-    findTransactionDeclaration,
-    deleteTransactionDeclaration,
+    // Transactions (Assuming you're keeping these)
+    //findTransactionDeclaration,
+    //deleteTransactionDeclaration,
 
     // Contacts
     addContactDeclaration,
     findContactDeclaration,
     updateContactDeclaration,
     deleteContactDeclaration,
-
-    // Books
-    addBookDeclaration,
-    findBookDeclaration,
-    updateBookDeclaration,
-    deleteBookDeclaration,
-
-    // Events
-    addEventDeclaration,
-    findEventDeclaration,
-    updateEventDeclaration,
-    deleteEventDeclaration,
-
-    // Attendees
-    addAttendeeDeclaration,
-    removeAttendeeDeclaration,
     
     // New CRM Functions
     logInteractionDeclaration,
-    getCustomerSummaryDeclaration
+    getCustomerSummaryDeclaration,
+
+    // New Expense Report Functions
+    findExpenseReportDeclaration, // <-- ADD THIS
+
+    // --- REMOVE ALL BOOK/EVENT/ATTENDEE DECLARATIONS ---
   ],
 }];
 
@@ -562,6 +573,18 @@ const aiTools: GeminiTool[] = [{
 const fCall = (name: string, args: Record<string, any>) => ({ functionCall: { name, args } });
 
 const fewShotExamples: GenerativeContent[] = [
+    // --- EXPENSE REPORT EXAMPLES ---
+    { role: "user", parts: [{ text: "how many draft expense reports are there?" }] },
+    { role: "model", parts: [fCall("countExpenseReports", { status: "Draft" })] },
+    { role: "user", parts: [{ text: "count submitted reports" }] },
+    { role: "model", parts: [fCall("countExpenseReports", { status: "Submitted" })] },
+    { role: "user", parts: [{ text: "find report 1003" }] },
+    { role: "model", parts: [fCall("findExpenseReport", { reportNumber: 1003 })] },
+    { role: "user", parts: [{ text: "show me expense reports for Test2 Contact2" }] },
+    { role: "model", parts: [fCall("findExpenseReport", { staffName: "Test2 Contact2" })] },
+    { role: "user", parts: [{ text: "find submitted reports for Test2 Contact2" }] },
+    { role: "model", parts: [fCall("findExpenseReport", { staffName: "Test2 Contact2", status: "Submitted" })] },
+
     // --- TRANSACTION MANAGEMENT EXAMPLES ---
     { role: "user", parts: [{ text: "Find the last transaction for Jane Doe." }] },
     { role: "model", parts: [fCall("findTransaction", { contactName: "jane doe" })] },
@@ -1099,7 +1122,12 @@ export const processCommand = onCall({
 
             // --- Your existing switch statement (no changes needed here) ---
             switch (name) {
-                // ... (all your cases remain the same) ...
+                case "findExpenseReport":
+                    responsePayload = { intent: 'FIND_EXPENSE_REPORT', data: { filters: args }, responseText: result.text || `Finding expense reports.` };
+                    break;
+                case "countExpenseReports":
+                    responsePayload = { intent: 'COUNT_EXPENSE_REPORTS', data: { filters: args }, responseText: result.text || `Counting expense reports.` };
+                    break;
                  case "findTransaction":
                     responsePayload = { intent: 'FIND_TRANSACTION', data: { transactionIdentifier: args }, responseText: result.text || `Finding transaction.` };
                     break;
@@ -1259,7 +1287,7 @@ export const setUserRole = onCall({cors: ['https://nsindxonline.web.app', 'https
     const { userId, role: newRole } = request.data;
 
     // Check for valid arguments
-    if (!userId || !['admin', 'viewer', 'applicant'].includes(newRole)) {
+    if (!userId || !['admin', 'viewer', 'applicant', 'bookkeeper'].includes(newRole)) {
         throw new HttpsError("invalid-argument", "The function must be called with a `userId` and a valid `role` (admin, viewer, or applicant).");
     }
 
@@ -1271,11 +1299,17 @@ export const setUserRole = onCall({cors: ['https://nsindxonline.web.app', 'https
         const requestingUserRef = db.collection("users").doc(requestingUid);
         const requestingUserDoc = await requestingUserRef.get();
 
-        if (!requestingUserDoc.exists || requestingUserDoc.data()?.role !== 'admin') {
+        // --- THIS IS THE FIX ---
+        // Get the user data
+        const requestingUserData = requestingUserDoc.data();
+
+        // Check if the user exists AND if their role is 'admin' OR 'master-admin'
+        if (!requestingUserDoc.exists || (requestingUserData?.role !== 'admin' && requestingUserData?.role !== 'master-admin')) {
             throw new HttpsError("permission-denied", "You must be an admin to change user roles.");
         }
 
-        const isMasterAdmin = requestingUserDoc.data()?.isMasterAdmin === true;
+        // Now, check for isMasterAdmin from the same data
+        const isMasterAdmin = requestingUserData?.isMasterAdmin === true;
 
         // 2. Get the target user's full doc
         const targetUserRef = db.collection("users").doc(userId);
@@ -1357,11 +1391,17 @@ export const deleteUser = onCall({cors: ['https://nsindxonline.web.app', 'https:
         const requestingUserRef = db.collection("users").doc(requestingUid);
         const requestingUserDoc = await requestingUserRef.get();
 
-        if (!requestingUserDoc.exists || requestingUserDoc.data()?.role !== 'admin') {
+        // --- THIS IS THE FIX ---
+        // Get the user data
+        const requestingUserData = requestingUserDoc.data();
+
+        // Check if the user exists AND if their role is 'admin' OR 'master-admin'
+        if (!requestingUserDoc.exists || (requestingUserData?.role !== 'admin' && requestingUserData?.role !== 'master-admin')) {
             throw new HttpsError("permission-denied", "You must be an admin to delete users.");
         }
-
-        const isMasterAdmin = requestingUserDoc.data()?.isMasterAdmin === true;
+        
+        // Now, check for isMasterAdmin from the same data
+        const isMasterAdmin = requestingUserData?.isMasterAdmin === true;
 
         // 2. Get the target user's full doc
         const targetUserRef = db.collection("users").doc(userId);
@@ -1414,10 +1454,11 @@ export const makeMeAdmin = onCall({cors: ['https://nsindxonline.web.app', 'https
     const uid = request.auth.uid;
     const email = request.auth.token.email || "Unknown";
     try {
-        await admin.auth().setCustomUserClaims(uid, { role: 'admin' });
+        // FIX: Set the correct 'master-admin' role on the auth token
+        await admin.auth().setCustomUserClaims(uid, { role: 'master-admin' });
         // --- This is the key change ---
         await admin.firestore().collection("users").doc(uid).set({
-            role: 'admin',
+            role: 'master-admin', // <-- FIX 1: Set the correct role in the database
             isAdmin: true,
             isMasterAdmin: true, // Set the first admin as Master Admin
             email: email, // <-- ADD THIS
@@ -1510,6 +1551,14 @@ export const forceSetMyRole = onCall({
 
     // 5. Force-set the claims on the Auth token
     await admin.auth().setCustomUserClaims(uid, newClaims);
+
+    // --- FIX 2: WRITE THE CORRECTED ROLE BACK TO THE DATABASE ---
+    // This fixes the de-synced state the user is seeing.
+    if (isMasterAdmin && userData.role !== 'master-admin') {
+      await userDocRef.update({ role: "master-admin" });
+      logger.info(`Updated database role for ${uid} to 'master-admin'.`);
+    }
+    // --- END FIX ---
     
     logger.info(`Successfully FORCED claim sync for ${uid}:`, newClaims);
     return { success: true, message: "Claims synced!", claims: newClaims };
@@ -1518,5 +1567,63 @@ export const forceSetMyRole = onCall({
     logger.error(`Error in forceSetMyRole for ${uid}:`, error);
     if (error instanceof HttpsError) { throw error; }
     throw new HttpsError("internal", "Failed to force-set role.");
+  }
+});
+
+// --- NEW FUNCTION TO SECURELY ADD EXPENSE REPORTS ---
+export const addExpenseReport = onCall({
+  cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'http://localhost:3000']
+}, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be logged in.");
+  }
+
+  const reportData = request.data;
+  const db = admin.firestore();
+
+  // 1. Define the counter document
+  const counterRef = db.collection("metadata").doc("expenseReportCounter");
+  const reportsRef = db.collection("expenseReports");
+
+  // --- FIX: REMOVED THE 'let nextReportNumber' LINE ---
+
+  try {
+    // 2. Run a transaction that *returns* the new number
+    const nextReportNumber = await db.runTransaction(async (transaction) => {
+      const counterDoc = await transaction.get(counterRef);
+      
+      let newCount: number; // <-- Declare the new count *inside* the transaction
+
+      if (!counterDoc.exists) {
+        // If it doesn't exist, start at 1001
+        newCount = 1001;
+        transaction.set(counterRef, { count: newCount });
+      } else {
+        // It exists, increment it
+        newCount = (counterDoc.data()?.count || 1000) + 1;
+        transaction.update(counterRef, { count: newCount });
+      }
+
+      // 3. Create the new report document with the guaranteed unique number
+      const newReportRef = reportsRef.doc();
+      transaction.set(newReportRef, {
+        ...reportData,
+        reportNumber: newCount, // Set the new number
+        createdBy: uid,                 // Set the creator
+        createdAt: FieldValue.serverTimestamp(), // Set timestamps
+        lastModifiedAt: FieldValue.serverTimestamp(),
+      });
+      
+      // --- FIX: Return the new count from the transaction ---
+      return newCount; 
+    });
+
+    // 4. Now 'nextReportNumber' is assigned and in scope.
+    return { success: true, message: `Report #${nextReportNumber} created.` };
+
+  } catch (error) {
+    logger.error("Error in addExpenseReport transaction:", error);
+    throw new HttpsError("internal", "Failed to create expense report.");
   }
 });
