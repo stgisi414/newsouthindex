@@ -179,34 +179,22 @@
         // This is the correct, simple filter.
         // It finds all contacts that have "Staff" in their category list.
         const staffContacts = useMemo(() => {
-            // --- START DEBUGGING ---
-            console.log("--- DEBUG: staffContacts useMemo ---");
-            console.log(`[DEBUG] Total contacts received by Dashboard: ${contacts.length}`);
-            
-            // Let's log the raw Category.STAFF value to be 100% sure
-            console.log(`[DEBUG] Filtering for Category.STAFF which has the value: "${Category.STAFF}"`);
-
-            const filtered = contacts.filter(contact => {
-                const isArray = Array.isArray(contact.category);
-                const hasStaff = isArray && contact.category.includes(Category.STAFF);
+            return contacts.filter(contact => {
+                const cat = contact.category;
                 
-                return isArray && hasStaff;
+                // Case 1: Category is an Array (Correct/New format)
+                if (Array.isArray(cat)) {
+                    return cat.includes(Category.STAFF);
+                }
+                
+                // Case 2: Category is a String (Legacy/Manual format)
+                if (typeof cat === 'string') {
+                    return cat === Category.STAFF;
+                }
+                
+                return false;
             });
-
-            // This is the most important log:
-            console.log(`[DEBUG] Found ${filtered.length} staff contacts:`, filtered);
-            
-            // If no staff are found, log ALL contacts to see why
-            if (filtered.length === 0 && contacts.length > 0) {
-                console.log("[DEBUG] No staff found. Logging all contacts for inspection:");
-                contacts.forEach(c => {
-                    console.log(`- Contact: ${c.firstName} ${c.lastName}, Categories: ${JSON.stringify(c.category)}`);
-                });
-            }
-            // --- END DEBUGGING ---
-
-            return filtered;
-        }, [contacts]); // Now it only depends on the contacts list
+        }, [contacts]);
 
         // Removed memos for books, transactions, events
 

@@ -1,5 +1,6 @@
 import { onCall, HttpsError, onRequest, Request } from "firebase-functions/v2/https";
 import { auth } from "firebase-functions/v1";
+import { onDocumentDeleted } from "firebase-functions/v2/firestore";
 import { Response } from "express";
 import * as logger from "firebase-functions/logger";
 import { GoogleGenAI, FunctionDeclaration, Type } from "@google/genai";
@@ -1017,7 +1018,7 @@ const ai = new GoogleGenAI({apiKey: process.env.GEMINI_API_KEY as string});
 const model = "gemini-2.5-flash-lite"; // Or your preferred model
 
 // --- Seed Database Function (using onCall) ---
-export const seedDatabase = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'http://localhost:3000']}, async (request) => { // Use specific CORS origin
+export const seedDatabase = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'https://newsouthindex.com', 'http://localhost:3000']}, async (request) => { // Use specific CORS origin
     if (process.env.FUNCTIONS_EMULATOR !== "true") {
         throw new HttpsError("permission-denied", "This function can only be run in the emulator environment.");
     }
@@ -1076,7 +1077,7 @@ export const seedDatabase = onCall({cors: ['https://nsindxonline.web.app', 'http
 // --- processCommand Function (using onRequest with manual PNA/CORS) ---
 export const processCommand = onCall({
     secrets: ["GEMINI_API_KEY"],
-    cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'http://localhost:3000']
+    cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'https://newsouthindex.com', 'http://localhost:3000']
 }, async (request) => {
 
     logger.info("Starting up process command (onCall)");
@@ -1276,7 +1277,7 @@ export const processCommand = onCall({
 // --- END processCommand ---
 
 // --- User Management Functions (using onCall) ---
-export const setUserRole = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'http://localhost:3000']}, async (request) => { // Use specific CORS origin
+export const setUserRole = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'https://newsouthindex.com', 'http://localhost:3000']}, async (request) => { // Use specific CORS origin
     const requestingUid = request.auth?.uid;
 
     // Check for authentication
@@ -1370,7 +1371,7 @@ export const setUserRole = onCall({cors: ['https://nsindxonline.web.app', 'https
     }
 });
 
-export const deleteUser = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'http://localhost:3000']}, async (request) => { // Use specific CORS origin
+export const deleteUser = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'https://newsouthindex.com', 'http://localhost:3000']}, async (request) => { // Use specific CORS origin
     const requestingUid = request.auth?.uid;
 
     // Check for authentication
@@ -1442,7 +1443,7 @@ export const deleteUser = onCall({cors: ['https://nsindxonline.web.app', 'https:
     }
 });
 
-export const makeMeAdmin = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'http://localhost:3000']}, async (request) => { // Use specific CORS origin
+export const makeMeAdmin = onCall({cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'https://newsouthindex.com', 'http://localhost:3000']}, async (request) => { // Use specific CORS origin
     if (!request.auth) {
         throw new HttpsError("unauthenticated", "You must be logged in to perform this action.");
     }
@@ -1509,7 +1510,7 @@ export const onUserCreate = auth.user().onCreate(async (user) => {
 
 // --- NEW MANUAL SYNC FUNCTION ---
 export const forceSetMyRole = onCall({
-  cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'http://localhost:3000']
+  cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'https://newsouthindex.com', 'http://localhost:3000']
 }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) {
@@ -1572,8 +1573,11 @@ export const forceSetMyRole = onCall({
 
 // --- NEW FUNCTION TO SECURELY ADD EXPENSE REPORTS ---
 export const addExpenseReport = onCall({
-  cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'http://localhost:3000']
+  cors: ['https://nsindxonline.web.app', 'https://newsouthindex.online', 'https://newsouthindex.com', 'http://localhost:3000']
 }, async (request) => {
+  // CHANGE THIS LINE:
+  logger.info("Starting expense report creation..."); // <--- Add this line to force a change
+
   const uid = request.auth?.uid;
   if (!uid) {
     throw new HttpsError("unauthenticated", "You must be logged in.");
@@ -1626,4 +1630,47 @@ export const addExpenseReport = onCall({
     logger.error("Error in addExpenseReport transaction:", error);
     throw new HttpsError("internal", "Failed to create expense report.");
   }
+});
+
+// --- TRIGGER: Auto-Recalculate Counter on Delete ---
+export const onReportDeleted = onDocumentDeleted("expenseReports/{reportId}", async (event) => {
+    // 1. Check if data exists (it should for a delete event)
+    const snap = event.data;
+    if (!snap) return;
+
+    const deletedReport = snap.data();
+    const deletedNumber = deletedReport?.reportNumber;
+
+    if (!deletedNumber) return;
+
+    const db = admin.firestore();
+    const counterRef = db.collection("metadata").doc("expenseReportCounter");
+    const reportsRef = db.collection("expenseReports");
+
+    try {
+        await db.runTransaction(async (transaction) => {
+            // 2. Find the NEW highest report number
+            // We query for the single highest number remaining in the database
+            const highestReportSnapshot = await transaction.get(
+                reportsRef.orderBy("reportNumber", "desc").limit(1)
+            );
+
+            let newMax = 1000; // Default baseline (so next is 1001)
+
+            if (!highestReportSnapshot.empty) {
+                // If reports still exist, grab the highest number
+                const highestReport = highestReportSnapshot.docs[0].data();
+                newMax = highestReport.reportNumber;
+            }
+
+            // 3. Update the counter to match this number
+            // If we deleted #1005 and #1004 is now top, newMax is 1004.
+            // If we deleted #1003 but #1005 exists, newMax is 1005 (no change).
+            transaction.set(counterRef, { count: newMax }, { merge: true });
+            
+            logger.info(`Report #${deletedNumber} deleted. Counter synced to ${newMax}.`);
+        });
+    } catch (error) {
+        logger.error("Failed to sync expense report counter:", error);
+    }
 });

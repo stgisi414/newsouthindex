@@ -201,68 +201,72 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
   // These styles will hide UI elements and format for printing
   const printStyles = `
     @media print {
-      body {
-        background-color: #fff;
-      }
-      .modal-container {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        max-width: 100%;
-        height: auto;
-        max-height: none;
-        box-shadow: none;
-        border: none;
+      /* 1. Kill Browser Margins */
+      @page {
         margin: 0;
-        padding: 0;
+        size: auto;
       }
-      .modal-content {
-        box-shadow: none;
-        border: none;
-        max-height: none;
-        overflow: visible;
-        padding: 1rem;
+
+      /* 2. Reset Global Layout */
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        height: auto !important;
+        overflow: visible !important;
+        background: white !important;
       }
-      .no-print {
-        display: none !important;
+
+      /* 3. Hide everything and collapse their space */
+      body * {
+        visibility: hidden;
+        height: 0; /* Prevents ghost content from creating extra pages */
+        overflow: hidden; /* Clips any hidden content */
       }
-      input, select, textarea {
-        border: none !important;
+
+      /* 4. Resurrect the Modal Container */
+      /* We must specifically override the 'fixed', 'p-4', 'flex' classes */
+      .modal-container {
+        visibility: visible !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important; /* Removes the "Space at Top" */
+        width: 100% !important;
+        height: auto !important;
+        display: block !important; /* Disables flex centering */
+        background: white !important;
+        inset: 0 !important;
+        z-index: 9999 !important;
+      }
+
+      /* 5. Style the Actual Report Content */
+      #printable-area {
+        visibility: visible !important;
+        position: relative !important;
+        height: auto !important;
+        width: 100% !important;
+        margin: 0 !important; /* Removes the "m-4" causing overflow */
+        
+        /* Add a safe printing padding manually so it looks good */
+        padding: 20px 40px !important; 
+        
         box-shadow: none !important;
-        background-color: #fff !important;
-        padding-left: 0.1rem;
-        padding-right: 0.1rem;
-        -webkit-appearance: none;
-        -moz-appearance: none;
-        appearance: none;
+        max-width: none !important;
+        max-height: none !important;
+        overflow: visible !important;
       }
-      input[type="date"]::-webkit-calendar-picker-indicator {
-        display: none;
+
+      /* 6. Ensure children of the report are visible and take up space */
+      #printable-area * {
+        visibility: visible !important;
+        height: auto !important;
+        overflow: visible !important;
       }
-      select {
-        pointer-events: none;
-      }
-      input[disabled], select[disabled] {
-        color: #000;
-        -webkit-text-fill-color: #000;
-      }
-      .print-only-text {
-        display: block;
-        padding: 0.25rem 0.75rem;
-      }
-      .print-hidden-select {
-        display: none;
-      }
-      .print-header {
-        margin-bottom: 2rem;
-      }
-      .print-table {
-        margin-top: 1rem;
-        margin-bottom: 2rem;
-      }
-      .print-totals {
-        margin-top: 2rem;
+
+      /* 7. Hide Buttons explicitly */
+      button, .no-print {
+        display: none !important;
       }
     }
   `;
@@ -270,7 +274,10 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 z-40 flex justify-center items-center p-4 modal-container">
       <style>{printStyles}</style>
-      <div className="bg-white rounded-lg shadow-2xl p-6 m-4 max-w-4xl w-full max-h-[90vh] flex flex-col font-serif modal-content">
+      <div 
+        id="printable-area" 
+        className="bg-white rounded-lg shadow-2xl p-6 m-4 max-w-4xl w-full max-h-[90vh] flex flex-col font-serif modal-content"
+      >
         
         {/* --- Header --- */}
         <div className="text-center border-b pb-4 mb-4 border-gray-300 print-header">
@@ -444,6 +451,27 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
               </div>
             </div>
           </div>
+
+          {/* === ADD THIS NEW SECTION === */}
+          <div className="mt-16 grid grid-cols-2 gap-x-12 gap-y-8 pt-12 border-t border-gray-300">
+            <div className="space-y-2">
+              <span className="block w-full h-8 border-b border-gray-400"></span>
+              <label className="block text-sm font-medium text-gray-700">Your Signature</label>
+            </div>
+            <div className="space-y-2">
+              <span className="block w-full h-8 border-b border-gray-400"></span>
+              <label className="block text-sm font-medium text-gray-700">Approved by:</label>
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Advance Check #</label>
+              <span className="block w-full h-8 border-b border-gray-400"></span>
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Reimb Ck #</label>
+              <span className="block w-full h-8 border-b border-gray-400"></span>
+            </div>
+          </div>
+          {/* === END NEW SECTION === */}
         </form>
 
         {/* --- Form Buttons --- */}

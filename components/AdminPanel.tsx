@@ -125,7 +125,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ users, currentUser, onForceSync
                       {user.email || "No Email"}
                       {user.id === currentUser.uid && " (You)"}
                     </div>
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-gray-500 capitalize">
                       {isTargetMaster ? "Master Admin" : user.role}
                     </div>
                   </td>

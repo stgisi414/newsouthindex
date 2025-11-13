@@ -1695,9 +1695,9 @@
         return <TutorialPage onBackToDashboard={() => setAppView('dashboard')} />;
       }
       // 2. If user is logged in BUT is an applicant, show the pending modal
-      /* if (userRole === UserRole.APPLICANT) {
+      if (userRole === UserRole.APPLICANT) {
         return <ApplicantModal onLogout={handleLogout} />;
-      } */
+      }
       // 3. If user is logged in AND is a Viewer or Admin, show the Dashboard
       return (
         <Dashboard
