@@ -104,7 +104,14 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
             updatedValue = updatedValue?.toLowerCase();
         }
         
-        if (updatedValue === '' || updatedValue === '-') {
+        // --- THIS IS THE BUG ---
+        // if (updatedValue === '' || updatedValue === '-') {
+        //     updatedValue = undefined; 
+        // }
+
+        // --- THIS IS THE FIX ---
+        // Only convert the placeholder '-' to undefined. Allow "" to be saved.
+        if (updatedValue === '-') {
             updatedValue = undefined; 
         }
 

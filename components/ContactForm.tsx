@@ -250,7 +250,12 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
         if (validate()) {
             // This line defines cleanedState
             const cleanedState = Object.fromEntries(
-                Object.entries(formState).filter(([, value]) => value !== '' && value !== null)
+                // --- THIS IS THE BUG ---
+                // Object.entries(formState).filter(([, value]) => value !== '' && value !== null)
+
+                // --- THIS IS THE FIX ---
+                // We remove the (value !== '') check, so empty strings are no longer filtered out
+                Object.entries(formState).filter(([, value]) => value !== null)
             );
 
             // Ensure category is an array, even if empty
