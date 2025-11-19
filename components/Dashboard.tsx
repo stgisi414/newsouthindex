@@ -34,6 +34,7 @@
     // --- Filter Configs ---
     // Kept contacts
     const contactFilterConfig: FilterFieldConfig[] = [
+      { field: 'sequentialId', label: 'ID', type: 'text' },
       { field: 'firstName', label: 'First Name', type: 'text' },
       { field: 'lastName', label: 'Last Name', type: 'text' },
       { field: 'email', label: 'Email', type: 'text' },

@@ -15,6 +15,7 @@ export interface FirebaseTimestamp {
 // Contact Interface
 export interface Contact {
   id: string;
+  sequentialId?: string;
   honorific?: string;
   firstName: string;
   middleName?: string; // <-- Changed from middleInitial

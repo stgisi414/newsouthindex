@@ -13,12 +13,10 @@ interface ContactTableProps {
 }
 
 type SortKey = keyof Contact;
-// FIX: Remove 'id' from the Exclude list so it can be displayed
 type DisplayableContactKey = Exclude<SortKey, 'lastModifiedDate' | 'createdDate' | 'createdBy'>;
 
-// FIX: Add 'ID' as the first item and 'Suffix' after lastName
 const ALL_CONTACT_FIELDS: { key: DisplayableContactKey; label: string; hiddenInMobile?: boolean }[] = [
-    { key: 'id', label: 'ID' },
+    { key: 'sequentialId', label: 'ID' }, // <-- CHANGED from 'id' to 'sequentialId'
     { key: 'firstName', label: 'First Name' },
     { key: 'lastName', label: 'Last Name' },
     { key: 'suffix', label: 'Suffix', hiddenInMobile: true },
@@ -187,7 +185,9 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                     {ALL_CONTACT_FIELDS.map(({ key, hiddenInMobile }) => {
                                         const isCategory = key === 'category';
                                         const isNewsletter = key === 'sendTNSBNewsletter';
-                                        const isId = key === 'id'; // ADDED: Check for ID field
+                                        
+                                        // CHANGE THIS LINE: Check for 'sequentialId' instead of 'id'
+                                        const isId = key === 'sequentialId'; 
                                         
                                         // FIX: Make ID field non-editable
                                         const isEditable = isAdmin && !isCategory && !isId;
