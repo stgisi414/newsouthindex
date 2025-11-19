@@ -28,6 +28,7 @@ export interface AppUser {
   showAiChat?: boolean;
   isMasterAdmin?: boolean;
   contactId?: string; // <-- ADD THIS: Links Auth User to Contact doc
+  userNumber?: number;
 }
 
 export interface FirebaseTimestamp {

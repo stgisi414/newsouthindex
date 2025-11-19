@@ -56,6 +56,7 @@ export interface AppUser {
     isMasterAdmin?: boolean; // (role === UserRole.MASTER_ADMIN)
     showAiChat?: boolean;
     contactId?: string; // <-- ADDED: Links user to a Contact document
+    userNumber?: number;
 }
 
 export interface ExpenseReport {

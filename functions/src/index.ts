@@ -1,5 +1,5 @@
 import { onCall, HttpsError, onRequest, Request } from "firebase-functions/v2/https";
-import { auth } from "firebase-functions/v1";
+import { auth, firestore } from "firebase-functions/v1";
 import { onDocumentDeleted } from "firebase-functions/v2/firestore";
 import { Response } from "express";
 import * as logger from "firebase-functions/logger";
@@ -1479,24 +1479,43 @@ export const makeMeAdmin = onCall({cors: ['https://nsindxonline.web.app', 'https
 // This trigger creates a default user document in Firestore when a new
 // user signs up in Firebase Auth.
 export const onUserCreate = auth.user().onCreate(async (user) => {
-  // The 'user' object is directly available, no 'event.data' needed
   logger.info(`New user signed up: ${user.uid}, Email: ${user.email}`);
 
-  const userDocRef = admin.firestore().collection("users").doc(user.uid);
+  const db = admin.firestore();
+  const userDocRef = db.collection("users").doc(user.uid);
+  const counterRef = db.collection("metadata").doc("userCounter");
 
   try {
-    // Set the default user document
-    await userDocRef.set({
-      email: user.email || null,
-      role: "applicant", // Default role for all new users
-      isAdmin: false,
-      isMasterAdmin: false,
-      showAiChat: true, // Default preference
-      contactId: null, // No contact linked by default
-      createdAt: FieldValue.serverTimestamp(),
+    // Use a transaction to guarantee a unique sequential ID
+    await db.runTransaction(async (transaction) => {
+      const counterDoc = await transaction.get(counterRef);
+      
+      // Determine the next number
+      let newCount = 1;
+      if (counterDoc.exists) {
+        const data = counterDoc.data();
+        if (data && typeof data.count === 'number') {
+             newCount = data.count + 1;
+        }
+      }
+
+      // 1. Update the counter
+      transaction.set(counterRef, { count: newCount }, { merge: true });
+
+      // 2. Create the user document with the new ID
+      transaction.set(userDocRef, {
+        email: user.email || null,
+        role: "applicant",
+        isAdmin: false,
+        isMasterAdmin: false,
+        showAiChat: true,
+        contactId: null,
+        createdAt: FieldValue.serverTimestamp(),
+        userNumber: newCount, // <-- ASSIGN SEQUENTIAL ID
+      });
     });
 
-    // Also set their default auth claim
+    // Set default auth claims (outside transaction is fine)
     await admin.auth().setCustomUserClaims(user.uid, {
       role: "applicant",
       contactId: null,
@@ -1505,6 +1524,52 @@ export const onUserCreate = auth.user().onCreate(async (user) => {
     logger.info(`Successfully created user document for ${user.uid}`);
   } catch (error) {
     logger.error(`Error creating user document for ${user.uid}:`, error);
+  }
+});
+
+// --- ADD THIS NEW FUNCTION FOR CONTACTS ---
+// Mirrors the logic of onUserCreate but for the 'contacts' collection
+export const onContactCreate = firestore.document("contacts/{contactId}").onCreate(async (snap, context) => {
+  const contactId = context.params.contactId;
+  logger.info(`New contact created: ${contactId}`);
+
+  const db = admin.firestore();
+  const docRef = snap.ref;
+  const counterRef = db.collection("metadata").doc("contactCounter");
+
+  // Check if data exists and if it already has a number (skip if so)
+  const newData = snap.data();
+  if (newData && newData.contactNumber) {
+     return;
+  }
+
+  try {
+    // Use a transaction to guarantee a unique sequential ID
+    await db.runTransaction(async (transaction) => {
+      const counterDoc = await transaction.get(counterRef);
+      
+      // Determine the next number
+      let newCount = 1;
+      if (counterDoc.exists) {
+        const data = counterDoc.data();
+        if (data && typeof data.count === 'number') {
+             newCount = data.count + 1;
+        }
+      }
+
+      // 1. Update the counter
+      transaction.set(counterRef, { count: newCount }, { merge: true });
+
+      // 2. Update the contact document with the new ID
+      // We use 'update' here because the document already exists
+      transaction.update(docRef, {
+        contactNumber: newCount, // <-- ASSIGN SEQUENTIAL ID
+      });
+    });
+
+    logger.info(`Successfully assigned contactNumber to contact ${contactId}`);
+  } catch (error) {
+    logger.error(`Error assigning contactNumber to ${contactId}:`, error);
   }
 });
 
