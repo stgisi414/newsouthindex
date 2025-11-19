@@ -9,7 +9,8 @@ try {
   admin.initializeApp({
     credential: admin.credential.applicationDefault(),
     // Make sure to add your databaseURL if it's not auto-detected
-    databaseURL: "https://nsindxonline.firebaseio.com" 
+    databaseURL: "https://nsindxonline.firebaseio.com",
+    projectId: "nsindxonline"
   });
   console.log('Firebase Admin initialized.');
 } catch (error: any) {
