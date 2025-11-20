@@ -1,7 +1,85 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Contact, Category, isValidEmail, isValidPhone, isValidUrl, PhoneEntry, EmailEntry, AddressEntry, SocialMediaEntry } from '../types';
 import ClipboardIcon from './icons/ClipboardIcon';
-import { formatPhoneNumber } from '../src/utils/formatting';
+// REMOVED: import { formatPhoneNumber } from '../src/utils/formatting'; 
+import { AsYouType, CountryCode } from 'libphonenumber-js';
+
+export const COUNTRY_CODES = [
+    // Top Priority
+    { code: '+1', iso: 'US', label: 'US/CA (+1)' },
+    { code: '+44', iso: 'GB', label: 'UK (+44)' },
+    { code: '+61', iso: 'AU', label: 'AU (+61)' },
+    { code: '+49', iso: 'DE', label: 'DE (+49)' },
+    { code: '+33', iso: 'FR', label: 'FR (+33)' },
+    { code: '+81', iso: 'JP', label: 'JP (+81)' },
+    { code: '+86', iso: 'CN', label: 'CN (+86)' },
+    { code: '+91', iso: 'IN', label: 'IN (+91)' },
+    { code: '+52', iso: 'MX', label: 'MX (+52)' },
+
+    // Major Global Economies & Populous Nations
+    { code: '+971', iso: 'AE', label: 'AE (+971)' },
+    { code: '+54', iso: 'AR', label: 'AR (+54)' },
+    { code: '+43', iso: 'AT', label: 'AT (+43)' },
+    { code: '+880', iso: 'BD', label: 'BD (+880)' },
+    { code: '+32', iso: 'BE', label: 'BE (+32)' },
+    { code: '+55', iso: 'BR', label: 'BR (+55)' },
+    { code: '+41', iso: 'CH', label: 'CH (+41)' },
+    { code: '+56', iso: 'CL', label: 'CL (+56)' },
+    { code: '+57', iso: 'CO', label: 'CO (+57)' },
+    { code: '+420', iso: 'CZ', label: 'CZ (+420)' },
+    { code: '+45', iso: 'DK', label: 'DK (+45)' },
+    { code: '+20', iso: 'EG', label: 'EG (+20)' },
+    { code: '+34', iso: 'ES', label: 'ES (+34)' },
+    { code: '+358', iso: 'FI', label: 'FI (+358)' },
+    { code: '+30', iso: 'GR', label: 'GR (+30)' },
+    { code: '+852', iso: 'HK', label: 'HK (+852)' },
+    { code: '+36', iso: 'HU', label: 'HU (+36)' },
+    { code: '+62', iso: 'ID', label: 'ID (+62)' },
+    { code: '+353', iso: 'IE', label: 'IE (+353)' },
+    { code: '+972', iso: 'IL', label: 'IL (+972)' },
+    { code: '+39', iso: 'IT', label: 'IT (+39)' },
+    { code: '+254', iso: 'KE', label: 'KE (+254)' },
+    { code: '+82', iso: 'KR', label: 'KR (+82)' },
+    { code: '+60', iso: 'MY', label: 'MY (+60)' },
+    { code: '+234', iso: 'NG', label: 'NG (+234)' },
+    { code: '+31', iso: 'NL', label: 'NL (+31)' },
+    { code: '+47', iso: 'NO', label: 'NO (+47)' },
+    { code: '+64', iso: 'NZ', label: 'NZ (+64)' },
+    { code: '+51', iso: 'PE', label: 'PE (+51)' },
+    { code: '+63', iso: 'PH', label: 'PH (+63)' },
+    { code: '+92', iso: 'PK', label: 'PK (+92)' },
+    { code: '+48', iso: 'PL', label: 'PL (+48)' },
+    { code: '+351', iso: 'PT', label: 'PT (+351)' },
+    { code: '+7', iso: 'RU', label: 'RU/KZ (+7)' },
+    { code: '+966', iso: 'SA', label: 'SA (+966)' },
+    { code: '+46', iso: 'SE', label: 'SE (+46)' },
+    { code: '+65', iso: 'SG', label: 'SG (+65)' },
+    { code: '+66', iso: 'TH', label: 'TH (+66)' },
+    { code: '+90', iso: 'TR', label: 'TR (+90)' },
+    { code: '+886', iso: 'TW', label: 'TW (+886)' },
+    { code: '+380', iso: 'UA', label: 'UA (+380)' },
+    { code: '+84', iso: 'VN', label: 'VN (+84)' },
+    { code: '+27', iso: 'ZA', label: 'ZA (+27)' },
+] as const;
+
+// Phone Formatter
+export const formatPhoneNumber = (value: string | undefined, callingCode: string = '+1') => {
+    if (!value) return '';
+    
+    // 1. Find the ISO code (e.g., 'US') based on the calling code (e.g., '+1')
+    // Default to US if code not found
+    const match = COUNTRY_CODES.find(c => c.code === callingCode);
+    const iso = (match ? match.iso : 'US') as CountryCode;
+    
+    // 2. Use libphonenumber-js to format
+    return new AsYouType(iso).input(value);
+};
+
+// Keep your existing helpers if they were there, or just ensuring this file is clean
+export const capitalize = (s: string) => {
+    if (!s) return s;
+    return s.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+};
 
 // Define the structure for the fetched Place object
 interface FetchedPlace {
@@ -58,26 +136,6 @@ const formatTimestamp = (timestamp: any): string => {
     }
 };
 
-const capitalize = (s: string) => {
-    if (!s) return s;
-    return s.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-};
-
-// Phone Formatter
-const formatPhoneNumber = (value: string) => {
-    if (!value) return value;
-    // Allow international or specific formats to bypass
-    if (value.startsWith('+') || value.startsWith('1')) return value;
-    
-    const input = value.replace(/\D/g, '');
-    // Prevent typing more than 10 digits for standard US numbers to avoid weirdness
-    const constrainedInput = input.substring(0, 10);
-    
-    if (constrainedInput.length < 4) return constrainedInput;
-    if (constrainedInput.length < 7) return `(${constrainedInput.slice(0, 3)}) ${constrainedInput.slice(3)}`;
-    return `(${constrainedInput.slice(0, 3)}) ${constrainedInput.slice(3, 6)}-${constrainedInput.slice(6, 10)}`;
-};
-
 interface ContactFormProps {
     isOpen: boolean;
     onClose: () => void;
@@ -106,6 +164,27 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
     const autocompleteRef = useRef<HTMLElement & { value: string, place?: google.maps.places.Place | null } | null>(null);
     const [mapsApiLoaded, setMapsApiLoaded] = useState(false);
     const [placeDetails, setPlaceDetails] = useState<FetchedPlace | null>(null);
+    const [phone, setPhone] = useState('');
+    const [countryCode, setCountryCode] = useState('+1');
+
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const input = e.target.value;
+      
+      // Combine code and input to let the library detect the format
+      // Then slice off the code to display just the formatted number in the input
+      const formatted = new AsYouType().input(`${countryCode}${input}`);
+      
+      // This extracts the formatted number without the country code prefix
+      // Note: You might need to adjust this depending on if you want the user 
+      // to see the +1 in the input box or just next to it.
+      // A simpler way if you separate inputs:
+      
+      // Option A: If input is JUST the local number
+      // It's hard to format strictly without the ISO code (e.g., 'US'), 
+      // but this helper cleans non-numeric chars:
+      const cleanNumber = input.replace(/[^0-9]/g, '');
+      setPhone(cleanNumber);
+    };
 
     // --- Effects ---
     useEffect(() => {
@@ -126,45 +205,26 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
             : initialFormState;
 
         // --- MIGRATION LOGIC ON LOAD ---
-        // If editing an old contact, convert strings to arrays
+        // Update Phone Migration
         if (contactToEdit) {
-            if (typeof contactToEdit.category === 'string') {
-                initialState.category = [contactToEdit.category as Category];
-            } else if (!Array.isArray(contactToEdit.category)) {
-                initialState.category = [];
-            }
-
-            if (!contactToEdit.phones && (contactToEdit as any).phone) {
-                initialState.phones = [{ type: 'Main', number: (contactToEdit as any).phone }];
-            }
-            if (!contactToEdit.emails && (contactToEdit as any).email) {
-                initialState.emails = [{ type: 'Main', address: (contactToEdit as any).email }];
-            }
-            if (!contactToEdit.addresses && (contactToEdit as any).address1) {
-                 initialState.addresses = [{
-                    type: 'Main',
-                    address1: (contactToEdit as any).address1 || '',
-                    address2: (contactToEdit as any).address2 || '',
-                    city: (contactToEdit as any).city || '',
-                    state: (contactToEdit as any).state || '',
-                    zip: (contactToEdit as any).zip || ''
-                 }];
+             if (!contactToEdit.phones && (contactToEdit as any).phone) {
+                initialState.phones = [{ type: 'Main', countryCode: '+1', number: (contactToEdit as any).phone }];
             }
         }
 
-        // Ensure at least one empty slot for new contacts
-        if (!initialState.phones || initialState.phones.length === 0) initialState.phones = [{ type: 'Mobile', number: '' }];
-        if (!initialState.emails || initialState.emails.length === 0) initialState.emails = [{ type: 'Main', address: '' }];
+        // Ensure at least one empty slot with default country code
+        if (!initialState.phones || initialState.phones.length === 0) {
+            initialState.phones = [{ type: 'Mobile', countryCode: '+1', number: '' }];
+        }
 
-        // >>> ADD THIS BLOCK <<<
-        // Apply formatting to loaded phone numbers immediately
+        // Apply formatting to all loaded numbers
         if (initialState.phones) {
             initialState.phones = initialState.phones.map((p: PhoneEntry) => ({
                 ...p,
-                number: formatPhoneNumber(p.number)
+                countryCode: p.countryCode || '+1', // Default to +1
+                number: formatPhoneNumber(p.number, p.countryCode || '+1')
             }));
-        }
-        // >>> END ADDITION <<<
+        }   
 
         setFormState(initialState);
         setPlaceDetails(null);
@@ -192,7 +252,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
              } catch (error) {
                  console.error("Error fetching place details:", error);
                  setPlaceDetails(null);
-             }
+             }  
         };
 
         autocompleteElement.addEventListener('gmp-select', handlePlaceSelect);
@@ -263,34 +323,40 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
         });
     };
 
-    // --- Dynamic Array Handlers (Fixed Immutability) ---
+    // --- UPDATED ARRAY HANDLER ---
     const handleArrayChange = (index: number, field: string, key: string, value: string) => {
         setFormState((prev: any) => {
-            // 1. Copy the array
             const list = [...(prev[field] as any[])];
-            // 2. Copy the specific item (This was missing!)
             const item = { ...list[index] }; 
             
-            if (field === 'phones' && key === 'number') {
-                // Apply formatting here
-                item[key] = formatPhoneNumber(value);
-            } else if (['city', 'address1', 'address2', 'company', 'jobTitle'].includes(key)) {
+            item[key] = value;
+
+            // Special handling for Phones
+            if (field === 'phones') {
+                if (key === 'number') {
+                    // Format number based on current country code
+                    item.number = formatPhoneNumber(value, item.countryCode);
+                } else if (key === 'countryCode') {
+                    // Re-format existing number when country code changes
+                    item.number = formatPhoneNumber(item.number, value);
+                }
+            } 
+            // ... (Keep other field formatting like capitalize)
+            else if (['city', 'address1', 'address2', 'company', 'jobTitle'].includes(key)) {
                  item[key] = capitalize(value);
             } else if (key === 'state') {
                  item[key] = value.toUpperCase();
-            } else {
-                item[key] = value;
             }
-            
-            // 3. Put the updated item back in the list
+
             list[index] = item;
             return { ...prev, [field]: list };
         });
     };
 
+    // --- UPDATED ADD ENTRY ---
     const addEntry = (field: string) => {
         const defaults: any = {
-            phones: { type: 'Mobile', number: '' },
+            phones: { type: 'Mobile', countryCode: '+1', number: '' }, // Default to +1
             emails: { type: 'Main', address: '' },
             socialMedia: { platform: 'LinkedIn', url: '' },
             addresses: { type: 'Main', address1: '', city: '', state: '', zip: '' }
@@ -408,18 +474,40 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
                     {/* --- Contact Info (Arrays) --- */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 border-t pt-4">
                         
-                        {/* Phones */}
+                        {/* Phones Section */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Phone Numbers</label>
                             {formState.phones.map((phone: PhoneEntry, index: number) => (
                                 <div key={index} className="flex gap-2 mb-2">
-                                    <select value={phone.type} onChange={(e) => handleArrayChange(index, 'phones', 'type', e.target.value)} className="w-1/3 px-2 py-2 bg-white border border-gray-300 rounded-md text-xs">
+                                    <select 
+                                        value={phone.type} 
+                                        onChange={(e) => handleArrayChange(index, 'phones', 'type', e.target.value)} 
+                                        className="w-[25%] px-2 py-2 bg-white border border-gray-300 rounded-md text-xs"
+                                    >
                                         <option value="Mobile">Mobile</option>
                                         <option value="Work">Work</option>
                                         <option value="Home">Home</option>
                                         <option value="Main">Main</option>
                                     </select>
-                                    <input type="tel" value={phone.number} onChange={(e) => handleArrayChange(index, 'phones', 'number', e.target.value)} placeholder="(555) 123-4567" className="flex-grow px-3 py-2 border border-gray-300 rounded-md text-sm" />
+
+                                    {/* Country Code Dropdown */}
+                                    <select
+                                        value={phone.countryCode}
+                                        onChange={(e) => handleArrayChange(index, 'phones', 'countryCode', e.target.value)}
+                                        className="w-[25%] px-2 py-2 bg-white border border-gray-300 rounded-md text-xs"
+                                    >
+                                        {COUNTRY_CODES.map(c => (
+                                            <option key={c.code} value={c.code}>{c.label}</option>
+                                        ))}
+                                    </select>
+
+                                    <input 
+                                        type="tel" 
+                                        value={phone.number} 
+                                        onChange={(e) => handleArrayChange(index, 'phones', 'number', e.target.value)} 
+                                        placeholder="(555) 123-4567" 
+                                        className="flex-grow px-3 py-2 border border-gray-300 rounded-md text-sm" 
+                                    />
                                     <button type="button" onClick={() => removeEntry('phones', index)} className="text-red-400 hover:text-red-600">&times;</button>
                                 </div>
                             ))}

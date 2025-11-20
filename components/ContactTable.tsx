@@ -42,15 +42,26 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
     const getPrimary = (contact: Contact, type: 'phones' | 'emails' | 'addresses', field: string) => {
         const list = contact[type] as any[];
         if (!list || list.length === 0) {
-             // Fallback to old fields if arrays are empty
              if (type === 'phones' && field === 'number') return (contact as any).phone || '';
              if (type === 'emails' && field === 'address') return (contact as any).email || '';
              if (type === 'addresses') return (contact as any)[field] || '';
              return '';
         }
-        // Prioritize 'Main', then the first one
         const primary = list.find(item => item.type === 'Main') || list[0];
         return primary ? primary[field] : '';
+    };
+
+    // >>> NEW HELPER: Get Phone Object (Number + Country Code) <<<
+    const getPrimaryPhone = (contact: Contact) => {
+        const list = contact.phones || [];
+        if (list.length === 0) return { number: (contact as any).phone || '', countryCode: '+1' };
+        
+        // Try to find 'Main', otherwise use the first one
+        const primary = list.find(p => p.type === 'Main') || list[0];
+        return { 
+            number: primary.number, 
+            countryCode: primary.countryCode || '+1' 
+        };
     };
 
     const sortedContacts = useMemo(() => {
@@ -74,7 +85,6 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                 valA = getPrimary(a, 'addresses', 'state').toLowerCase();
                 valB = getPrimary(b, 'addresses', 'state').toLowerCase();
             } else if (sortKey === 'contactNumber') {
-                // Numerical sort for ID
                 return ((a.contactNumber || 0) - (b.contactNumber || 0));
             } else {
                 valA = (a[sortKey as keyof typeof a] || '').toString().toLowerCase();
@@ -95,7 +105,6 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
         return sortedContacts.slice(startIndex, startIndex + ITEMS_PER_PAGE);
     }, [currentPage, sortedContacts]);
 
-
     const handleToggleExpand = (contactId: string) => {
         setExpandedContactId(prevId => (prevId === contactId ? null : contactId));
     };
@@ -115,7 +124,6 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
         return sortOrder === 'asc' ? '▲' : '▼';
     };
 
-    // --- UPDATED: Inline Edit Handler for Arrays ---
     const handleFieldUpdate = (e: React.FocusEvent<HTMLSpanElement>, contact: Contact, field: string) => {
         if (!isAdmin) return;
         if (field === 'category') return; 
@@ -123,41 +131,39 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
         let value = e.currentTarget.textContent;
         let updatedValue: string | undefined = value?.trim();
         
-        // Normalize empty dash to undefined/empty
         if (updatedValue === '-') updatedValue = undefined;
 
         if (updatedValue !== undefined) {
              if (field === 'phone' && !isValidPhone(updatedValue as string)) {
                  alert(`Validation Error: Invalid phone format: ${value}`);
-                 e.currentTarget.textContent = getPrimary(contact, 'phones', 'number'); // Revert
+                 e.currentTarget.textContent = getPrimary(contact, 'phones', 'number'); 
                  return; 
              }
              if (field === 'email' && !isValidEmail(updatedValue as string)) {
                 alert(`Validation Error: Invalid email format: ${value}`);
-                e.currentTarget.textContent = getPrimary(contact, 'emails', 'address'); // Revert
+                e.currentTarget.textContent = getPrimary(contact, 'emails', 'address'); 
                 return;
              }
         }
         
-        // Construct Update
         const updatedContact = { ...contact };
         
-        // Map flat field edit to the correct array index (0 or Main)
         if (field === 'phone') {
             const phones = [...(contact.phones || [])];
-            if (phones.length === 0) phones.push({ type: 'Mobile', number: '' });
+            // Ensure we have at least one entry if empty
+            if (phones.length === 0) phones.push({ type: 'Mobile', number: '', countryCode: '+1' });
             
             const targetIndex = phones.findIndex(p => p.type === 'Main') !== -1 
                 ? phones.findIndex(p => p.type === 'Main') 
                 : 0;
             
-            // FIX: Apply formatter here
-            const formattedNumber = formatPhoneNumber(updatedValue || ''); 
+            // >>> FIX: Use current country code for formatting while editing <<<
+            const currentCode = phones[targetIndex].countryCode || '+1';
+            const formattedNumber = formatPhoneNumber(updatedValue || '', currentCode); 
             
             phones[targetIndex] = { ...phones[targetIndex], number: formattedNumber };
             updatedContact.phones = phones;
             
-            // Force the cell to show the formatted value immediately
             if (e.currentTarget) e.currentTarget.textContent = formattedNumber;
         }
         else if (field === 'email') {
@@ -179,7 +185,6 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
              updatedContact.addresses = addresses;
         }
         else {
-            // Standard fields (firstName, lastName, etc.)
             (updatedContact as any)[field] = updatedValue;
         }
 
@@ -238,7 +243,6 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                         
                                         let displayValue: string | React.ReactNode = '-';
                                         
-                                        // --- MAPPING LOGIC ---
                                         if (isId) {
                                             displayValue = contact.contactNumber ? `#${contact.contactNumber}` : '-';
                                         }
@@ -252,8 +256,21 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                             }
                                             if (categories.length > 0) displayValue = catString;
                                        } 
+                                       // >>> FIX: Extract code and format properly <<<
                                        else if (key === 'phone') {
-                                            displayValue = formatPhoneNumber(getPrimary(contact, 'phones', 'number'));
+                                            // 1. Get the phone entry
+                                            const phones = contact.phones || [];
+                                            const primary = phones.find(p => p.type === 'Main') || phones[0];
+                                            
+                                            // 2. Extract values (with fallbacks)
+                                            const rawNumber = primary?.number || (contact as any).phone || '';
+                                            const code = primary?.countryCode || '+1'; 
+
+                                            // 3. Format the number using the Country Code (fixes the "US format" issue)
+                                            const formattedLocal = formatPhoneNumber(rawNumber, code);
+                                            
+                                            // 4. Display: "+82 010-1234-5678" (fixes the "missing code" issue)
+                                            displayValue = `${code} ${formattedLocal}`;
                                        }
                                        else if (key === 'email') {
                                             displayValue = getPrimary(contact, 'emails', 'address');
@@ -332,9 +349,17 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                             <div className="space-y-3 text-sm text-gray-600">
                                                 <p><strong className="font-medium text-gray-800">Phone:</strong> 
                                                     <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'phone')} suppressContentEditableWarning={true}>
-                                                        {formatPhoneNumber(getPrimary(contact, 'phones', 'number'))}
+                                                        {(() => {
+                                                            // COPY THE SAME LOGIC HERE
+                                                            const phones = contact.phones || [];
+                                                            const primary = phones.find(p => p.type === 'Main') || phones[0];
+                                                            const rawNumber = primary?.number || (contact as any).phone || '';
+                                                            const code = primary?.countryCode || '+1';
+                                                            
+                                                            return `${code} ${formatPhoneNumber(rawNumber, code)}`;
+                                                        })()}
                                                     </span>
-                                            </p>
+                                                </p>
                                                 <p><strong className="font-medium text-gray-800">Email:</strong> 
                                                     <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'email')} suppressContentEditableWarning={true}>
                                                         {getPrimary(contact, 'emails', 'address')}
