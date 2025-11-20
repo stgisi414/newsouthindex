@@ -2,7 +2,8 @@ import React, { useState, useMemo, Fragment } from 'react';
 import { Contact, Category, isValidEmail, isValidPhone, isValidUrl, PhoneEntry, EmailEntry, AddressEntry } from '../types';
 import EditIcon from './icons/EditIcon';
 import DeleteIcon from './icons/DeleteIcon';
-import CategoryEditPopup from './CategoryEditPopup'; 
+import CategoryEditPopup from './CategoryEditPopup';
+import { formatPhoneNumber } from '../src/utils/formatting';
 
 interface ContactTableProps {
     contacts: Contact[];
@@ -199,17 +200,6 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
         return contacts.find(c => c.id === editingCategoryId);
     }, [editingCategoryId, contacts]);
 
-    const formatPhoneNumber = (value: string) => {
-        if (!value) return value;
-        if (value.startsWith('+') || value.startsWith('1')) return value;
-        const input = value.replace(/\D/g, '');
-        const constrainedInput = input.substring(0, 10);
-        
-        if (constrainedInput.length < 4) return constrainedInput;
-        if (constrainedInput.length < 7) return `(${constrainedInput.slice(0, 3)}) ${constrainedInput.slice(3)}`;
-        return `(${constrainedInput.slice(0, 3)}) ${constrainedInput.slice(3, 6)}-${constrainedInput.slice(6, 10)}`;
-    };
-
     return (
         <div className="bg-white shadow-lg rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
@@ -263,7 +253,7 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                             if (categories.length > 0) displayValue = catString;
                                        } 
                                        else if (key === 'phone') {
-                                            displayValue = getPrimary(contact, 'phones', 'number');
+                                            displayValue = formatPhoneNumber(getPrimary(contact, 'phones', 'number'));
                                        }
                                        else if (key === 'email') {
                                             displayValue = getPrimary(contact, 'emails', 'address');
@@ -342,9 +332,9 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                             <div className="space-y-3 text-sm text-gray-600">
                                                 <p><strong className="font-medium text-gray-800">Phone:</strong> 
                                                     <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'phone')} suppressContentEditableWarning={true}>
-                                                        {getPrimary(contact, 'phones', 'number')}
+                                                        {formatPhoneNumber(getPrimary(contact, 'phones', 'number'))}
                                                     </span>
-                                                </p>
+                                            </p>
                                                 <p><strong className="font-medium text-gray-800">Email:</strong> 
                                                     <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'email')} suppressContentEditableWarning={true}>
                                                         {getPrimary(contact, 'emails', 'address')}

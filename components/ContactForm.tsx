@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Contact, Category, isValidEmail, isValidPhone, isValidUrl, PhoneEntry, EmailEntry, AddressEntry, SocialMediaEntry } from '../types';
 import ClipboardIcon from './icons/ClipboardIcon';
-
-
+import { formatPhoneNumber } from '../src/utils/formatting';
 
 // Define the structure for the fetched Place object
 interface FetchedPlace {
@@ -157,6 +156,16 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
         if (!initialState.phones || initialState.phones.length === 0) initialState.phones = [{ type: 'Mobile', number: '' }];
         if (!initialState.emails || initialState.emails.length === 0) initialState.emails = [{ type: 'Main', address: '' }];
 
+        // >>> ADD THIS BLOCK <<<
+        // Apply formatting to loaded phone numbers immediately
+        if (initialState.phones) {
+            initialState.phones = initialState.phones.map((p: PhoneEntry) => ({
+                ...p,
+                number: formatPhoneNumber(p.number)
+            }));
+        }
+        // >>> END ADDITION <<<
+
         setFormState(initialState);
         setPlaceDetails(null);
 
@@ -263,6 +272,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
             const item = { ...list[index] }; 
             
             if (field === 'phones' && key === 'number') {
+                // Apply formatting here
                 item[key] = formatPhoneNumber(value);
             } else if (['city', 'address1', 'address2', 'company', 'jobTitle'].includes(key)) {
                  item[key] = capitalize(value);
