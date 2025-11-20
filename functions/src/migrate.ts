@@ -253,6 +253,107 @@ async function migrateContactIds() {
   console.log(`Final Contact Counter set to: ${currentCount}`);
 }
 
+// ... imports and init ...
+
+// ... existing migrateCollection function ...
+// ... existing migrateUserIds function ...
+// ... existing migrateContactIds function ...
+
+/**
+ * Migrates CONTACTS to use arrays for phone, email, and addresses.
+ * Also ensures category is an array.
+ */
+async function migrateContactArrays() {
+  console.log('\n--- Starting Contact Array Migration ---');
+  const contactsRef = db.collection('contacts');
+  const snapshot = await contactsRef.get();
+  
+  if (snapshot.empty) {
+      console.log("No contacts found to migrate.");
+      return;
+  }
+
+  let batch = db.batch();
+  let batchOpCount = 0;
+  let processedCount = 0;
+
+  for (const doc of snapshot.docs) {
+      const data = doc.data() as any;
+      const updatePayload: Record<string, any> = {};
+      let needsUpdate = false;
+
+      // 1. Migrate Phone (String) -> Phones (Array)
+      if (!data.phones || data.phones.length === 0) {
+          if (data.phone) {
+              updatePayload.phones = [{ type: 'Main', number: data.phone }];
+              needsUpdate = true;
+          } else {
+              // Initialize empty if missing
+              updatePayload.phones = [];
+              needsUpdate = true;
+          }
+      }
+
+      // 2. Migrate Email (String) -> Emails (Array)
+      if (!data.emails || data.emails.length === 0) {
+          if (data.email) {
+              updatePayload.emails = [{ type: 'Main', address: data.email }];
+              needsUpdate = true;
+          } else {
+              updatePayload.emails = [];
+              needsUpdate = true;
+          }
+      }
+
+      // 3. Migrate Address Fields -> Addresses (Array)
+      if (!data.addresses || data.addresses.length === 0) {
+          if (data.address1 || data.city || data.state || data.zip) {
+              updatePayload.addresses = [{
+                  type: 'Main',
+                  address1: data.address1 || '',
+                  address2: data.address2 || '',
+                  city: data.city || '',
+                  state: data.state || '',
+                  zip: data.zip || ''
+              }];
+              needsUpdate = true;
+          } else {
+              updatePayload.addresses = [];
+              needsUpdate = true;
+          }
+      }
+
+      // 4. Ensure Category is Array
+      if (data.category && typeof data.category === 'string') {
+          updatePayload.category = [data.category];
+          needsUpdate = true;
+      } else if (!data.category) {
+          updatePayload.category = [];
+          needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+          batch.update(doc.ref, updatePayload);
+          batchOpCount++;
+          processedCount++;
+      }
+
+      if (batchOpCount >= 100) {
+          await batch.commit();
+          batch = db.batch();
+          batchOpCount = 0;
+          console.log(`Committed batch...`);
+      }
+  }
+
+  if (batchOpCount > 0) {
+      await batch.commit();
+  }
+
+  console.log(`--- Finished Contact Array Migration ---`);
+  console.log(`Total documents updated: ${processedCount}`);
+}
+
 /**
  * Main migration function
  */
@@ -260,15 +361,15 @@ async function runMigration() {
   console.log('Starting Firestore data migration...');
   
   try {
-    // You can keep or comment out the field renames if they are already done
+    // Existing migrations
     await migrateCollection('contacts');
     await migrateCollection('books');
     await migrateCollection('events');
-    
     await migrateUserIds();
-    
-    // --- ADD THIS CALL ---
     await migrateContactIds();
+    
+    // --- ADD THIS NEW CALL ---
+    await migrateContactArrays();
     
     console.log('\nMigration complete for all collections!');
   } catch (error) {
@@ -277,5 +378,4 @@ async function runMigration() {
   }
 }
 
-// Run the script
 runMigration().catch(console.error);

@@ -186,16 +186,25 @@ const AIChat: React.FC<AIChatProps> = ({ onCommandProcessed, isAdmin, currentUse
                  if (foundContacts.length > 0) {
                      onAiSearch(foundContacts, 'contacts');
                        const contactsText = foundContacts.map(c => {
-                           const email = c.email || 'N/A';
-                           const phone = c.phone || 'N/A';
-                           // --- FIX: Handle category array ---
+                           // --- UPDATED DISPLAY LOGIC ---
+                           // Map emails array to string, or fall back to old field
+                           const emails = (c.emails && c.emails.length > 0) 
+                                ? c.emails.map(e => `${e.address} (${e.type})`).join(', ') 
+                                : (c.email || 'N/A');
+
+                           // Map phones array to string
+                           const phones = (c.phones && c.phones.length > 0)
+                                ? c.phones.map(p => `${p.number} (${p.type})`).join(', ')
+                                : (c.phone || 'N/A');
+                           
                            const category = (Array.isArray(c.category) && c.category.length > 0)
                                ? c.category.join(', ')
                                : 'N/A';
-                           // --- End Fix ---
-                           return `\n- ${c.firstName} ${c.lastName} (${category}): ${email}, Phone: ${phone}`;
-                       }).join('');
-                         aiResponseText = `I found the following contact(s): ${contactsText}`;
+                           
+                           return `\n- ${c.firstName} ${c.lastName} [${category}]\n  Emails: ${emails}\n  Phones: ${phones}`;
+                           // --- END UPDATE ---
+                       }).join('\n');
+                         aiResponseText = `I found the following contact(s):\n${contactsText}`;
                  } else {
                        aiResponseText = `I couldn't find any contacts matching that description.`;
                  }

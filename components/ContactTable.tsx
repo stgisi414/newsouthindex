@@ -1,8 +1,8 @@
 import React, { useState, useMemo, Fragment } from 'react';
-import { Contact, Category, isValidEmail, isValidPhone, isValidUrl } from '../types';
+import { Contact, Category, isValidEmail, isValidPhone, isValidUrl, PhoneEntry, EmailEntry, AddressEntry } from '../types';
 import EditIcon from './icons/EditIcon';
 import DeleteIcon from './icons/DeleteIcon';
-import CategoryEditPopup from './CategoryEditPopup'; // <-- FIX: Import new popup
+import CategoryEditPopup from './CategoryEditPopup'; 
 
 interface ContactTableProps {
     contacts: Contact[];
@@ -12,11 +12,11 @@ interface ContactTableProps {
     onUpdateContact: (contact: Contact) => void;
 }
 
-type SortKey = keyof Contact;
+type SortKey = keyof Contact | 'phone' | 'email' | 'city' | 'state';
 type DisplayableContactKey = Exclude<SortKey, 'lastModifiedDate' | 'createdDate' | 'createdBy'>;
 
-const ALL_CONTACT_FIELDS: { key: DisplayableContactKey; label: string; hiddenInMobile?: boolean }[] = [
-    { key: 'sequentialId', label: 'ID' }, // <-- CHANGED from 'id' to 'sequentialId'
+const ALL_CONTACT_FIELDS: { key: string; label: string; hiddenInMobile?: boolean }[] = [
+    { key: 'contactNumber', label: 'ID' }, 
     { key: 'firstName', label: 'First Name' },
     { key: 'lastName', label: 'Last Name' },
     { key: 'suffix', label: 'Suffix', hiddenInMobile: true },
@@ -28,8 +28,6 @@ const ALL_CONTACT_FIELDS: { key: DisplayableContactKey; label: string; hiddenInM
     { key: 'sendTNSBNewsletter', label: 'Newsletter', hiddenInMobile: true },
 ];
 
-// No longer needed: const CATEGORY_VALUES = Object.values(Category);
-
 const ITEMS_PER_PAGE = 10;
 
 const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete, isAdmin, onUpdateContact }) => {
@@ -37,17 +35,46 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     const [expandedContactId, setExpandedContactId] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
-    const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null); // <-- FIX: State for popup
+    const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+
+    // --- HELPER: Get primary data from new arrays ---
+    const getPrimary = (contact: Contact, type: 'phones' | 'emails' | 'addresses', field: string) => {
+        const list = contact[type] as any[];
+        if (!list || list.length === 0) {
+             // Fallback to old fields if arrays are empty
+             if (type === 'phones' && field === 'number') return (contact as any).phone || '';
+             if (type === 'emails' && field === 'address') return (contact as any).email || '';
+             if (type === 'addresses') return (contact as any)[field] || '';
+             return '';
+        }
+        // Prioritize 'Main', then the first one
+        const primary = list.find(item => item.type === 'Main') || list[0];
+        return primary ? primary[field] : '';
+    };
 
     const sortedContacts = useMemo(() => {
         const sorted = [...contacts].sort((a, b) => {
-            let valA: string;
-            let valB: string;
+            let valA = '';
+            let valB = '';
 
-            // <-- FIX: Handle sorting for category array
             if (sortKey === 'category') {
                 valA = (Array.isArray(a.category) ? a.category : []).join(', ').toLowerCase();
                 valB = (Array.isArray(b.category) ? b.category : []).join(', ').toLowerCase();
+            } else if (sortKey === 'phone') {
+                valA = getPrimary(a, 'phones', 'number');
+                valB = getPrimary(b, 'phones', 'number');
+            } else if (sortKey === 'email') {
+                valA = getPrimary(a, 'emails', 'address');
+                valB = getPrimary(b, 'emails', 'address');
+            } else if (sortKey === 'city') {
+                valA = getPrimary(a, 'addresses', 'city').toLowerCase();
+                valB = getPrimary(b, 'addresses', 'city').toLowerCase();
+            } else if (sortKey === 'state') {
+                valA = getPrimary(a, 'addresses', 'state').toLowerCase();
+                valB = getPrimary(b, 'addresses', 'state').toLowerCase();
+            } else if (sortKey === 'contactNumber') {
+                // Numerical sort for ID
+                return ((a.contactNumber || 0) - (b.contactNumber || 0));
             } else {
                 valA = (a[sortKey as keyof typeof a] || '').toString().toLowerCase();
                 valB = (b[sortKey as keyof typeof b] || '').toString().toLowerCase();
@@ -87,70 +114,101 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
         return sortOrder === 'asc' ? '▲' : '▼';
     };
 
-    const handleFieldUpdate = (e: React.FocusEvent<HTMLSpanElement>, contact: Contact, field: keyof Contact) => {
+    // --- UPDATED: Inline Edit Handler for Arrays ---
+    const handleFieldUpdate = (e: React.FocusEvent<HTMLSpanElement>, contact: Contact, field: string) => {
         if (!isAdmin) return;
-        
-        // This function no longer handles 'category'
         if (field === 'category') return; 
 
         let value = e.currentTarget.textContent;
-        const originalValue = contact[field] || '';
-
         let updatedValue: string | undefined = value?.trim();
         
-        if (field === 'email') {
-            updatedValue = updatedValue?.toLowerCase();
-        }
-        
-        // --- THIS IS THE BUG ---
-        // if (updatedValue === '' || updatedValue === '-') {
-        //     updatedValue = undefined; 
-        // }
-
-        // --- THIS IS THE FIX ---
-        // Only convert the placeholder '-' to undefined. Allow "" to be saved.
-        if (updatedValue === '-') {
-            updatedValue = undefined; 
-        }
+        // Normalize empty dash to undefined/empty
+        if (updatedValue === '-') updatedValue = undefined;
 
         if (updatedValue !== undefined) {
              if (field === 'phone' && !isValidPhone(updatedValue as string)) {
-                 alert(`Validation Error: Invalid phone format for input: ${value}`);
-                 e.currentTarget.textContent = originalValue as string;
-                 return; 
-             }
-             if (field === 'url' && !isValidUrl(updatedValue as string)) {
-                 alert(`Validation Error: Invalid URL format for input: ${value}`);
-                 e.currentTarget.textContent = originalValue as string;
+                 alert(`Validation Error: Invalid phone format: ${value}`);
+                 e.currentTarget.textContent = getPrimary(contact, 'phones', 'number'); // Revert
                  return; 
              }
              if (field === 'email' && !isValidEmail(updatedValue as string)) {
-                alert(`Validation Error: Invalid email format for input: ${value}`);
-                e.currentTarget.textContent = originalValue as string;
+                alert(`Validation Error: Invalid email format: ${value}`);
+                e.currentTarget.textContent = getPrimary(contact, 'emails', 'address'); // Revert
                 return;
              }
         }
         
-        const updatedContact = { ...contact, [field]: updatedValue };
-        onUpdateContact(updatedContact as Contact);
+        // Construct Update
+        const updatedContact = { ...contact };
+        
+        // Map flat field edit to the correct array index (0 or Main)
+        if (field === 'phone') {
+            const phones = [...(contact.phones || [])];
+            if (phones.length === 0) phones.push({ type: 'Mobile', number: '' });
+            
+            const targetIndex = phones.findIndex(p => p.type === 'Main') !== -1 
+                ? phones.findIndex(p => p.type === 'Main') 
+                : 0;
+            
+            // FIX: Apply formatter here
+            const formattedNumber = formatPhoneNumber(updatedValue || ''); 
+            
+            phones[targetIndex] = { ...phones[targetIndex], number: formattedNumber };
+            updatedContact.phones = phones;
+            
+            // Force the cell to show the formatted value immediately
+            if (e.currentTarget) e.currentTarget.textContent = formattedNumber;
+        }
+        else if (field === 'email') {
+            const emails = [...(contact.emails || [])];
+            if (emails.length === 0) emails.push({ type: 'Main', address: '' });
+            const targetIndex = emails.findIndex(e => e.type === 'Main') !== -1 
+                ? emails.findIndex(e => e.type === 'Main') 
+                : 0;
+            emails[targetIndex] = { ...emails[targetIndex], address: updatedValue || '' };
+            updatedContact.emails = emails;
+        }
+        else if (['city', 'state', 'zip', 'address1', 'address2'].includes(field)) {
+             const addresses = [...(contact.addresses || [])];
+             if (addresses.length === 0) addresses.push({ type: 'Main', address1: '', city: '', state: '', zip: '' });
+             const targetIndex = addresses.findIndex(a => a.type === 'Main') !== -1 
+                ? addresses.findIndex(a => a.type === 'Main') 
+                : 0;
+             (addresses[targetIndex] as any)[field] = updatedValue || '';
+             updatedContact.addresses = addresses;
+        }
+        else {
+            // Standard fields (firstName, lastName, etc.)
+            (updatedContact as any)[field] = updatedValue;
+        }
+
+        onUpdateContact(updatedContact);
     };
 
-    // <-- FIX: New handler for saving from the popup
     const handleSaveCategory = (categories: Category[]) => {
         if (!editingCategoryId) return;
-
         const contactToUpdate = contacts.find(c => c.id === editingCategoryId);
         if (contactToUpdate) {
             onUpdateContact({ ...contactToUpdate, category: categories });
         }
-        setEditingCategoryId(null); // Close popup
+        setEditingCategoryId(null); 
     };
 
-    // Find the contact being edited for the popup
     const contactForPopup = useMemo(() => {
         if (!editingCategoryId) return undefined;
         return contacts.find(c => c.id === editingCategoryId);
     }, [editingCategoryId, contacts]);
+
+    const formatPhoneNumber = (value: string) => {
+        if (!value) return value;
+        if (value.startsWith('+') || value.startsWith('1')) return value;
+        const input = value.replace(/\D/g, '');
+        const constrainedInput = input.substring(0, 10);
+        
+        if (constrainedInput.length < 4) return constrainedInput;
+        if (constrainedInput.length < 7) return `(${constrainedInput.slice(0, 3)}) ${constrainedInput.slice(3)}`;
+        return `(${constrainedInput.slice(0, 3)}) ${constrainedInput.slice(3, 6)}-${constrainedInput.slice(6, 10)}`;
+    };
 
     return (
         <div className="bg-white shadow-lg rounded-xl overflow-hidden">
@@ -185,32 +243,35 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                     {ALL_CONTACT_FIELDS.map(({ key, hiddenInMobile }) => {
                                         const isCategory = key === 'category';
                                         const isNewsletter = key === 'sendTNSBNewsletter';
-                                        
-                                        // CHANGE THIS LINE: Check for 'sequentialId' instead of 'id'
-                                        const isId = key === 'sequentialId'; 
-                                        
-                                        // FIX: Make ID field non-editable
+                                        const isId = key === 'contactNumber'; 
                                         const isEditable = isAdmin && !isCategory && !isId;
                                         
-                                        // <-- FIX: Handle category array display
                                         let displayValue: string | React.ReactNode = '-';
-                                        if (isCategory) {
+                                        
+                                        // --- MAPPING LOGIC ---
+                                        if (isId) {
+                                            displayValue = contact.contactNumber ? `#${contact.contactNumber}` : '-';
+                                        }
+                                        else if (isCategory) {
                                             const categories = Array.isArray(contact.category) ? contact.category : [];
                                             let catString = categories.join(', ');
-
-                                            // --- ADD: Logic to display otherCategory text ---
                                             if (categories.includes(Category.OTHER) && contact.otherCategory) {
-                                                // Replace "Other" with "Other (specified text)"
                                                 catString = categories.map(c => 
                                                     c === Category.OTHER ? `${Category.OTHER} (${contact.otherCategory})` : c
                                                 ).join(', ');
                                             }
-                                            // --- END ADD ---
-
-                                            if (categories.length > 0) {
-                                                displayValue = catString;
-                                            }
-                                       } else if (isNewsletter) {
+                                            if (categories.length > 0) displayValue = catString;
+                                       } 
+                                       else if (key === 'phone') {
+                                            displayValue = getPrimary(contact, 'phones', 'number');
+                                       }
+                                       else if (key === 'email') {
+                                            displayValue = getPrimary(contact, 'emails', 'address');
+                                       }
+                                       else if (['city', 'state'].includes(key)) {
+                                            displayValue = getPrimary(contact, 'addresses', key);
+                                       }
+                                       else if (isNewsletter) {
                                             const subscribed = !!contact.sendTNSBNewsletter;
                                             displayValue = (
                                                 <button
@@ -223,7 +284,7 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                                 </button>
                                             );
                                         } else {
-                                            displayValue = contact[key] || (isEditable ? '' : '-');
+                                            displayValue = (contact as any)[key] || (isEditable ? '' : '-');
                                         }
 
                                         return (
@@ -234,7 +295,6 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                                     ${hiddenInMobile ? 'hidden lg:table-cell' : ''}
                                                 `}
                                             >
-                                                {/* --- FIX: New Category display/edit logic --- */}
                                                 {isCategory ? (
                                                     <button
                                                         type="button"
@@ -249,7 +309,7 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                                 ) : (
                                                     <span
                                                         contentEditable={isEditable}
-                                                        onBlur={(e) => isEditable && handleFieldUpdate(e, contact, key as keyof Contact)}
+                                                        onBlur={(e) => isEditable && handleFieldUpdate(e, contact, key)}
                                                         suppressContentEditableWarning={true}
                                                         className={isEditable ? 'inline-block w-full cursor-text' : 'inline-block'}
                                                     >
@@ -280,20 +340,20 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                     <tr className="lg:hidden bg-gray-50">
                                         <td colSpan={ALL_CONTACT_FIELDS.length + 1} className="px-6 py-4">
                                             <div className="space-y-3 text-sm text-gray-600">
-                                                <p><strong className="font-medium text-gray-800">Phone:</strong> <span 
-                                                    contentEditable={isAdmin} 
-                                                    onBlur={(e) => handleFieldUpdate(e, contact, 'phone')} 
-                                                    suppressContentEditableWarning={true}
-                                                >
-                                                    {contact.phone || (isAdmin ? '' : '-')}
-                                                </span></p>
-                                                <p><strong className="font-medium text-gray-800">URL:</strong> <span 
-                                                    contentEditable={isAdmin} 
-                                                    onBlur={(e) => handleFieldUpdate(e, contact, 'url')} 
-                                                    suppressContentEditableWarning={true}
-                                                >
-                                                    {contact.url || (isAdmin ? '' : '-')}
-                                                </span></p>
+                                                <p><strong className="font-medium text-gray-800">Phone:</strong> 
+                                                    <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'phone')} suppressContentEditableWarning={true}>
+                                                        {getPrimary(contact, 'phones', 'number')}
+                                                    </span>
+                                                </p>
+                                                <p><strong className="font-medium text-gray-800">Email:</strong> 
+                                                    <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'email')} suppressContentEditableWarning={true}>
+                                                        {getPrimary(contact, 'emails', 'address')}
+                                                    </span>
+                                                </p>
+                                                <p>
+                                                    <strong className="font-medium text-gray-800">Address:</strong>
+                                                    {getPrimary(contact, 'addresses', 'address1')} {getPrimary(contact, 'addresses', 'city')}, {getPrimary(contact, 'addresses', 'state')}
+                                                </p>
                                                 <p>
                                                     <strong className="font-medium text-gray-800">Newsletter:</strong>
                                                     <button
@@ -305,10 +365,6 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                                         {contact.sendTNSBNewsletter ? 'Subscribed' : 'Not Subscribed'}
                                                     </button>
                                                 </p>
-                                                <p><strong className="font-medium text-gray-800">Address 1:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'address1')} suppressContentEditableWarning={true}>{contact.address1 || (isAdmin ? '' : '-')}</span></p>
-
-                                                <p><strong className="font-medium text-gray-800">Address 2:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'address2')} suppressContentEditableWarning={true}>{contact.address2 || (isAdmin ? '' : '-')}</span></p>
-                                                <p><strong className="font-medium text-gray-800">City, State, Zip:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'city')} suppressContentEditableWarning={true}>{contact.city || ''}</span>, <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'state')} suppressContentEditableWarning={true}>{contact.state || ''}</span> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'zip')} suppressContentEditableWarning={true}>{contact.zip || ''}</span></p>
                                                 <p><strong className="font-medium text-gray-800">Notes:</strong> <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'notes')} suppressContentEditableWarning={true}>{contact.notes || (isAdmin ? '' : '-')}</span></p>
                                             </div>
                                         </td>
@@ -319,7 +375,6 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                     </tbody>
                 </table>
             </div>
-            {/* Pagination Controls */}
             <div className="px-6 py-3 flex items-center justify-between border-t border-gray-200 bg-gray-50">
                 <div className="flex-1 flex justify-between sm:hidden">
                     <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50">Previous</button>
@@ -347,7 +402,6 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                 </div>
             </div>
 
-            {/* --- FIX: Render the popup --- */}
             {contactForPopup && (
                 <CategoryEditPopup
                     contact={contactForPopup}

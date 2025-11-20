@@ -34,7 +34,7 @@
     // --- Filter Configs ---
     // Kept contacts
     const contactFilterConfig: FilterFieldConfig[] = [
-      { field: 'sequentialId', label: 'ID', type: 'text' },
+      { field: 'contactNumber', label: 'ID', type: 'text' },
       { field: 'firstName', label: 'First Name', type: 'text' },
       { field: 'lastName', label: 'Last Name', type: 'text' },
       { field: 'email', label: 'Email', type: 'text' },
@@ -177,6 +177,12 @@
             return manuallyFilteredContacts;
         }, [aiSearchResults, currentView, contacts, filteredContacts, manuallyFilteredContacts]);
 
+        const activeContacts = useMemo(() => {
+            // Show contact if isActive is true OR undefined (legacy records are visible)
+            // Hide only if explicitly false
+            return finalContactsList.filter(c => c.isActive !== false); 
+        }, [finalContactsList]);
+
         // This is the correct, simple filter.
         // It finds all contacts that have "Staff" in their category list.
         const staffContacts = useMemo(() => {
@@ -227,9 +233,13 @@
         };
 
         const handleDeleteContact = (id: string) => {
-            // Use custom modal later
-            if (window.confirm('Are you sure you want to delete this contact?')) {
-                onDeleteContact(id);
+            // Changed prompt to reflect "Archiving"
+            if (window.confirm('Are you sure you want to archive this contact? They will be moved to inactive status.')) {
+                const contact = contacts.find(c => c.id === id);
+                if (contact) {
+                    // Soft Delete: Update isActive to false instead of removing from DB
+                    onUpdateContact({ ...contact, isActive: false });
+                }
             }
         };
         
@@ -490,7 +500,7 @@
                             {/* --- Main View Content --- */}
                             {currentView === 'contacts' && (
                                 <ContactTable 
-                                    contacts={finalContactsList} // Use the final list
+                                    contacts={activeContacts} // <--- CHANGE THIS (was finalContactsList)
                                     onEdit={handleEditContact} 
                                     onDelete={handleDeleteContact} 
                                     isAdmin={isAdmin} 

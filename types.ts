@@ -15,7 +15,7 @@ export interface FirebaseTimestamp {
 // Contact Interface
 export interface Contact {
   id: string;
-  sequentialId?: string;
+  contactNumber?: number;
   honorific?: string;
   firstName: string;
   middleName?: string; // <-- Changed from middleInitial
@@ -23,13 +23,20 @@ export interface Contact {
   suffix?: string;
   category: Category[]; // <-- FIX: Changed from Category to Category[]
   phone?: string;
+  phones: PhoneEntry[];
   email: string;
+  emails: EmailEntry[];
   url?: string;
   address1?: string;
   address2?: string;
+  addresses: AddressEntry[];
   city?: string;
   state?: string;
   zip?: string;
+  company?: string; 
+  jobTitle?: string;
+  website?: string;
+  socialMedia?: SocialMediaEntry[];
   notes?: string;
   otherCategory?: string;
   sendTNSBNewsletter?: boolean;
@@ -37,6 +44,7 @@ export interface Contact {
   createdBy?: string;
   lastModifiedAt?: FirebaseTimestamp | Date | any;
   lastModifiedBy?: string;
+  isActive?: boolean;
 }
 
 export enum UserRole {

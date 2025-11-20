@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Contact, Category, isValidEmail, isValidPhone, isValidUrl, isValidZip, isValidState } from '../types';
+import { Contact, Category, isValidEmail, isValidPhone, isValidUrl, PhoneEntry, EmailEntry, AddressEntry, SocialMediaEntry } from '../types';
 import ClipboardIcon from './icons/ClipboardIcon';
+
+
 
 // Define the structure for the fetched Place object
 interface FetchedPlace {
@@ -13,16 +15,16 @@ declare global {
   namespace JSX {
     interface IntrinsicElements {
       'gmp-place-autocomplete': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement> & {
-        value: string;
-        "country-codes": string;
-        "place-fields": string;
+        value?: string;
+        "country-codes"?: string;
+        "place-fields"?: string;
         place?: google.maps.places.Place | null;
       }, HTMLElement>;
     }
   }
 }
 
-// API Loader Function (no changes)
+// API Loader Function
 const loadGoogleMapsScript = () => {
   const apiKey = (import.meta as any).env.VITE_GOOGLE_MAPS_API_KEY;
   const scriptId = 'google-maps-script';
@@ -50,18 +52,31 @@ const formatTimestamp = (timestamp: any): string => {
     try {
         const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
         if (isNaN(date.getTime())) return 'Invalid Date';
-        return date.toLocaleString(); // e.g., "11/1/2025, 7:30:00 PM"
+        return date.toLocaleString();
     } catch (error) {
         console.error("Error formatting timestamp:", error);
         return 'N/A';
     }
 };
 
-// --- FIX: Added capitalize helper function ---
 const capitalize = (s: string) => {
     if (!s) return s;
-    // Capitalizes the first letter of each word
     return s.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+};
+
+// Phone Formatter
+const formatPhoneNumber = (value: string) => {
+    if (!value) return value;
+    // Allow international or specific formats to bypass
+    if (value.startsWith('+') || value.startsWith('1')) return value;
+    
+    const input = value.replace(/\D/g, '');
+    // Prevent typing more than 10 digits for standard US numbers to avoid weirdness
+    const constrainedInput = input.substring(0, 10);
+    
+    if (constrainedInput.length < 4) return constrainedInput;
+    if (constrainedInput.length < 7) return `(${constrainedInput.slice(0, 3)}) ${constrainedInput.slice(3)}`;
+    return `(${constrainedInput.slice(0, 3)}) ${constrainedInput.slice(3, 6)}-${constrainedInput.slice(6, 10)}`;
 };
 
 interface ContactFormProps {
@@ -72,21 +87,26 @@ interface ContactFormProps {
 }
 
 const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, contactToEdit }) => {
-    // --- State Hooks ---
+    // --- Initial State ---
     const initialFormState = {
         honorific: '', firstName: '', middleName: '', lastName: '', suffix: '',
         category: [] as Category[],
-        phone: '', email: '', url: '',
-        address1: '', address2: '', city: '', state: '', zip: '', notes: '',
-        otherCategory: '', // Added for 'Other' category
+        phones: [] as PhoneEntry[],
+        emails: [] as EmailEntry[],
+        addresses: [] as AddressEntry[],
+        company: '', jobTitle: '', website: '', 
+        socialMedia: [] as SocialMediaEntry[],
+        notes: '',
+        otherCategory: '',
         sendTNSBNewsletter: false,
+        isActive: true,
     };
-    const [formState, setFormState] = useState<Omit<Contact, 'id' | 'createdAt' | 'createdBy' | 'lastModifiedAt' | 'lastModifiedBy'>>(initialFormState);
+
+    const [formState, setFormState] = useState<any>(initialFormState);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
     const autocompleteRef = useRef<HTMLElement & { value: string, place?: google.maps.places.Place | null } | null>(null);
     const [mapsApiLoaded, setMapsApiLoaded] = useState(false);
     const [placeDetails, setPlaceDetails] = useState<FetchedPlace | null>(null);
-
 
     // --- Effects ---
     useEffect(() => {
@@ -106,40 +126,50 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
             ? { ...initialFormState, ...contactToEdit } 
             : initialFormState;
 
-        // Handle Category conversion for old data
+        // --- MIGRATION LOGIC ON LOAD ---
+        // If editing an old contact, convert strings to arrays
         if (contactToEdit) {
             if (typeof contactToEdit.category === 'string') {
                 initialState.category = [contactToEdit.category as Category];
-            } else if (Array.isArray(contactToEdit.category)) {
-                initialState.category = contactToEdit.category;
-            } else {
+            } else if (!Array.isArray(contactToEdit.category)) {
                 initialState.category = [];
+            }
+
+            if (!contactToEdit.phones && (contactToEdit as any).phone) {
+                initialState.phones = [{ type: 'Main', number: (contactToEdit as any).phone }];
+            }
+            if (!contactToEdit.emails && (contactToEdit as any).email) {
+                initialState.emails = [{ type: 'Main', address: (contactToEdit as any).email }];
+            }
+            if (!contactToEdit.addresses && (contactToEdit as any).address1) {
+                 initialState.addresses = [{
+                    type: 'Main',
+                    address1: (contactToEdit as any).address1 || '',
+                    address2: (contactToEdit as any).address2 || '',
+                    city: (contactToEdit as any).city || '',
+                    state: (contactToEdit as any).state || '',
+                    zip: (contactToEdit as any).zip || ''
+                 }];
             }
         }
 
-        // Handle mapping if 'middleInitial' still exists on old data
-        if (contactToEdit && (contactToEdit as any).middleInitial && !contactToEdit.middleName) {
-            initialState.middleName = (contactToEdit as any).middleInitial;
-        }
+        // Ensure at least one empty slot for new contacts
+        if (!initialState.phones || initialState.phones.length === 0) initialState.phones = [{ type: 'Mobile', number: '' }];
+        if (!initialState.emails || initialState.emails.length === 0) initialState.emails = [{ type: 'Main', address: '' }];
 
         setFormState(initialState);
-        setPlaceDetails(null); // Reset details on open
+        setPlaceDetails(null);
 
         if (autocompleteRef.current) {
              autocompleteRef.current.value = '';
         }
     }, [isOpen, contactToEdit]);
 
-
     // Google Maps Autocomplete listener
     useEffect(() => {
-        if (!isOpen || !mapsApiLoaded || !autocompleteRef.current) {
-            return;
-        }
+        if (!isOpen || !mapsApiLoaded || !autocompleteRef.current) return;
 
         const autocompleteElement = autocompleteRef.current;
-        console.log('Attaching gmp-select listener...');
-
         const handlePlaceSelect = async (event: any) => {
             const { placePrediction } = event;
              if (!placePrediction) {
@@ -149,11 +179,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
              try {
                 const place = placePrediction.toPlace();
                 await place.fetchFields({ fields: ['addressComponents', 'formattedAddress'] });
-                 if (place.addressComponents) {
-                     setPlaceDetails(place as FetchedPlace);
-                 } else {
-                     setPlaceDetails(null);
-                 }
+                setPlaceDetails(place as FetchedPlace);
              } catch (error) {
                  console.error("Error fetching place details:", error);
                  setPlaceDetails(null);
@@ -161,16 +187,15 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
         };
 
         autocompleteElement.addEventListener('gmp-select', handlePlaceSelect);
-
         return () => {
-             if (autocompleteElement) {
-                autocompleteElement.removeEventListener('gmp-select', handlePlaceSelect);
-            }
+             if (autocompleteElement) autocompleteElement.removeEventListener('gmp-select', handlePlaceSelect);
         };
     }, [isOpen, mapsApiLoaded]);
 
 
-    // --- Event Handlers ---
+    // --- Handlers ---
+
+    // Updated: Adds a NEW address card based on the search result
     const handleFillAddress = () => {
         if (placeDetails?.addressComponents) {
             const getAddressComponent = (type: string, useShortName = false): string => {
@@ -181,50 +206,96 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
             const street_number = getAddressComponent('street_number');
             const route = getAddressComponent('route');
 
-            setFormState(prev => ({
-                ...prev,
+            const newAddress: AddressEntry = {
+                type: 'Main',
                 address1: `${street_number} ${route}`.trim(),
+                address2: '',
                 city: getAddressComponent('locality') || getAddressComponent('postal_town'),
                 state: getAddressComponent('administrative_area_level_1', true),
                 zip: getAddressComponent('postal_code'),
+            };
+
+            setFormState((prev: any) => ({
+                ...prev,
+                addresses: [...(prev.addresses || []), newAddress]
             }));
+            
+            // Reset search
+            setPlaceDetails(null);
+            if (autocompleteRef.current) autocompleteRef.current.value = '';
         }
     };
 
-    // --- FIX: Updated handleChange to include capitalization ---
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        
         let finalValue = value;
-        // Apply capitalization logic to specific fields
-        if (name === 'firstName' || name === 'lastName' || name === 'city') {
+        if (['firstName', 'lastName', 'city', 'company', 'jobTitle'].includes(name)) {
             finalValue = capitalize(value);
         }
-        
-        setFormState(prev => ({ ...prev, [name]: finalValue }));
+        setFormState((prev: any) => ({ ...prev, [name]: finalValue }));
     };
 
     const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, checked } = e.target;
-        setFormState(prev => ({ ...prev, [name]: checked }));
+        setFormState((prev: any) => ({ ...prev, [name]: checked }));
     };
     
-    // Handler for category checkboxes
     const handleCategoryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { value, checked } = e.target;
         const category = value as Category;
-
-        setFormState(prev => {
+        setFormState((prev: any) => {
             const currentCategories = prev.category || [];
-            if (checked) {
-                if (!currentCategories.includes(category)) {
-                    return { ...prev, category: [...currentCategories, category] };
-                }
-            } else {
-                return { ...prev, category: currentCategories.filter(cat => cat !== category) };
+            if (checked && !currentCategories.includes(category)) {
+                return { ...prev, category: [...currentCategories, category] };
+            } else if (!checked) {
+                return { ...prev, category: currentCategories.filter((cat: Category) => cat !== category) };
             }
             return prev;
         });
+    };
+
+    // --- Dynamic Array Handlers (Fixed Immutability) ---
+    const handleArrayChange = (index: number, field: string, key: string, value: string) => {
+        setFormState((prev: any) => {
+            // 1. Copy the array
+            const list = [...(prev[field] as any[])];
+            // 2. Copy the specific item (This was missing!)
+            const item = { ...list[index] }; 
+            
+            if (field === 'phones' && key === 'number') {
+                item[key] = formatPhoneNumber(value);
+            } else if (['city', 'address1', 'address2', 'company', 'jobTitle'].includes(key)) {
+                 item[key] = capitalize(value);
+            } else if (key === 'state') {
+                 item[key] = value.toUpperCase();
+            } else {
+                item[key] = value;
+            }
+            
+            // 3. Put the updated item back in the list
+            list[index] = item;
+            return { ...prev, [field]: list };
+        });
+    };
+
+    const addEntry = (field: string) => {
+        const defaults: any = {
+            phones: { type: 'Mobile', number: '' },
+            emails: { type: 'Main', address: '' },
+            socialMedia: { platform: 'LinkedIn', url: '' },
+            addresses: { type: 'Main', address1: '', city: '', state: '', zip: '' }
+        };
+        setFormState((prev: any) => ({
+            ...prev,
+            [field]: [...(prev[field] || []), defaults[field]]
+        }));
+    };
+
+    const removeEntry = (field: string, index: number) => {
+        setFormState((prev: any) => ({
+            ...prev,
+            [field]: (prev[field] as any[]).filter((_, i) => i !== index)
+        }));
     };
     
     const validate = () => {
@@ -232,262 +303,254 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
         
         if (!formState.firstName) newErrors.firstName = 'First name is required.';
         if (!formState.lastName) newErrors.lastName = 'Last name is required.';
-        if (!formState.email) newErrors.email = 'Email is required.';
         
-        if (formState.email && !isValidEmail(formState.email)) newErrors.email = 'Email is invalid.';
-        if (formState.phone && !isValidPhone(formState.phone)) newErrors.phone = 'Phone format is invalid (use only digits, at least 7).';
-        if (formState.url && !isValidUrl(formState.url)) newErrors.url = 'URL is invalid.';
-        if (formState.zip && !isValidZip(formState.zip)) newErrors.zip = 'Zip code must be 5 or 5-4 digits.';
-        if (formState.state && !isValidState(formState.state)) newErrors.state = 'State must be a 2-letter abbreviation.';
+        // Validate Emails
+        formState.emails?.forEach((e: EmailEntry) => {
+             if (e.address && !isValidEmail(e.address)) {
+                 newErrors.email = 'One or more emails are invalid.';
+             }
+        });
+
+        // --- RESTORED PHONE VALIDATION ---
+        formState.phones?.forEach((p: PhoneEntry) => {
+             // Only validate if a number is entered
+             if (p.number && !isValidPhone(p.number)) {
+                 newErrors.phone = `Invalid phone number: ${p.number}`;
+             }
+        });
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
-    }
+    };
 
-    // --- FIX: Corrected handleSubmit logic for 'otherCategory' ---
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (validate()) {
-            // This line defines cleanedState
-            const cleanedState = Object.fromEntries(
-                // --- THIS IS THE BUG ---
-                // Object.entries(formState).filter(([, value]) => value !== '' && value !== null)
+            // Clean up empty entries before saving
+            const cleanedState = { ...formState };
+            cleanedState.phones = cleanedState.phones.filter((p: PhoneEntry) => p.number.trim() !== '');
+            cleanedState.emails = cleanedState.emails.filter((e: EmailEntry) => e.address.trim() !== '');
+            cleanedState.addresses = cleanedState.addresses.filter((a: AddressEntry) => a.address1.trim() !== '');
 
-                // --- THIS IS THE FIX ---
-                // We remove the (value !== '') check, so empty strings are no longer filtered out
-                Object.entries(formState).filter(([, value]) => value !== null)
-            );
-
-            // Ensure category is an array, even if empty
-            let finalState: Omit<Contact, 'id' | 'createdAt' | 'createdBy' | 'lastModifiedAt' | 'lastModifiedBy'> | Contact = {
-                ...cleanedState, // This line was causing the error
-                category: formState.category || [],
-            };
-            
-            // Conditionally add otherCategory ONLY if 'Other' is selected
-            if (formState.category.includes(Category.OTHER)) {
-                finalState.otherCategory = formState.otherCategory || ''; // Use empty string if "Other" is checked but field is blank
-            } else {
-                // Explicitly delete otherCategory if 'Other' is NOT selected
-                // This prevents 'undefined' from being sent to Firestore
-                delete (finalState as Partial<Contact>).otherCategory; 
+            // Handle Other Category
+            if (!cleanedState.category.includes(Category.OTHER)) {
+                delete cleanedState.otherCategory;
             }
-            
-            onSave(contactToEdit ? { ...finalState, id: contactToEdit.id } as Contact : finalState as Omit<Contact, 'id'>);
+
+            onSave(contactToEdit ? { ...cleanedState, id: contactToEdit.id } : cleanedState);
             onClose();
         }
     };
 
-    // --- Render Logic ---
     if (!isOpen) return null;
     
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center">
-            <div className="bg-white rounded-lg shadow-2xl p-8 m-4 max-w-3xl w-full max-h-[90vh] flex flex-col">
-                <h2 className="text-2xl font-bold text-gray-800 mb-6 flex-shrink-0">{contactToEdit ? 'Edit Contact' : 'New Contact'}</h2>
-                <form onSubmit={handleSubmit} className="flex-grow overflow-y-auto pr-2">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                        {/* Name Fields */}
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center overflow-y-auto py-10">
+            <div className="bg-white rounded-lg shadow-2xl p-8 m-4 max-w-4xl w-full flex flex-col max-h-[95vh]">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-gray-800">
+                        {contactToEdit ? 'Edit Contact' : 'New Contact'}
+                    </h2>
+                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="flex-grow overflow-y-auto pr-2 space-y-6">
+                    
+                    {/* --- Basic Info --- */}
+                    <div className="grid grid-cols-1 md:grid-cols-6 gap-6">
                         <div className="md:col-span-1">
-                            <label htmlFor="honorific" className="block text-sm font-medium text-gray-700">Honorific</label>
-                            <select
-                                id="honorific"
-                                name="honorific"
-                                value={formState.honorific || ''}
-                                onChange={handleChange}
-                                className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                            >
-                                <option value="">-- Select --</option>
+                            <label className="block text-sm font-medium text-gray-700">Honorific</label>
+                            <select name="honorific" value={formState.honorific || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm sm:text-sm">
+                                <option value="">-</option>
                                 <option value="Mr.">Mr.</option>
                                 <option value="Mrs.">Mrs.</option>
-                                <option value="Miss">Miss</option>
                                 <option value="Ms.">Ms.</option>
                                 <option value="Dr.">Dr.</option>
-                                <option value="Rev.">Rev.</option>
                             </select>
                         </div>
                         <div className="md:col-span-2">
-                            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name <span className="text-red-500">*</span></label>
-                            <input type="text" id="firstName" name="firstName" value={formState.firstName} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.firstName ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} />
+                            <label className="block text-sm font-medium text-gray-700">First Name *</label>
+                            <input type="text" name="firstName" value={formState.firstName} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 border ${errors.firstName ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} />
                             {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
                         </div>
                         <div className="md:col-span-1">
-                            <label htmlFor="middleName" className="block text-sm font-medium text-gray-700">Middle</label>
-                            <input type="text" id="middleName" name="middleName" value={formState.middleName || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" />
-                        </div>
-                        <div className="md:col-span-3">
-                            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">Last Name <span className="text-red-500">*</span></label>
-                            <input type="text" id="lastName" name="lastName" value={formState.lastName} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.lastName ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} />
-                            {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName}</p>}
-                        </div>
-                        <div className="md:col-span-1">
-                            <label htmlFor="suffix" className="block text-sm font-medium text-gray-700">Suffix</label>
-                            <input type="text" id="suffix" name="suffix" value={formState.suffix || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" />
-                        </div>
-
-                        {/* Contact Fields */}
-                        <div className="md:col-span-2">
-                            <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Phone</label>
-                            <input type="tel" id="phone" name="phone" value={formState.phone || ''} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.phone ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} />
-                            {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+                            <label className="block text-sm font-medium text-gray-700">Middle</label>
+                            <input type="text" name="middleName" value={formState.middleName || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" />
                         </div>
                         <div className="md:col-span-2">
-                            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email <span className="text-red-500">*</span></label>
-                            <input type="email" id="email" name="email" value={formState.email} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.email ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} />
-                            {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-                        </div>
-                        
-                        {/* Address Search Section */}
-                        <div className="md:col-span-4">
-                            <label className="block text-sm font-medium text-gray-700">Address Search</label>
-                            <div className="flex items-center gap-2 mt-1">
-                                {mapsApiLoaded ? (
-                                    <gmp-place-autocomplete
-                                        ref={autocompleteRef}
-                                        placeholder="Start typing an address..."
-                                        country-codes='["us"]'
-                                        place-fields="addressComponents,formattedAddress"
-                                        className="flex-grow border border-gray-300 rounded-md shadow-sm p-2 text-sm"
-                                    ></gmp-place-autocomplete>
-                                 ) : (
-                                    <div className="flex-grow p-2 text-sm text-gray-500 italic">Loading maps...</div>
-                                 )}
-                                <button
-                                    type="button"
-                                    onClick={handleFillAddress}
-                                    disabled={!placeDetails}
-                                    className={`p-2 rounded-md transition-opacity ${
-                                        placeDetails
-                                            ? 'text-indigo-600 hover:bg-indigo-100'
-                                            : 'text-gray-400 cursor-not-allowed opacity-50'
-                                    }`}
-                                >
-                                    <ClipboardIcon className="h-6 w-6" />
-                                    <span className="sr-only">Fill Address</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Individual Address fields */}
-                        <div className="md:col-span-4">
-                            <label htmlFor="address1" className="block text-sm font-medium text-gray-700">Address 1</label>
-                            <input type="text" id="address1" name="address1" value={formState.address1 || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" />
-                        </div>
-                        <div className="md:col-span-4">
-                            <label htmlFor="address2" className="block text-sm font-medium text-gray-700">Address 2</label>
-                            <input type="text" id="address2" name="address2" value={formState.address2 || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" />
+                            <label className="block text-sm font-medium text-gray-700">Last Name *</label>
+                            <input type="text" name="lastName" value={formState.lastName} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 border ${errors.lastName ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} />
                         </div>
                         <div className="md:col-span-2">
-                            <label htmlFor="city" className="block text-sm font-medium text-gray-700">City</label>
-                            <input type="text" id="city" name="city" value={formState.city || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm" />
+                            <label className="block text-sm font-medium text-gray-700">Company</label>
+                            <input type="text" name="company" value={formState.company || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" />
                         </div>
-                        <div className="md:col-span-1">
-                            <label htmlFor="state" className="block text-sm font-medium text-gray-700">State</label>
-                            <input type="text" id="state" name="state" value={formState.state || ''} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.state ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm uppercase`} maxLength={2} />
-                            {errors.state && <p className="text-red-500 text-xs mt-1">{errors.state}</p>}
+                        <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700">Job Title</label>
+                            <input type="text" name="jobTitle" value={formState.jobTitle || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" />
                         </div>
-                        <div className="md:col-span-1">
-                            <label htmlFor="zip" className="block text-sm font-medium text-gray-700">Zip</label>
-                            <input type="text" id="zip" name="zip" value={formState.zip || ''} onChange={handleChange} className={`mt-1 block w-full px-3 py-2 bg-white border ${errors.zip ? 'border-red-500' : 'border-gray-300'} rounded-md shadow-sm`} maxLength={10} />
-                            {errors.zip && <p className="text-red-500 text-xs mt-1">{errors.zip}</p>}
-                        </div>
-
-                        {/* Category Checkboxes */}
-                         <div className="md:col-span-4">
-                             <label className="block text-sm font-medium text-gray-700">Category</label>
-                             <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
-                                {/* Sorted Category List */}
-                                {[
-                                    Category.CUSTOMER,
-                                    Category.MEDIA,
-                                    Category.STAFF,
-                                    Category.VENDOR,
-                                    Category.OTHER
-                                ].map(cat => (
-                                    <div key={cat} className="flex items-center">
-                                        <input
-                                            id={`category-${cat}`}
-                                            name="category"
-                                            type="checkbox"
-                                            value={cat}
-                                            checked={(formState.category || []).includes(cat)}
-                                            onChange={handleCategoryChange}
-                                            className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                                        />
-                                        <label htmlFor={`category-${cat}`} className="ml-3 block text-sm text-gray-900">
-                                            {cat}
-                                        </label>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Other Category Textbox */}
-                        {formState.category.includes(Category.OTHER) && (
-                            <div className="md:col-span-4">
-                                <label htmlFor="otherCategory" className="block text-sm font-medium text-gray-700">Other Category (Please specify)</label>
-                                <input
-                                    type="text"
-                                    id="otherCategory"
-                                    name="otherCategory"
-                                    value={(formState as any).otherCategory || ''}
-                                    onChange={handleChange}
-                                    className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                                />
-                            </div>
-                        )}
-
-                        {/* Newsletter Toggle */}
-                        <div className="md:col-span-4">
-                            <div className="flex items-center">
-                                <input
-                                    id="sendTNSBNewsletter"
-                                    name="sendTNSBNewsletter"
-                                    type="checkbox"
-                                    checked={!!formState.sendTNSBNewsletter}
-                                    onChange={handleCheckboxChange}
-                                    className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                                />
-                                <label htmlFor="sendTNSBNewsletter" className="ml-3 block text-sm font-medium text-gray-700">
-                                    Send TNSB Newsletter
-                                </label>
-                            </div>
-                        </div>
-
-                        {/* Notes */}
-                        <div className="md:col-span-4">
-                            <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Notes</label>
-                            <textarea
-                                id="notes"
-                                name="notes"
-                                value={formState.notes || ''}
-                                onChange={handleChange}
-                                rows={3}
-                                className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm"
-                            />
+                        <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700">Website</label>
+                            <input type="url" name="website" value={formState.website || ''} onChange={handleChange} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" placeholder="https://" />
                         </div>
                     </div>
 
-                    {/* Metadata */}
+                    {/* --- Contact Info (Arrays) --- */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 border-t pt-4">
+                        
+                        {/* Phones */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Phone Numbers</label>
+                            {formState.phones.map((phone: PhoneEntry, index: number) => (
+                                <div key={index} className="flex gap-2 mb-2">
+                                    <select value={phone.type} onChange={(e) => handleArrayChange(index, 'phones', 'type', e.target.value)} className="w-1/3 px-2 py-2 bg-white border border-gray-300 rounded-md text-xs">
+                                        <option value="Mobile">Mobile</option>
+                                        <option value="Work">Work</option>
+                                        <option value="Home">Home</option>
+                                        <option value="Main">Main</option>
+                                    </select>
+                                    <input type="tel" value={phone.number} onChange={(e) => handleArrayChange(index, 'phones', 'number', e.target.value)} placeholder="(555) 123-4567" className="flex-grow px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                                    <button type="button" onClick={() => removeEntry('phones', index)} className="text-red-400 hover:text-red-600">&times;</button>
+                                </div>
+                            ))}
+                             <button type="button" onClick={() => addEntry('phones')} className="text-xs text-indigo-600 font-semibold">+ Add Phone</button>
+                        </div>
+
+                        {/* Emails */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Email Addresses</label>
+                            {formState.emails.map((email: EmailEntry, index: number) => (
+                                <div key={index} className="flex gap-2 mb-2">
+                                    <select value={email.type} onChange={(e) => handleArrayChange(index, 'emails', 'type', e.target.value)} className="w-1/3 px-2 py-2 bg-white border border-gray-300 rounded-md text-xs">
+                                        <option value="Main">Main</option>
+                                        <option value="Work">Work</option>
+                                        <option value="Personal">Personal</option>
+                                    </select>
+                                    <input type="email" value={email.address} onChange={(e) => handleArrayChange(index, 'emails', 'address', e.target.value)} className="flex-grow px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                                    <button type="button" onClick={() => removeEntry('emails', index)} className="text-red-400 hover:text-red-600">&times;</button>
+                                </div>
+                            ))}
+                            <button type="button" onClick={() => addEntry('emails')} className="text-xs text-indigo-600 font-semibold">+ Add Email</button>
+                        </div>
+                    </div>
+
+                    {/* --- Addresses (With Search) --- */}
+                    <div className="border-t pt-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Addresses</label>
+                        
+                        {/* Search Bar */}
+                        <div className="flex items-center gap-2 mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                             <div className="flex-grow">
+                                {mapsApiLoaded ? (
+                                    <gmp-place-autocomplete
+                                        ref={autocompleteRef}
+                                        placeholder="Search to add an address..."
+                                        country-codes='["us"]'
+                                        place-fields="addressComponents,formattedAddress"
+                                        className="w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm"
+                                    ></gmp-place-autocomplete>
+                                 ) : <span className="text-xs text-gray-400">Loading maps...</span>}
+                             </div>
+                             <button type="button" onClick={handleFillAddress} disabled={!placeDetails} className={`p-2 rounded-md ${placeDetails ? 'text-indigo-600 hover:bg-indigo-50' : 'text-gray-300 cursor-not-allowed'}`}>
+                                <ClipboardIcon className="h-6 w-6" />
+                             </button>
+                        </div>
+
+                        {/* Address List */}
+                        <div className="space-y-4">
+                            {formState.addresses.map((addr: AddressEntry, index: number) => (
+                                <div key={index} className="p-4 bg-white rounded-lg border border-gray-300 relative shadow-sm">
+                                    <div className="grid grid-cols-12 gap-3">
+                                        <div className="col-span-3">
+                                             <select value={addr.type} onChange={(e) => handleArrayChange(index, 'addresses', 'type', e.target.value)} className="w-full px-2 py-1 border border-gray-300 rounded text-xs">
+                                                <option value="Main">Main</option>
+                                                <option value="Work">Work</option>
+                                                <option value="Home">Home</option>
+                                                <option value="Other">Other</option>
+                                            </select>
+                                        </div>
+                                        <div className="col-span-9 flex justify-end">
+                                             <button type="button" onClick={() => removeEntry('addresses', index)} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
+                                        </div>
+                                        <div className="col-span-12">
+                                            <input type="text" placeholder="Address Line 1" value={addr.address1} onChange={(e) => handleArrayChange(index, 'addresses', 'address1', e.target.value)} className="w-full px-3 py-1 border border-gray-300 rounded text-sm" />
+                                        </div>
+                                        <div className="col-span-12">
+                                            <input type="text" placeholder="Address Line 2" value={addr.address2} onChange={(e) => handleArrayChange(index, 'addresses', 'address2', e.target.value)} className="w-full px-3 py-1 border border-gray-300 rounded text-sm" />
+                                        </div>
+                                        <div className="col-span-5">
+                                            <input type="text" placeholder="City" value={addr.city} onChange={(e) => handleArrayChange(index, 'addresses', 'city', e.target.value)} className="w-full px-3 py-1 border border-gray-300 rounded text-sm" />
+                                        </div>
+                                        <div className="col-span-3">
+                                            <input type="text" placeholder="State" value={addr.state} maxLength={2} onChange={(e) => handleArrayChange(index, 'addresses', 'state', e.target.value)} className="w-full px-3 py-1 border border-gray-300 rounded text-sm uppercase" />
+                                        </div>
+                                        <div className="col-span-4">
+                                            <input type="text" placeholder="Zip" value={addr.zip} maxLength={10} onChange={(e) => handleArrayChange(index, 'addresses', 'zip', e.target.value)} className="w-full px-3 py-1 border border-gray-300 rounded text-sm" />
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                            <button type="button" onClick={() => addEntry('addresses')} className="text-sm text-indigo-600 font-medium">+ Add Manual Address</button>
+                        </div>
+                    </div>
+
+                    {/* --- Categories & Notes --- */}
+                    <div className="border-t pt-4">
+                         <label className="block text-sm font-medium text-gray-700">Category</label>
+                         <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {[Category.CUSTOMER, Category.MEDIA, Category.STAFF, Category.VENDOR, Category.OTHER].map(cat => (
+                                <div key={cat} className="flex items-center">
+                                    <input id={`cat-${cat}`} type="checkbox" value={cat} checked={(formState.category || []).includes(cat)} onChange={handleCategoryChange} className="h-4 w-4 text-indigo-600 border-gray-300 rounded" />
+                                    <label htmlFor={`cat-${cat}`} className="ml-2 text-sm text-gray-900">{cat}</label>
+                                </div>
+                            ))}
+                        </div>
+                        {formState.category.includes(Category.OTHER) && (
+                            <input type="text" name="otherCategory" value={formState.otherCategory || ''} onChange={handleChange} placeholder="Specify other category" className="mt-2 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm" />
+                        )}
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Notes</label>
+                        <textarea name="notes" value={formState.notes || ''} onChange={handleChange} rows={3} className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm" />
+                    </div>
+
+                    <div className="flex items-center">
+                        <input id="newsletter" name="sendTNSBNewsletter" type="checkbox" checked={!!formState.sendTNSBNewsletter} onChange={handleCheckboxChange} className="h-4 w-4 text-indigo-600 border-gray-300 rounded" />
+                        <label htmlFor="newsletter" className="ml-2 block text-sm text-gray-900">Subscribe to TNSB Newsletter</label>
+                    </div>
+
+                    {/* Metadata - UPDATED SECTION */}
                     {contactToEdit && (
-                        <div className="md:col-span-4 mt-6 pt-4 border-t border-gray-200">
-                            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider">Metadata</h3>
-                            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-600">
-                                <p><strong>Contact ID:</strong> {contactToEdit.id}</p>
-                                <p><strong>Created By:</strong> {contactToEdit.createdBy || 'Unknown'}</p>
-                                <p><strong>Created At:</strong> {formatTimestamp(contactToEdit.createdAt)}</p>
-                                <p><strong>Last Editor:</strong> {contactToEdit.lastModifiedBy || 'Unknown'}</p>
-                                <p><strong>Last Modified:</strong> {formatTimestamp(contactToEdit.lastModifiedAt)}</p>
+                        <div className="mt-6 pt-4 border-t border-gray-200">
+                            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Metadata</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-gray-500">
+                                <div className="bg-gray-50 p-2 rounded border border-gray-100">
+                                    <span className="block font-semibold text-gray-700 mb-1">Contact ID</span>
+                                    <span className="font-mono text-indigo-600">
+                                        {contactToEdit.contactNumber ? `#${contactToEdit.contactNumber}` : contactToEdit.id}
+                                    </span>
+                                </div>
+                                <div className="bg-gray-50 p-2 rounded border border-gray-100">
+                                    <span className="block font-semibold text-gray-700 mb-1">Created</span>
+                                    {formatTimestamp(contactToEdit.createdAt)}
+                                    <span className="block text-gray-400 text-[10px] mt-1">By: {contactToEdit.createdBy || 'System'}</span>
+                                </div>
+                                <div className="bg-gray-50 p-2 rounded border border-gray-100">
+                                    <span className="block font-semibold text-gray-700 mb-1">Last Modified</span>
+                                    {formatTimestamp(contactToEdit.lastModifiedAt)}
+                                    <span className="block text-gray-400 text-[10px] mt-1">By: {contactToEdit.lastModifiedBy || 'System'}</span>
+                                </div>
                             </div>
                         </div>
                     )}
 
                     {/* Form Buttons */}
-                    <div className="mt-8 flex justify-end space-x-4 flex-shrink-0">
-                        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+                    <div className="mt-8 flex justify-end space-x-4 pt-4 border-t border-gray-200">
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 font-medium shadow-sm transition-colors">
                             Cancel
                         </button>
-                        <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-medium shadow-sm transition-colors">
                             Save Contact
                         </button>
                     </div>

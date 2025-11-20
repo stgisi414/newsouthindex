@@ -227,15 +227,59 @@ const countExpenseReportsDeclaration: FunctionDeclaration = {
 
 const addContactDeclaration: FunctionDeclaration = {
   name: "addContact",
-  description: "Adds a new contact to the database.",
+  description: "Adds a new contact to the database. Can handle multiple emails, phones, and addresses.",
   parameters: {
     type: Type.OBJECT,
     properties: {
       firstName: { type: Type.STRING, description: "The contact's first name." },
       lastName: { type: Type.STRING, description: "The contact's last name." },
       honorific: { type: Type.STRING, description: "The contact's title (e.g., Mr, Ms, Dr)." },
-      email: { type: Type.STRING, description: "The contact's email address." },
-      phone: { type: Type.STRING, description: "The contact's phone number." },
+      
+      // --- NEW FIELDS ---
+      company: { type: Type.STRING, description: "The contact's company or organization." },
+      jobTitle: { type: Type.STRING, description: "The contact's job title." },
+      website: { type: Type.STRING, description: "The contact's website URL." },
+      
+      // --- UPDATED ARRAY FIELDS ---
+      emails: {
+        type: Type.ARRAY,
+        description: "List of email addresses.",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            type: { type: Type.STRING, description: "Type of email (e.g., Main, Work, Personal)." },
+            address: { type: Type.STRING, description: "The email address." }
+          }
+        }
+      },
+      phones: {
+        type: Type.ARRAY,
+        description: "List of phone numbers.",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            type: { type: Type.STRING, description: "Type of phone (e.g., Mobile, Work, Home, Main)." },
+            number: { type: Type.STRING, description: "The phone number." }
+          }
+        }
+      },
+      addresses: {
+        type: Type.ARRAY,
+        description: "List of addresses.",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            type: { type: Type.STRING, description: "Type of address (e.g., Main, Work, Home)." },
+            address1: { type: Type.STRING, description: "Street address line 1." },
+            address2: { type: Type.STRING, description: "Street address line 2." },
+            city: { type: Type.STRING, description: "City." },
+            state: { type: Type.STRING, description: "State abbreviation (e.g., AL)." },
+            zip: { type: Type.STRING, description: "Zip code." }
+          }
+        }
+      },
+      // --- END UPDATES ---
+
       category: {
         type: Type.ARRAY,
         description: "A list of categories for the contact (e.g., ['Customer', 'Vendor']).",
@@ -244,10 +288,6 @@ const addContactDeclaration: FunctionDeclaration = {
           enum: Object.values(Category),
         },
       },
-      address1: { type: Type.STRING, description: "The contact's street address." },
-      city: { type: Type.STRING, description: "The contact's city." },
-      state: { type: Type.STRING, description: "The contact's state (2-letter abbreviation)." },
-      zip: { type: Type.STRING, description: "The contact's zip code." },
       sendTNSBNewsletter: { type: Type.BOOLEAN, description: "Whether the contact wants to receive the TNSB Newsletter." },
     },
     required: ["firstName", "lastName"],
@@ -276,11 +316,18 @@ const findContactDeclaration: FunctionDeclaration = {
                 enum: Object.values(Category),
               },
             },
+            // --- EXISTING ADDRESS FILTERS (Backend checks addresses[] array) ---
             state: { type: Type.STRING, description: "The state to filter by (e.g., 'AL')." },
             city: { type: Type.STRING, description: "The city to filter by." },
-            zip: { type: Type.STRING, description: "The zip code to filter by." }, // <-- ADDED
-            sendTNSBNewsletter: { type: Type.BOOLEAN, description: "Filter by newsletter subscription status." }, // <-- ADDED
-            phone: { type: Type.STRING, description: "The phone number to filter by." } // <-- ADDED
+            zip: { type: Type.STRING, description: "The zip code to filter by." },
+            
+            // --- NEW FIELDS (Add these!) ---
+            company: { type: Type.STRING, description: "The company or organization to filter by." },
+            jobTitle: { type: Type.STRING, description: "The job title to filter by." },
+
+            // --- EXISTING OTHER FILTERS ---
+            sendTNSBNewsletter: { type: Type.BOOLEAN, description: "Filter by newsletter subscription status." },
+            phone: { type: Type.STRING, description: "The phone number to filter by." } // Backend checks phones[] array
         }
       }
     },
@@ -301,25 +348,33 @@ const updateContactDeclaration: FunctionDeclaration = {
         type: Type.OBJECT,
         description: "An object containing the fields to update.",
         properties: {
-          // You can list all possible fields here, but it's often easier
-          // to just describe it as an object. For strictness, list them:
           category: {
             type: Type.ARRAY,
-            description: "The new list of categories (e.g., ['Customer', 'Vendor']).",
-            items: {
-              type: Type.STRING,
-              enum: Object.values(Category),
-            },
+            items: { type: Type.STRING, enum: Object.values(Category) },
           },
-          city: { type: Type.STRING, description: "The new city." },
-          email: { type: Type.STRING, description: "The new email." },
-          zip: { type: Type.STRING, description: "The new zip code." },
-          notes: { type: Type.STRING, description: "The new notes." },
-          address1: { type: Type.STRING, description: "The new street address." },
-          suffix: { type: Type.STRING, description: "The new suffix (e.g., Jr)." },
-          honorific: { type: Type.STRING, description: "The new honorific." },
-          sendTNSBNewsletter: { type: Type.BOOLEAN, description: "Set whether the contact wants to receive the TNSB Newsletter." }
-          // Add any other updatable fields
+          // --- NEW SIMPLE FIELDS ---
+          company: { type: Type.STRING },
+          jobTitle: { type: Type.STRING },
+          website: { type: Type.STRING },
+          notes: { type: Type.STRING },
+          
+          // Note: Updating arrays via AI is complex (append vs replace). 
+          // For now, we can allow replacing the specific list if provided.
+          emails: {
+             type: Type.ARRAY,
+             items: {
+                type: Type.OBJECT,
+                properties: { type: { type: Type.STRING }, address: { type: Type.STRING } }
+             }
+          },
+          phones: {
+             type: Type.ARRAY,
+             items: {
+                type: Type.OBJECT,
+                properties: { type: { type: Type.STRING }, number: { type: Type.STRING } }
+             }
+          },
+          sendTNSBNewsletter: { type: Type.BOOLEAN }
         },
       }
     },
@@ -1030,9 +1085,11 @@ export const seedDatabase = onCall({cors: ['https://nsindxonline.web.app', 'http
     }
     logger.info("Database is empty. Seeding with mock data...");
     const batch = admin.firestore().batch();
+    
     const contactDocs = mockContacts.map(contact => {
         const docRef = contactsRef.doc();
-        batch.set(docRef, { ...contact, createdDate: FieldValue.serverTimestamp() });
+        // CHANGED: Uses createdAt instead of createdDate
+        batch.set(docRef, { ...contact, createdAt: FieldValue.serverTimestamp() });
         return { id: docRef.id, ...contact };
     });
     const booksRef = admin.firestore().collection("books");
@@ -1475,6 +1532,7 @@ export const makeMeAdmin = onCall({cors: ['https://nsindxonline.web.app', 'https
         throw new HttpsError("internal", "Failed to set admin role. Check the function logs.");
     }
 });
+
 // --- ADD THIS NEW FUNCTION ---
 // This trigger creates a default user document in Firestore when a new
 // user signs up in Firebase Auth.

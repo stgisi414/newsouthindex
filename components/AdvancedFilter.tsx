@@ -23,18 +23,46 @@ interface AdvancedFilterProps<T> {
 const itemMatchesFilters = <T extends Record<string, any>>(item: T, filters: Record<string, any>, config: FilterFieldConfig[]): boolean => {
   for (const conf of config) {
     const filterValue = filters[conf.field];
-    const itemValue = item[conf.field];
+    
+    // Skip if no filter value
+    if (filterValue === undefined || filterValue === '' || filterValue === null) continue;
 
-    if (filterValue === undefined || filterValue === '' || filterValue === null) {
-      continue; // No filter applied for this field
+    const itemValue = item[conf.field];
+    
+    // --- NEW LOGIC START ---
+    // Handle "New Fields" mapping for search
+    // If we are filtering by 'email', check the new 'emails' array
+    if (conf.field === 'email' && Array.isArray(item.emails)) {
+        const match = item.emails.some((e: any) => e.address.toLowerCase().includes(String(filterValue).toLowerCase()));
+        if (!match) return false;
+        continue; // Passed this filter, move to next
+    }
+    
+    // If filtering by 'phone', check the 'phones' array
+    if (conf.field === 'phone' && Array.isArray(item.phones)) {
+        // Strip formatting for search
+        const searchClean = String(filterValue).replace(/\D/g, ''); 
+        const match = item.phones.some((p: any) => p.number.replace(/\D/g, '').includes(searchClean));
+        if (!match) return false;
+        continue;
     }
 
+    // If filtering by 'city', 'state', or 'zip', check 'addresses' array
+    if (['city', 'state', 'zip'].includes(conf.field) && Array.isArray(item.addresses)) {
+        const match = item.addresses.some((a: any) => 
+            String(a[conf.field] || '').toLowerCase().includes(String(filterValue).toLowerCase())
+        );
+        if (!match) return false;
+        continue;
+    }
+    // --- NEW LOGIC END ---
+
+    // ... Existing switch statement for standard fields (sequentialId, names, etc.) ...
     switch (conf.type) {
       case 'text':
-        if (typeof itemValue !== 'string' || !itemValue.toLowerCase().includes(String(filterValue).toLowerCase())) {
-          return false;
-        }
-        break;
+         const stringValue = itemValue !== undefined && itemValue !== null ? String(itemValue) : '';
+         if (!stringValue.toLowerCase().includes(String(filterValue).toLowerCase())) return false;
+         break;
       case 'select':
         if (itemValue !== filterValue) {
           return false;
