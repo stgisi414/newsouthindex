@@ -228,30 +228,37 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
 
   if (!isOpen) return null;
 
-  // --- UPDATED PRINT MODE STYLES (Mac/Safari Safe) ---
+  // --- UNIVERSAL PRINT STYLES (Mac & Windows Compatible) ---
   const printStyles = `
     @media print {
       @page {
-        margin: 0.5in;
+        margin: 0.4in;
         size: auto;
       }
 
-      html, body {
+      /* 1. RESET ROOT LAYOUT & POSITIONING */
+      /* Force parents to be static so the absolute modal anchors to the page, not the div */
+      html, body, #root, main {
+        position: static !important;
+        margin: 0 !important;
+        padding: 0 !important;
         height: auto !important;
         overflow: visible !important;
         background: white !important;
-        margin: 0 !important;
-        padding: 0 !important;
       }
 
-      /* Hide everything by default using visibility */
-      body {
+      /* 2. HIDE CONTENT (Using visibility to allow nested overrides) */
+      /* We do NOT use display:none here, to avoid hiding the nested modal */
+      body * {
         visibility: hidden;
       }
 
-      /* 2. Target the modal container specifically */
-      .modal-container {
+      /* 3. UNHIDE MODAL & POSITION AT TOP */
+      .modal-container, .modal-container * {
         visibility: visible !important;
+      }
+
+      .modal-container {
         position: absolute !important;
         top: 0 !important;
         left: 0 !important;
@@ -259,39 +266,37 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
         margin: 0 !important;
         padding: 0 !important;
         background: white !important;
+        
+        /* Ensure it sits on top of everything */
         z-index: 9999 !important;
+        
+        /* Disable flex centering if it was present */
+        display: block !important; 
       }
 
-      /* 3. Target the printable area and all its children */
-      #printable-area, #printable-area * {
-        visibility: visible !important;
-      }
-      
-      #printable-area {
-        position: relative !important;
+      /* 4. PREVENT PAGE BREAK ISSUES */
+      .modal-content {
+        box-shadow: none !important;
+        border: none !important;
         width: 100% !important;
         max-width: none !important;
-        box-shadow: none !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: visible !important;
       }
 
-      /* 4. Hide controls specifically */
+      /* 5. HIDE UI ELEMENTS */
       button, .no-print {
         display: none !important;
       }
       
-      /* 5. Ensure inputs look like text */
       input, select, textarea {
         border: none !important;
         background: transparent !important;
         box-shadow: none !important;
-        padding: 0 !important;
-        margin: 0 !important;
         resize: none !important;
         appearance: none !important;
-        -webkit-appearance: none !important;
+      }
+      
+      ::placeholder {
+        color: transparent !important;
       }
     }
   `;
