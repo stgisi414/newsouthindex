@@ -57,6 +57,7 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
     );
   }, [currentUserRole]);
 
+  // EFFECT 1: Initialize Form Data (Runs ONLY when opening or changing the specific report)
   useEffect(() => {
     if (isOpen) {
       setErrors({});
@@ -66,32 +67,45 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
         setReportDate(formatTimestampToInputDate(reportToEdit.reportDate));
         setContactId(reportToEdit.staffContactId || '');
         setContactName(reportToEdit.staffName || '');
+        
+        // FIX: Force cashAmount to be a formatted STRING ("11.90") on load
+        // We cast 'as any' because TypeScript expects a number, but we need a string for the input to show .00
         setItems(reportToEdit.items && reportToEdit.items.length > 0 ? reportToEdit.items.map(item => ({
           ...item,
-          itemDate: formatTimestampToInputDate(item.itemDate)
-        })) : [{ itemDate: new Date().toISOString().split('T')[0], description: '', cashAmount: 0 }]);
+          itemDate: formatTimestampToInputDate(item.itemDate),
+          cashAmount: (Number(item.cashAmount) || 0).toFixed(2) as any
+        })) : [{ itemDate: new Date().toISOString().split('T')[0], description: '', cashAmount: '0.00' as any }]);
+        
         setDateSubmitted(formatTimestampToInputDate(reportToEdit.dateSubmitted));
       } else {
         // --- CREATING NEW ---
         setReportNumber(0);
         setReportDate(new Date().toISOString().split('T')[0]);
-        setItems([{ itemDate: new Date().toISOString().split('T')[0], description: '', cashAmount: 0 }]);
+        setItems([{ itemDate: new Date().toISOString().split('T')[0], description: '', cashAmount: '0.00' as any }]);
         setDateSubmitted('');
+        
+        // Clear these now; the second effect will handle auto-filling if needed
+        if (!contactId) {
+            setContactId('');
+            setContactName('');
+        }
+      }
+    }
+    // CRITICAL: Do NOT include staffContacts here. This prevents the form from resetting while you type.
+  }, [isOpen, reportToEdit]); 
 
-        // Pre-fill user's name IF they are not an admin/bookkeeper
-        if (!isPrivilegedUser && currentUserContactId) {
+
+  // EFFECT 2: Handle Staff Pre-fill for New Reports (Runs separately)
+  useEffect(() => {
+      // Only run if: Open, Not Editing, User is Staff, and Field is currently empty
+      if (isOpen && !reportToEdit && !isPrivilegedUser && currentUserContactId && !contactId) {
           const loggedInStaffContact = staffContacts.find(c => c.id === currentUserContactId);
           if (loggedInStaffContact) {
             setContactId(loggedInStaffContact.id);
             setContactName(`${loggedInStaffContact.firstName} ${loggedInStaffContact.lastName}`);
           }
-        } else {
-          setContactId('');
-          setContactName('');
-        }
       }
-    }
-  }, [isOpen, reportToEdit, staffContacts, currentUserContactId, isPrivilegedUser]);
+  }, [isOpen, reportToEdit, isPrivilegedUser, currentUserContactId, staffContacts, contactId]);
 
   const handleItemChange = (index: number, field: keyof ExpenseReportItem, value: string | number) => {
     if (isPrintMode) return; 
@@ -99,7 +113,8 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
     const item = newItems[index];
     
     if (field === 'cashAmount') {
-      newItems[index] = { ...item, [field]: parseFloat(value as string) || 0 };
+      // FIX: Store value as-is (string). Do NOT use parseFloat here.
+      newItems[index] = { ...item, [field]: value as any };
     } else {
       newItems[index] = { ...item, [field]: value };
     }
@@ -406,6 +421,13 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
                         placeholder="0.00"
                         value={item.cashAmount || ''}
                         onChange={(e) => handleItemChange(index, 'cashAmount', e.target.value)}
+                        // FIX: Format to 2 decimals when user clicks away
+                        onBlur={(e) => {
+                            const val = parseFloat(e.target.value);
+                            if (!isNaN(val)) {
+                                handleItemChange(index, 'cashAmount', val.toFixed(2));
+                            }
+                        }}
                         className="w-32 border-gray-300 rounded-md shadow-sm text-sm"
                         disabled={isPrintMode}
                       />

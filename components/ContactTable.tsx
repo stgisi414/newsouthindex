@@ -262,15 +262,22 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                             const phones = contact.phones || [];
                                             const primary = phones.find(p => p.type === 'Main') || phones[0];
                                             
-                                            // 2. Extract values (with fallbacks)
+                                            // 2. Extract values
                                             const rawNumber = primary?.number || (contact as any).phone || '';
-                                            const code = primary?.countryCode || '+1'; 
+                                            
+                                            // 3. INTELLIGENT CODE DEFAULT: 
+                                            // If no code exists, and number starts with '+', assume code is embedded (don't default to +1)
+                                            let code = primary?.countryCode;
+                                            if (!code) {
+                                                code = rawNumber.trim().startsWith('+') ? '' : '+1';
+                                            }
 
-                                            // 3. Format the number using the Country Code (fixes the "US format" issue)
+                                            // 4. Format
                                             const formattedLocal = formatPhoneNumber(rawNumber, code);
                                             
-                                            // 4. Display: "+82 010-1234-5678" (fixes the "missing code" issue)
-                                            displayValue = `${code} ${formattedLocal}`;
+                                            // 5. Display
+                                            // If code is empty (embedded in number), just show formattedLocal. Otherwise, show Code + Number.
+                                            displayValue = code ? `${code} ${formattedLocal}` : formattedLocal;
                                        }
                                        else if (key === 'email') {
                                             displayValue = getPrimary(contact, 'emails', 'address');
@@ -350,13 +357,18 @@ const ContactTable: React.FC<ContactTableProps> = ({ contacts, onEdit, onDelete,
                                                 <p><strong className="font-medium text-gray-800">Phone:</strong> 
                                                     <span contentEditable={isAdmin} onBlur={(e) => handleFieldUpdate(e, contact, 'phone')} suppressContentEditableWarning={true}>
                                                         {(() => {
-                                                            // COPY THE SAME LOGIC HERE
                                                             const phones = contact.phones || [];
                                                             const primary = phones.find(p => p.type === 'Main') || phones[0];
                                                             const rawNumber = primary?.number || (contact as any).phone || '';
-                                                            const code = primary?.countryCode || '+1';
                                                             
-                                                            return `${code} ${formatPhoneNumber(rawNumber, code)}`;
+                                                            // SAME FIX HERE
+                                                            let code = primary?.countryCode;
+                                                            if (!code) {
+                                                                code = rawNumber.trim().startsWith('+') ? '' : '+1';
+                                                            }
+                                                            
+                                                            const formattedLocal = formatPhoneNumber(rawNumber, code);
+                                                            return code ? `${code} ${formattedLocal}` : formattedLocal;
                                                         })()}
                                                     </span>
                                                 </p>

@@ -143,6 +143,146 @@ interface ContactFormProps {
     contactToEdit?: Contact | null;
 }
 
+// --- Sub-Component: Individual Address Row with its own Search ---
+const AddressRow: React.FC<{
+    index: number;
+    address: AddressEntry;
+    onChange: (index: number, field: string, key: string, value: string) => void;
+    onRemove: (field: string, index: number) => void;
+    mapsApiLoaded: boolean;
+}> = ({ index, address, onChange, onRemove, mapsApiLoaded }) => {
+    const autocompleteRef = useRef<any>(null);
+
+    useEffect(() => {
+        if (!autocompleteRef.current) return;
+
+        const handlePlaceSelect = async (event: any) => {
+            const { placePrediction } = event;
+            if (!placePrediction) return;
+
+            try {
+                const place = placePrediction.toPlace();
+                await place.fetchFields({ fields: ['addressComponents', 'formattedAddress'] });
+
+                // Extract Data
+                const getComponent = (type: string, useShort = false) => {
+                    const c = place.addressComponents?.find((c: any) => c.types.includes(type));
+                    return c ? (useShort ? c.shortText : c.longText) : "";
+                };
+
+                const streetNum = getComponent('street_number');
+                const route = getComponent('route');
+                const address1 = `${streetNum} ${route}`.trim();
+                const city = getComponent('locality') || getComponent('postal_town');
+                const state = getComponent('administrative_area_level_1', true);
+                const zip = getComponent('postal_code');
+
+                // Update Parent State
+                // Batch updates would be better, but we'll reuse the existing handler for simplicity
+                if (address1) onChange(index, 'addresses', 'address1', address1);
+                if (city) onChange(index, 'addresses', 'city', city);
+                if (state) onChange(index, 'addresses', 'state', state);
+                if (zip) onChange(index, 'addresses', 'zip', zip);
+                
+                // Clear the search bar after selection so it looks clean
+                if (autocompleteRef.current) autocompleteRef.current.value = '';
+
+            } catch (error) {
+                console.error("Error parsing address:", error);
+            }
+        };
+
+        const el = autocompleteRef.current;
+        el.addEventListener('gmp-select', handlePlaceSelect);
+        return () => el.removeEventListener('gmp-select', handlePlaceSelect);
+    }, [index, onChange]);
+
+    return (
+        <div className="p-4 bg-white rounded-lg border border-gray-300 shadow-sm mb-4">
+            <div className="flex justify-between items-center mb-3">
+                <select
+                    value={address.type}
+                    onChange={(e) => onChange(index, 'addresses', 'type', e.target.value)}
+                    className="px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50"
+                >
+                    <option value="Main">Main</option>
+                    <option value="Work">Work</option>
+                    <option value="Home">Home</option>
+                    <option value="Other">Other</option>
+                </select>
+                <button type="button" onClick={() => onRemove('addresses', index)} className="text-red-400 hover:text-red-600 text-xs font-medium">
+                    Remove
+                </button>
+            </div>
+
+            {/* Local Search Bar */}
+            <div className="mb-3">
+                {mapsApiLoaded ? (
+                    <gmp-place-autocomplete
+                        ref={autocompleteRef}
+                        placeholder="Search address to autofill..."
+                        country-codes='["us"]'
+                        className="w-full border border-indigo-100 bg-indigo-50 rounded-md px-3 py-2 text-sm placeholder-indigo-300 focus:ring-2 focus:ring-indigo-500"
+                    ></gmp-place-autocomplete>
+                ) : (
+                    <div className="text-xs text-gray-400 italic">Loading address search...</div>
+                )}
+            </div>
+
+            {/* Inputs */}
+            <div className="grid grid-cols-12 gap-3">
+                <div className="col-span-12">
+                    <input
+                        type="text"
+                        placeholder="Address Line 1"
+                        value={address.address1}
+                        onChange={(e) => onChange(index, 'addresses', 'address1', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                    />
+                </div>
+                <div className="col-span-12">
+                    <input
+                        type="text"
+                        placeholder="Address Line 2"
+                        value={address.address2}
+                        onChange={(e) => onChange(index, 'addresses', 'address2', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                    />
+                </div>
+                <div className="col-span-5">
+                    <input
+                        type="text"
+                        placeholder="City"
+                        value={address.city}
+                        onChange={(e) => onChange(index, 'addresses', 'city', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                    />
+                </div>
+                <div className="col-span-3">
+                    <input
+                        type="text"
+                        placeholder="State"
+                        value={address.state}
+                        maxLength={2}
+                        onChange={(e) => onChange(index, 'addresses', 'state', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm uppercase"
+                    />
+                </div>
+                <div className="col-span-4">
+                    <input
+                        type="text"
+                        placeholder="Zip"
+                        value={address.zip}
+                        maxLength={10}
+                        onChange={(e) => onChange(index, 'addresses', 'zip', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                    />
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, contactToEdit }) => {
     // --- Initial State ---
     const initialFormState = {
@@ -534,62 +674,70 @@ const ContactForm: React.FC<ContactFormProps> = ({ isOpen, onClose, onSave, cont
 
                     {/* --- Addresses (With Search) --- */}
                     <div className="border-t pt-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Addresses</label>
-                        
                         {/* Search Bar */}
-                        <div className="flex items-center gap-2 mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                             <div className="flex-grow">
-                                {mapsApiLoaded ? (
-                                    <gmp-place-autocomplete
-                                        ref={autocompleteRef}
-                                        placeholder="Search to add an address..."
-                                        country-codes='["us"]'
-                                        place-fields="addressComponents,formattedAddress"
-                                        className="w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm"
-                                    ></gmp-place-autocomplete>
-                                 ) : <span className="text-xs text-gray-400">Loading maps...</span>}
-                             </div>
-                             <button type="button" onClick={handleFillAddress} disabled={!placeDetails} className={`p-2 rounded-md ${placeDetails ? 'text-indigo-600 hover:bg-indigo-50' : 'text-gray-300 cursor-not-allowed'}`}>
-                                <ClipboardIcon className="h-6 w-6" />
-                             </button>
+                        <div className="flex justify-between items-center mb-4">
+                            <label className="block text-sm font-medium text-gray-700">Addresses</label>
+                            <button 
+                                type="button" 
+                                onClick={() => addEntry('addresses')} 
+                                className="text-sm text-indigo-600 font-medium hover:text-indigo-800"
+                            >
+                                + Add Address
+                            </button>
                         </div>
-
-                        {/* Address List */}
-                        <div className="space-y-4">
+                        
+                        <div className="space-y-4 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                            {formState.addresses.length === 0 && (
+                                <p className="text-sm text-gray-400 text-center py-2">No addresses added yet.</p>
+                            )}
+                            
                             {formState.addresses.map((addr: AddressEntry, index: number) => (
-                                <div key={index} className="p-4 bg-white rounded-lg border border-gray-300 relative shadow-sm">
-                                    <div className="grid grid-cols-12 gap-3">
-                                        <div className="col-span-3">
-                                             <select value={addr.type} onChange={(e) => handleArrayChange(index, 'addresses', 'type', e.target.value)} className="w-full px-2 py-1 border border-gray-300 rounded text-xs">
-                                                <option value="Main">Main</option>
-                                                <option value="Work">Work</option>
-                                                <option value="Home">Home</option>
-                                                <option value="Other">Other</option>
-                                            </select>
-                                        </div>
-                                        <div className="col-span-9 flex justify-end">
-                                             <button type="button" onClick={() => removeEntry('addresses', index)} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
-                                        </div>
-                                        <div className="col-span-12">
-                                            <input type="text" placeholder="Address Line 1" value={addr.address1} onChange={(e) => handleArrayChange(index, 'addresses', 'address1', e.target.value)} className="w-full px-3 py-1 border border-gray-300 rounded text-sm" />
-                                        </div>
-                                        <div className="col-span-12">
-                                            <input type="text" placeholder="Address Line 2" value={addr.address2} onChange={(e) => handleArrayChange(index, 'addresses', 'address2', e.target.value)} className="w-full px-3 py-1 border border-gray-300 rounded text-sm" />
-                                        </div>
-                                        <div className="col-span-5">
-                                            <input type="text" placeholder="City" value={addr.city} onChange={(e) => handleArrayChange(index, 'addresses', 'city', e.target.value)} className="w-full px-3 py-1 border border-gray-300 rounded text-sm" />
-                                        </div>
-                                        <div className="col-span-3">
-                                            <input type="text" placeholder="State" value={addr.state} maxLength={2} onChange={(e) => handleArrayChange(index, 'addresses', 'state', e.target.value)} className="w-full px-3 py-1 border border-gray-300 rounded text-sm uppercase" />
-                                        </div>
-                                        <div className="col-span-4">
-                                            <input type="text" placeholder="Zip" value={addr.zip} maxLength={10} onChange={(e) => handleArrayChange(index, 'addresses', 'zip', e.target.value)} className="w-full px-3 py-1 border border-gray-300 rounded text-sm" />
-                                        </div>
-                                    </div>
+                                <AddressRow 
+                                    key={index}
+                                    index={index}
+                                    address={addr}
+                                    onChange={handleArrayChange}
+                                    onRemove={removeEntry}
+                                    mapsApiLoaded={mapsApiLoaded}
+                                />
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* --- Social Media --- */}
+                    <div className="border-t pt-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Social Media</label>
+                        <div className="space-y-2">
+                            {formState.socialMedia.map((entry: SocialMediaEntry, index: number) => (
+                                <div key={index} className="flex gap-2 items-center">
+                                    <select 
+                                        value={entry.platform} 
+                                        onChange={(e) => handleArrayChange(index, 'socialMedia', 'platform', e.target.value)} 
+                                        className="w-1/3 md:w-1/4 px-2 py-2 bg-white border border-gray-300 rounded-md text-xs"
+                                    >
+                                        <option value="LinkedIn">LinkedIn</option>
+                                        <option value="Facebook">Facebook</option>
+                                        <option value="Twitter">X (Formerly known as Twitter)</option>
+                                        <option value="Instagram">Instagram</option>
+                                        <option value="Website">Website</option>
+                                        <option value="Other">Other</option>
+                                    </select>
+                                    <input 
+                                        type="text" 
+                                        value={entry.url} 
+                                        onChange={(e) => handleArrayChange(index, 'socialMedia', 'url', e.target.value)} 
+                                        placeholder="URL or Handle..." 
+                                        className="flex-grow px-3 py-2 border border-gray-300 rounded-md text-sm" 
+                                    />
+                                    <button type="button" onClick={() => removeEntry('socialMedia', index)} className="text-red-400 hover:text-red-600 font-bold px-2">
+                                        &times;
+                                    </button>
                                 </div>
                             ))}
-                            <button type="button" onClick={() => addEntry('addresses')} className="text-sm text-indigo-600 font-medium">+ Add Manual Address</button>
                         </div>
+                        <button type="button" onClick={() => addEntry('socialMedia')} className="mt-2 text-xs text-indigo-600 font-semibold hover:text-indigo-800">
+                            + Add Social Media
+                        </button>
                     </div>
 
                     {/* --- Categories & Notes --- */}

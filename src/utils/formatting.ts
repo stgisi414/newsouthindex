@@ -1,8 +1,13 @@
-export const formatPhoneNumber = (value: string) => {
+export const formatPhoneNumber = (value: string, countryCode: string = '+1') => {
     if (!value) return value;
-    // Allow international or specific formats to bypass
-    if (value.startsWith('+') || value.startsWith('1')) return value;
-    
+
+    // If it's NOT US/Canada (+1), do NOT truncate or force (XXX) format.
+    // Just return the input so international numbers display fully.
+    if (countryCode && countryCode !== '+1') {
+        return value;
+    }
+
+    // US/Canada Formatting ONLY
     const input = value.replace(/\D/g, '');
     const constrainedInput = input.substring(0, 10);
     
