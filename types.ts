@@ -73,6 +73,7 @@ export interface ExpenseReport {
     staffName: string; 
     expenseDate: any; // Firestore Timestamp
     totalAmount: number;
+    advanceAmount?: number;
     notes?: string;
     reportNumber?: number;
     

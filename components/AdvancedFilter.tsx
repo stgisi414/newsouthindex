@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Category } from '../types'; // Import Category enum
 import ChevronDownIcon from './icons/ChevronDownIcon';
 import ChevronUpIcon from './icons/ChevronUpIcon';
 
 // Define types for configuration
-type FilterType = 'text' | 'select' | 'numberRange' | 'dateRange' | 'boolean';
-interface FilterFieldConfig {
-  field: string; // The key in the data object (e.g., 'firstName', 'category', 'price')
-  label: string; // User-friendly label (e.g., 'First Name', 'Category', 'Price')
+export type FilterType = 'text' | 'select' | 'numberRange' | 'dateRange' | 'boolean';
+
+export interface FilterFieldConfig {
+  field: string; // The key in the data object
+  label: string; // User-friendly label
   type: FilterType;
-  options?: string[]; // For 'select' type (e.g., Category enum values)
+  options?: string[]; // For 'select' type
+  id?: string; // Optional unique ID if needed
 }
 
 interface AdvancedFilterProps<T> {
@@ -17,6 +18,7 @@ interface AdvancedFilterProps<T> {
   filterConfig: FilterFieldConfig[];
   onFilterChange: (filteredData: T[]) => void; // Callback with the filtered results
   initialOpen?: boolean;
+  initialFilters?: Record<string, any>; // Allow passing initial state
 }
 
 // Helper function to check if an item matches the current filters
@@ -29,25 +31,18 @@ const itemMatchesFilters = <T extends Record<string, any>>(item: T, filters: Rec
 
     const itemValue = item[conf.field];
     
-    // --- NEW LOGIC START ---
-    // Handle "New Fields" mapping for search
-    // If we are filtering by 'email', check the new 'emails' array
+    // Handle "New Fields" mapping for search (Legacy support for Contacts)
     if (conf.field === 'email' && Array.isArray(item.emails)) {
         const match = item.emails.some((e: any) => e.address.toLowerCase().includes(String(filterValue).toLowerCase()));
         if (!match) return false;
-        continue; // Passed this filter, move to next
+        continue;
     }
-    
-    // If filtering by 'phone', check the 'phones' array
     if (conf.field === 'phone' && Array.isArray(item.phones)) {
-        // Strip formatting for search
         const searchClean = String(filterValue).replace(/\D/g, ''); 
         const match = item.phones.some((p: any) => p.number.replace(/\D/g, '').includes(searchClean));
         if (!match) return false;
         continue;
     }
-
-    // If filtering by 'city', 'state', or 'zip', check 'addresses' array
     if (['city', 'state', 'zip'].includes(conf.field) && Array.isArray(item.addresses)) {
         const match = item.addresses.some((a: any) => 
             String(a[conf.field] || '').toLowerCase().includes(String(filterValue).toLowerCase())
@@ -55,57 +50,81 @@ const itemMatchesFilters = <T extends Record<string, any>>(item: T, filters: Rec
         if (!match) return false;
         continue;
     }
-    // --- NEW LOGIC END ---
 
-    // ... Existing switch statement for standard fields (sequentialId, names, etc.) ...
     switch (conf.type) {
       case 'text':
          const stringValue = itemValue !== undefined && itemValue !== null ? String(itemValue) : '';
          if (!stringValue.toLowerCase().includes(String(filterValue).toLowerCase())) return false;
          break;
+
       case 'select':
         if (itemValue !== filterValue) {
           return false;
         }
         break;
+
       case 'numberRange':
-        // Assuming filterValue is { min: number | '', max: number | '' }
+        // filterValue is { min: number | '', max: number | '' }
         if (typeof itemValue !== 'number' ||
             (filterValue.min !== '' && itemValue < filterValue.min) ||
             (filterValue.max !== '' && itemValue > filterValue.max)) {
           return false;
         }
         break;
+
       case 'dateRange':
-         // Assuming filterValue is { start: Date | null, end: Date | null }
-         // Assuming itemValue is a Firestore Timestamp or Date object
-         const itemDate = itemValue?.toDate ? itemValue.toDate() : (itemValue instanceof Date ? itemValue : null);
-         if (!itemDate ||
-             (filterValue.start && itemDate < filterValue.start) ||
-             (filterValue.end && itemDate > filterValue.end)) {
-             return false;
+         let itemDate: Date | null = null;
+
+         if (itemValue && typeof itemValue.toDate === 'function') {
+            // Firestore Timestamp
+            itemDate = itemValue.toDate();
+         } else if (itemValue instanceof Date) {
+            // JS Date Object
+            itemDate = itemValue;
+         } else if (typeof itemValue === 'string') {
+             // FIX: Handle YYYY-MM-DD strings by forcing Local Time
+             // This prevents "2023-11-20" from being read as "2023-11-19 19:00 (EST)" due to UTC conversion
+             if (/^\d{4}-\d{2}-\d{2}$/.test(itemValue)) {
+                 const [y, m, d] = itemValue.split('-').map(Number);
+                 itemDate = new Date(y, m - 1, d); // Construct as Local Date
+             } else {
+                 const parsed = new Date(itemValue);
+                 if (!isNaN(parsed.getTime())) itemDate = parsed;
+             }
          }
+
+         // If we couldn't parse a valid date from the item, it fails the filter
+         if (!itemDate) return false;
+
+         // Compare
+         if (filterValue.start && itemDate < filterValue.start) return false;
+         if (filterValue.end && itemDate > filterValue.end) return false;
          break;
+
       case 'boolean':
-        // filterValue will be 'true' or 'false' (as strings)
         const filterBool = filterValue === 'true';
-        const itemBool = !!itemValue; // Coerce undefined/null to false
+        const itemBool = !!itemValue;
         if (itemBool !== filterBool) {
             return false;
         }
         break;
-      // Add other types as needed
     }
   }
-  return true; // Item passes all active filters
+  return true;
 };
 
 
-function AdvancedFilter<T extends Record<string, any>>({ data, filterConfig, onFilterChange, initialOpen = true }: AdvancedFilterProps<T>) {
-  const [activeFilters, setActiveFilters] = useState<Record<string, any>>({});
+function AdvancedFilter<T extends Record<string, any>>({ 
+    data, 
+    filterConfig, 
+    onFilterChange, 
+    initialOpen = true,
+    initialFilters = {}
+}: AdvancedFilterProps<T>) {
+  const [activeFilters, setActiveFilters] = useState<Record<string, any>>(initialFilters);
   const [isOpen, setIsOpen] = useState(initialOpen);
 
-  // Debounce filtering to avoid performance issues on rapid input changes
+  // Debounce logic
   const debounce = (func: (...args: any[]) => void, delay: number) => {
     let timeoutId: NodeJS.Timeout;
     return (...args: any[]) => {
@@ -116,37 +135,50 @@ function AdvancedFilter<T extends Record<string, any>>({ data, filterConfig, onF
     };
   };
 
-  // Memoized debounced filter application function
   const applyFilters = useCallback(
     debounce((currentFilters: Record<string, any>) => {
-      const filtered = data.filter(item => itemMatchesFilters(item, currentFilters, filterConfig));
+      // Safety check for data array
+      const safeData = Array.isArray(data) ? data : [];
+      const filtered = safeData.filter(item => itemMatchesFilters(item, currentFilters, filterConfig));
       onFilterChange(filtered);
-    }, 300), // 300ms debounce delay
-    [data, filterConfig, onFilterChange] // Dependencies for useCallback
+    }, 300),
+    [data, filterConfig, onFilterChange]
   );
 
-
+  // Re-apply filters when activeFilters or data changes
   useEffect(() => {
     applyFilters(activeFilters);
-  }, [activeFilters, applyFilters]); // Rerun effect when filters change
+  }, [activeFilters, data]); 
 
   const handleInputChange = (field: string, value: any, type: FilterType) => {
     setActiveFilters(prev => {
       const newFilters = { ...prev };
+      
       if (type === 'numberRange' || type === 'dateRange') {
-        newFilters[field] = { ...newFilters[field], ...value }; // Merge min/max or start/end
+        newFilters[field] = { ...(newFilters[field] || {}), ...value };
       } else {
         newFilters[field] = value;
       }
 
-      // Clear filter if value is empty/null/default
+      // Cleanup empty values
       if (value === '' || value === null || (type === 'select' && value === 'All') || (type === 'boolean' && value === 'All')) {
          delete newFilters[field];
       }
-      // Clear range if both min/max or start/end are empty/null
-      if ((type === 'numberRange' && (newFilters[field]?.min === '' || newFilters[field]?.min == null) && (newFilters[field]?.max === '' || newFilters[field]?.max == null)) ||
-          (type === 'dateRange' && !newFilters[field]?.start && !newFilters[field]?.end)) {
-           delete newFilters[field];
+      
+      // Cleanup empty ranges
+      if (type === 'numberRange') {
+          const min = newFilters[field]?.min;
+          const max = newFilters[field]?.max;
+          if ((min === '' || min == null) && (max === '' || max == null)) {
+              delete newFilters[field];
+          }
+      }
+      if (type === 'dateRange') {
+          const start = newFilters[field]?.start;
+          const end = newFilters[field]?.end;
+          if (!start && !end) {
+              delete newFilters[field];
+          }
       }
 
       return newFilters;
@@ -185,33 +217,36 @@ function AdvancedFilter<T extends Record<string, any>>({ data, filterConfig, onF
                     <input
                         type="number"
                         placeholder="Min"
-                        value={activeFilters[field]?.min || ''}
+                        value={activeFilters[field]?.min ?? ''}
                         onChange={(e) => handleInputChange(field, { min: e.target.value ? parseFloat(e.target.value) : '' }, type)}
                         className={`${commonClasses} w-1/2`}
                     />
                     <input
                         type="number"
                         placeholder="Max"
-                        value={activeFilters[field]?.max || ''}
+                        value={activeFilters[field]?.max ?? ''}
                         onChange={(e) => handleInputChange(field, { max: e.target.value ? parseFloat(e.target.value) : '' }, type)}
                         className={`${commonClasses} w-1/2`}
                     />
                 </div>
             );
         case 'dateRange':
+             const startVal = activeFilters[field]?.start instanceof Date ? activeFilters[field].start.toISOString().split('T')[0] : '';
+             const endVal = activeFilters[field]?.end instanceof Date ? activeFilters[field].end.toISOString().split('T')[0] : '';
+             
              return (
                  <div className="flex space-x-2 items-center">
                      <input
                          type="date"
-                         value={activeFilters[field]?.start ? activeFilters[field].start.toISOString().split('T')[0] : ''}
-                         onChange={(e) => handleInputChange(field, { start: e.target.value ? new Date(e.target.value + 'T00:00:00') : null }, type)} // Add time to avoid timezone issues
+                         value={startVal}
+                         onChange={(e) => handleInputChange(field, { start: e.target.value ? new Date(e.target.value + 'T00:00:00') : null }, type)}
                          className={`${commonClasses} w-1/2`}
                      />
-                     <span>to</span>
+                     <span className="text-gray-500">to</span>
                      <input
                          type="date"
-                         value={activeFilters[field]?.end ? activeFilters[field].end.toISOString().split('T')[0] : ''}
-                         onChange={(e) => handleInputChange(field, { end: e.target.value ? new Date(e.target.value + 'T23:59:59') : null }, type)} // End of day
+                         value={endVal}
+                         onChange={(e) => handleInputChange(field, { end: e.target.value ? new Date(e.target.value + 'T23:59:59') : null }, type)}
                          className={`${commonClasses} w-1/2`}
                      />
                  </div>
@@ -234,26 +269,22 @@ function AdvancedFilter<T extends Record<string, any>>({ data, filterConfig, onF
   };
 
   return (
-    // Updated container with border-b only if open
     <div className={`bg-gray-50 border border-gray-200 rounded-lg shadow-sm mb-4 ${!isOpen ? 'border-b-0' : ''}`}>
-        {/* Header with Toggle Button */}
         <div
-            className="flex justify-between items-center p-4 cursor-pointer hover:bg-gray-100"
+            className="flex justify-between items-center p-4 cursor-pointer hover:bg-gray-100 rounded-t-lg"
             onClick={() => setIsOpen(!isOpen)}
         >
             <h3 className="text-md font-semibold text-gray-700">Advanced Filters</h3>
             <button
                 type="button"
                 className="text-gray-500 hover:text-gray-700"
-                aria-expanded={isOpen}
             >
                 {isOpen ? <ChevronUpIcon className="h-5 w-5" /> : <ChevronDownIcon className="h-5 w-5" />}
             </button>
         </div>
 
-        {/* Collapsible Content */}
         {isOpen && (
-            <div className="p-4 border-t border-gray-200"> {/* Added border-t */}
+            <div className="p-4 border-t border-gray-200">
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {filterConfig.map(config => (
                   <div key={config.field}>
@@ -262,15 +293,10 @@ function AdvancedFilter<T extends Record<string, any>>({ data, filterConfig, onF
                   </div>
                 ))}
               </div>
-              {/* Optional: Add a button to clear all filters */}
               <div className="mt-4 text-right">
                   <button
-                      onClick={() => {
-                          setActiveFilters({}); // Clear local state
-                          // Optionally call onFilterChange immediately with original data if needed
-                          // onFilterChange(data);
-                      }}
-                      className="text-sm text-indigo-600 hover:text-indigo-800"
+                      onClick={() => setActiveFilters({})}
+                      className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
                   >
                       Clear Filters
                   </button>

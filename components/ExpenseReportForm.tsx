@@ -46,6 +46,7 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
     { itemDate: new Date().toISOString().split('T')[0], description: '', cashAmount: 0 },
   ]);
   const [dateSubmitted, setDateSubmitted] = useState('');
+  const [advanceAmount, setAdvanceAmount] = useState<string | number>(0);
   const [errors, setErrors] = useState<{ staff?: string }>({});
 
   // Check if current user is admin/bookkeeper
@@ -67,6 +68,7 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
         setReportDate(formatTimestampToInputDate(reportToEdit.reportDate));
         setContactId(reportToEdit.staffContactId || '');
         setContactName(reportToEdit.staffName || '');
+        setAdvanceAmount((reportToEdit.advanceAmount || 0).toFixed(2));
         
         // FIX: Force cashAmount to be a formatted STRING ("11.90") on load
         // We cast 'as any' because TypeScript expects a number, but we need a string for the input to show .00
@@ -83,6 +85,7 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
         setReportDate(new Date().toISOString().split('T')[0]);
         setItems([{ itemDate: new Date().toISOString().split('T')[0], description: '', cashAmount: '0.00' as any }]);
         setDateSubmitted('');
+        setAdvanceAmount('0.00');
         
         // Clear these now; the second effect will handle auto-filling if needed
         if (!contactId) {
@@ -173,9 +176,8 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
     setItems(newItems);
   };
 
-  const totalAmount = useMemo(() => {
-    return items.reduce((sum, item) => sum + (Number(item.cashAmount) || 0), 0);
-  }, [items]);
+  const totalExpenses = items.reduce((sum, item) => sum + (parseFloat(item.cashAmount as any) || 0), 0);
+  const totalDue = totalExpenses - (Number(advanceAmount) || 0);
 
   const validateForm = (): boolean => {
     if (isPrintMode) return true; 
@@ -204,7 +206,8 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
         itemDate: item.itemDate ? new Date(item.itemDate) : new Date(),
         cashAmount: Number(item.cashAmount) || 0
       })),
-      totalAmount: totalAmount,
+      totalAmount: totalExpenses,
+      advanceAmount: Number(advanceAmount),
       dateSubmitted: dateSubmitted ? new Date(dateSubmitted) : null,
       status: dateSubmitted ? 'Submitted' : 'Draft',
     };
@@ -227,6 +230,13 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
   };
 
   if (!isOpen) return null;
+
+  const formatDateToDisplay = (dateString: string): string => {
+    if (!dateString) return '';
+    const [year, month, day] = dateString.split('-');
+    if (!year || !month || !day) return dateString;
+    return `${month}/${day}/${year}`;
+  };
 
   // --- UNIVERSAL PRINT STYLES (Mac & Windows Compatible) ---
   const printStyles = `
@@ -298,6 +308,23 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
       ::placeholder {
         color: transparent !important;
       }
+
+      /* 1. Repeat headers on every new page */
+      thead {
+          display: table-header-group;
+      }
+
+      /* 2. Don't slice a row of text in half between pages */
+      tr {
+          break-inside: avoid;
+          page-break-inside: avoid;
+      }
+      
+      /* 3. Ensure the footer (totals) doesn't break awkwardly */
+      .total-section { 
+          break-inside: avoid;
+          page-break-inside: avoid;
+      }
     }
   `;
 
@@ -368,7 +395,7 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
               <div className="flex items-center justify-end">
                 <span className="font-bold w-32 text-left">Report Date:</span>
                 {isPrintMode ? (
-                   <span className="px-3 py-1 print-only-text print:px-0">{reportDate}</span>
+                   <span className="px-3 py-1 print-only-text print:px-0">{formatDateToDisplay(reportDate)}</span>
                 ) : (
                   <input
                     type="date"
@@ -463,7 +490,7 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
           </div>
 
           {/* --- Totals & Footer --- */}
-          <div className="mt-8 pt-4 border-t-2 border-gray-400 flex justify-between print-totals">
+          <div className="mt-8 pt-4 border-t-2 border-gray-400 flex justify-between print-totals total-section">
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">
                 Date Submitted (MM/DD/YYYY)
@@ -478,20 +505,52 @@ const ExpenseReportForm: React.FC<ExpenseReportFormProps> = ({
             </div>
             
             <div className="space-y-2 text-right">
+              {/* TOTAL EXPENSES */}
               <div className="flex items-center justify-end">
-                <span className="font-bold text-gray-700 w-28">Total Amount:</span>
+                <span className="font-bold text-gray-700 w-28">Total Expenses:</span>
                 <span className="text-lg font-bold text-gray-900 w-32 text-left pl-4">
-                  ${totalAmount.toFixed(2)}
+                  ${totalExpenses.toFixed(2)}
                 </span>
               </div>
+
+              {/* LESS ADVANCE INPUT */}
               <div className="flex items-center justify-end">
                 <span className="font-bold text-gray-700 w-28">Less Advance:</span>
-                <span className="text-lg font-bold text-gray-900 w-32 text-left pl-4">$0.00</span>
+                {isPrintMode ? (
+                   <span className="text-lg font-bold text-gray-900 w-32 text-left pl-4">
+                     ${Number(advanceAmount).toFixed(2)}
+                   </span>
+                ) : (
+                  <div className="relative w-32 pl-4">
+                      <span className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-900 font-bold">$</span>
+                      <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          // Pass the raw value so it can be empty
+                          value={advanceAmount} 
+                          
+                          // 1. Allow the user to type anything (including empty string)
+                          onChange={(e) => setAdvanceAmount(e.target.value)}
+                          
+                          // 2. When they leave the box, format it nicely (e.g. "500.00")
+                          onBlur={() => {
+                              const val = parseFloat(advanceAmount.toString());
+                              setAdvanceAmount(isNaN(val) ? 0 : val.toFixed(2));
+                          }}
+                          
+                          className="w-full pl-6 pr-2 py-1 text-lg font-bold text-gray-900 bg-transparent border-b border-gray-300 focus:border-indigo-500 focus:outline-none text-left"
+                          placeholder="0.00"
+                      />
+                  </div>
+                )}
               </div>
+
+              {/* TOTAL DUE (Calculated) */}
               <div className="flex items-center justify-end border-t border-gray-300 pt-2 mt-2">
                 <span className="font-bold text-gray-900 w-28">Total Due:</span>
-                <span className="text-xl font-bold text-gray-900 w-32 text-left pl-4">
-                  ${totalAmount.toFixed(2)}
+                <span className={`text-xl font-bold w-32 text-left pl-4 ${totalDue < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                  ${totalDue.toFixed(2)}
                 </span>
               </div>
             </div>
